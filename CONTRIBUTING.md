@@ -4,7 +4,7 @@ First off, thank you for considering a contribution to the Agroasys Settlement P
 
 **Agroasys is financial infrastructure.** Code merged here controls real value and legally binding settlement logic. Therefore, we hold all contributions to a high standard of security, testing, and documentation.
 
-By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md) (if applicable) and the terms of the [Apache 2.0 License](LICENSE).
+By participating in this project, you agree to abide by the terms of the [Apache 2.0 License](LICENSE).
 
 ---
 
