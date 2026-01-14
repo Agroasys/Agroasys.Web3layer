@@ -1,0 +1,1 @@
+# SubQuery/Squid Indexer Schema
