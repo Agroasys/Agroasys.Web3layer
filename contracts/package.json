@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "license": "Apache-2.0",
+  "scripts": {
+    "compile":"hardhat compile",
+    "test": "hardhat test"
+  },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
     "@nomicfoundation/hardhat-ethers": "^3.0.0",
