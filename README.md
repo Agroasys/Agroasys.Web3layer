@@ -31,30 +31,27 @@ The protocol implements a deterministic Two-Stage Settlement Mechanism. This arc
 **1. Lock (Encumbrance)**
 
 - **Action**: The Payer (Buyer/Client) deposits `USDC` (or any asset ID) into the Escrow Contract.
+This includes:
+  - Goods value
+  - Logistics/shipping fees
+  - Platform fees
 
 - **State**: The protocol records the `ricardianHash` (Immutable Proof of Agreement) and encumbers the funds, splitting the total value into `stageOneAmount` (Operational/Fee) and `stageTwoAmount` (Net Settlement).
 
 **2. Stage 1 Release (Intermediary / Operational)**
 
-- **Trigger**: Validated documentation (e.g., Bill of Lading, Export Permit).
+- **Trigger**: Oracle verifies validated documentation (e.g., Bill of Lading, Export Permit).
   
-- **Action**: The protocol releases **40% (configurable)** of funds to the `TreasuryWallet` to cover immediate logistics and platform fees.
+- **Action**: Actions (executed atomically in a single transaction):
+  - Logistics Payment: Release the shipping fee to the TreasuryWallet to pay the logistics provider.
+  - Platform Fee: Release the platform commission to the TreasuryWallet.
+  - Supplier Tranche 1: Release 40% (configurable) of the goods value to the SupplierAddress (working capital coverage).
 
 **3. Stage 2 Release (Final Settlement)**
 
-- **Purpose**: Funding platform fees, shipping labels, down payments, or operational overhead.
+- **Trigger**: Oracle verifies the Inspection Report (Quality/Quantity confirmation) at the destination port.
 
-- **Trigger**: A verified off-chain signal (e.g., `KYC_VERIFIED`, `SHIPPED`, or `MILESTONE_1_MET`) authenticated by the Oracle.
-
-- **Action**: The protocol atomically releases the configurable Stage 1 % to the designated operational wallet (Treasury or Service Provider)
-
-**3. Stage 2 Release (Final Settlement)**
-
-- **Purpose**: Net payment to the ultimate beneficiary upon contract fulfillment.
-
-- **Trigger**: Final confirmation signal (e.g., `DELIVERED`, `MERGED`, or `ACCEPTED`).
-
-- **Action**: The protocol releases the remaining Stage 2 % directly to the Payee (Seller/Provider), closing the contract state.
+- **Action**: Release the remaining 60% of the goods value to the SupplierAddress, completing the trade.
 
 ## Tech Stack
 
