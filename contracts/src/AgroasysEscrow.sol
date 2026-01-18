@@ -11,8 +11,13 @@ contract AgroasysEscrow is ReentrancyGuard{
         LOCKED,  // initial deposit
         IN_TRANSIT, // BOL verified -> Stage1 released
         CLOSED, // Inspection passed -> Stage 2 released
-        DISPUTED, // Dispute raised
-        REFUNDED // Buyer refunded if needed (admin decides when DISPUTED)
+        DISPUTED // if admins solved manually an issue
+    }
+
+    enum DisputeStatus {
+        REFUND, // refund the buyer if an issue occured 
+        RESOLVE, // pay the supplier if the funds got stuck or the if there is an issue with the oracle
+        PARTICULAR_ISSUE // send the funds to the treasury wallet if a particular issue needs a complex solutiuon
     }
 
     struct Trade {
@@ -60,6 +65,15 @@ contract AgroasysEscrow is ReentrancyGuard{
         uint256 platformFeesAmountReleased,
         uint256 supplierFirstTrancheReleased,
         uint256 supplierSecondTrancheReleased,
+        bytes32 ricardianHash
+    );
+
+    event DisputeRaised(
+        uint256 tradeId,
+        DisputeStatus status,
+        address buyer,
+        address supplier,
+        address treasury,
         bytes32 ricardianHash
     );
 
@@ -137,9 +151,8 @@ contract AgroasysEscrow is ReentrancyGuard{
         Trade storage trade = trades[_tradeId];
 
         require(
-            trade.status != TradeStatus.CLOSED && 
-            trade.status != TradeStatus.DISPUTED && 
-            trade.status != TradeStatus.REFUNDED,
+            trade.status != TradeStatus.CLOSED &&
+            trade.status != TradeStatus.DISPUTED,
             "trade not modifiable by the oracle"
         );
 
@@ -192,6 +205,65 @@ contract AgroasysEscrow is ReentrancyGuard{
             platformFeesReleased,
             supplierFirstTrancheReleased,
             supplierSecondTrancheReleased,
+            trade.ricardianHash
+        );
+    }
+
+
+    function dispute(
+        uint256 _tradeId,
+        DisputeStatus _disputeStatus
+    ) external onlyAdmin nonReentrant {
+        require(_tradeId < tradeCounter, "trade doesn't exist");
+        
+        Trade storage trade = trades[_tradeId];
+        
+        require(trade.status != TradeStatus.CLOSED, "trade already closed");
+        
+        // admin can solve if oracle was inactive for 7 days
+        require(block.timestamp >= trade.updatedAt + 7 days,"must wait 7 days since last oracle update");
+        
+        uint256 availableAmount = 0;
+        
+        if (trade.status == TradeStatus.LOCKED) {
+            // nothing was paid so buyer can be entierly refunded
+            availableAmount = trade.totalAmountLocked;
+        } else if (trade.status == TradeStatus.IN_TRANSIT) {
+            // only the second tranche payement is avalaible
+            availableAmount = trade.supplierSecondTranche;
+        }
+        
+        require(availableAmount > 0, "no funds available for dispute");
+        
+        trade.status = TradeStatus.DISPUTED;
+        trade.updatedAt = block.timestamp;
+        
+        
+        if (_disputeStatus == DisputeStatus.REFUND) {
+            // if an issue occured -> refund the buyer
+            bool refundSuccess = usdcToken.transfer(trade.buyerAddress, availableAmount);
+            require(refundSuccess, "refund transfer failed");
+        } 
+        else if (_disputeStatus == DisputeStatus.RESOLVE) {
+            // if everything went right but somehow the oracle failed to call releaseFunds
+            bool resolveSuccess = usdcToken.transfer(trade.supplierAddress, availableAmount);
+            require(resolveSuccess, "resolve transfer failed");
+        } 
+        else if (_disputeStatus == DisputeStatus.PARTICULAR_ISSUE){
+            // let the company solve the particular issue
+            bool treasuryTransferSuccess = usdcToken.transfer(trade.treasuryAddress, availableAmount);
+            require(treasuryTransferSuccess, "transfer to treasury failed");
+        }
+        else {
+            revert("invalid dispute status");
+        }
+        
+        emit DisputeRaised(
+            _tradeId,
+            _disputeStatus,
+            trade.buyerAddress,
+            trade.supplierAddress,
+            trade.treasuryAddress,
             trade.ricardianHash
         );
     }
