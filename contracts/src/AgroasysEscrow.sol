@@ -49,6 +49,20 @@ contract AgroasysEscrow is ReentrancyGuard{
         bytes32 ricardianHash
     );
 
+    // new status, example: if the status was LOCKED and became IN_TRANSIT, the event status is gonna be IN_TRANSIT
+    // tracking each amount to know exactly how many funds were released for each releaseFunds call
+    event FundsReleased(
+        uint256 tradeId,
+        address treasury,
+        address supplier,
+        TradeStatus status, 
+        uint256 logisticsAmountReleased,
+        uint256 platformFeesAmountReleased,
+        uint256 supplierFirstTrancheReleased,
+        uint256 supplierSecondTrancheReleased,
+        bytes32 ricardianHash
+    );
+
     constructor(address _usdcToken,address _oracleAddress){
         usdcToken = IERC20(_usdcToken);
         oracleAddress = _oracleAddress;
@@ -102,13 +116,83 @@ contract AgroasysEscrow is ReentrancyGuard{
         });
 
         // then create the transfer
-        bool transferStatus = usdcToken.transferFrom(msg.sender, address(this),_totalAmount);
+        bool transferSuccess = usdcToken.transferFrom(msg.sender, address(this),_totalAmount);
 
-        require(transferStatus,"Transfer failed");
+        require(transferSuccess,"Transfer failed");
 
         // emit the event TradeLocked
         emit TradeLocked(newTradeId, msg.sender, _supplier, _totalAmount, _ricardianHash);
 
         return newTradeId;
+    }
+
+
+
+    function releaseFunds(
+        uint256 _tradeId,
+        TradeStatus _newStatus // new status, so one step after the current contract trade status
+    ) external onlyOracle nonReentrant{
+        require(_tradeId<tradeCounter,"trade doesn't exist");
+        // use storage the make the changes permanent
+        Trade storage trade = trades[_tradeId];
+
+        require(
+            trade.status != TradeStatus.CLOSED && 
+            trade.status != TradeStatus.DISPUTED && 
+            trade.status != TradeStatus.REFUNDED,
+            "trade not modifiable by the oracle"
+        );
+
+        if (_newStatus == TradeStatus.IN_TRANSIT) {
+            require(trade.status == TradeStatus.LOCKED, "actual status must be LOCKED to release stage 1");
+        } else if (_newStatus == TradeStatus.CLOSED) {
+            require(trade.status == TradeStatus.IN_TRANSIT, "actual status  must be IN_TRANSIT to release stage 2");
+        } else {
+            revert("new status not valid");
+        }
+
+        // track for the FundsReleased event
+        uint256 logisticsReleased = 0;
+        uint256 platformFeesReleased = 0;
+        uint256 supplierFirstTrancheReleased = 0;
+        uint256 supplierSecondTrancheReleased = 0;
+
+        if (_newStatus==TradeStatus.IN_TRANSIT){
+            trade.status = TradeStatus.IN_TRANSIT;
+            trade.updatedAt = block.timestamp;
+            logisticsReleased = trade.logisticsAmount;
+            platformFeesReleased = trade.platformFeesAmount;
+            supplierFirstTrancheReleased = trade.supplierFirstTranche;
+
+            // first payement to treasury to pay logistics and fees
+            uint256 treasuryTotal = trade.platformFeesAmount + trade.logisticsAmount;
+            bool treasuryTransferSuccess = usdcToken.transfer(trade.treasuryAddress, treasuryTotal);
+            require(treasuryTransferSuccess,"Transfer failed");
+
+            // second payement to pay the first tranche to the supplier
+            bool supplierTransferSuccess = usdcToken.transfer(trade.supplierAddress, trade.supplierFirstTranche);
+            require(supplierTransferSuccess,"Transfer failed");
+        }
+        else if (_newStatus==TradeStatus.CLOSED){
+            trade.status = TradeStatus.CLOSED;
+            trade.updatedAt = block.timestamp;
+            supplierSecondTrancheReleased = trade.supplierSecondTranche;
+            // third payement to pay the second tranche to the supplier
+            bool supplierTransferSuccess = usdcToken.transfer(trade.supplierAddress, trade.supplierSecondTranche);
+            require(supplierTransferSuccess,"Transfer failed");
+        }
+
+
+        emit FundsReleased(
+            _tradeId,
+            trade.treasuryAddress,
+            trade.supplierAddress,
+            trade.status,
+            logisticsReleased,
+            platformFeesReleased,
+            supplierFirstTrancheReleased,
+            supplierSecondTrancheReleased,
+            trade.ricardianHash
+        );
     }
 }
