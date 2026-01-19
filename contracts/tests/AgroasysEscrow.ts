@@ -7,14 +7,13 @@ import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 describe("AgroasysEscrow: creation trade", function () {
   let escrow: AgroasysEscrow;
   let usdc: MockUSDC;
-  let owner:SignerWithAddress;
   let buyer: SignerWithAddress;
   let supplier: SignerWithAddress;
   let treasury:SignerWithAddress;
   let oracle:SignerWithAddress;
 
   beforeEach(async function () {
-    [owner, buyer, supplier, treasury, oracle] = await ethers.getSigners();
+    [buyer, supplier, treasury, oracle] = await ethers.getSigners();
 
     const USDCFactory = await ethers.getContractFactory("MockUSDC");
     usdc = await USDCFactory.deploy();
@@ -205,4 +204,80 @@ describe("AgroasysEscrow: creation trade", function () {
     });
   });
 
+});
+
+
+describe("AgroasysEscrow: releaseFunds", function () {
+  let escrow: AgroasysEscrow;
+  let usdc: MockUSDC;
+  let buyer: SignerWithAddress;
+  let supplier: SignerWithAddress;
+  let treasury: SignerWithAddress;
+  let oracle: SignerWithAddress;
+  let tradeId: bigint;
+
+  beforeEach(async function () {
+    [buyer, supplier, treasury, oracle] = await ethers.getSigners();
+
+    const USDCFactory = await ethers.getContractFactory("MockUSDC");
+    usdc = await USDCFactory.deploy();
+    await usdc.waitForDeployment();
+
+    await usdc.mint(buyer.address, ethers.parseUnits("1000000", 6));
+
+    const EscrowFactory = await ethers.getContractFactory("AgroasysEscrow");
+    escrow = await EscrowFactory.deploy(await usdc.getAddress(), oracle.address);
+    await escrow.waitForDeployment();
+
+    const totalAmount = ethers.parseUnits("107000", 6);
+    await usdc.connect(buyer).approve(await escrow.getAddress(), totalAmount);
+    
+    const tx = await escrow.connect(buyer).createTrade(
+      supplier.address,
+      treasury.address,
+      totalAmount,
+      ethers.parseUnits("5000", 6),  // logistics
+      ethers.parseUnits("2000", 6),  // platform fees
+      ethers.parseUnits("40000", 6), // first tranche
+      ethers.parseUnits("60000", 6), // second tranche
+      ethers.id("1b4f0e9851971998e732078544c96b36c3d01cedf7caa332359d6f1d83567014")
+    );
+    
+    tradeId = 0n;
+  });
+
+  describe("Success:", function () {
+    it("Should release stage 1 funds (IN_TRANSIT)", async function () {
+      const treasuryBalanceBefore = await usdc.balanceOf(treasury.address);
+      const supplierBalanceBefore = await usdc.balanceOf(supplier.address);
+
+      const tx = await escrow.connect(oracle).releaseFunds(tradeId, 1); // 1 = IN_TRANSIT
+
+      await expect(tx)
+        .to.emit(escrow, "FundsReleased")
+        .withArgs(
+          tradeId,
+          treasury.address,
+          supplier.address,
+          1, // IN_TRANSIT
+          ethers.parseUnits("5000", 6),  // logistics
+          ethers.parseUnits("2000", 6),  // platform fees
+          ethers.parseUnits("40000", 6), // first tranche
+          0,                              // second tranche (not released yet)
+          ethers.id("1b4f0e9851971998e732078544c96b36c3d01cedf7caa332359d6f1d83567014")
+        );
+
+      // check balances
+      expect(await usdc.balanceOf(treasury.address)).to.equal(
+        treasuryBalanceBefore + ethers.parseUnits("7000", 6) // logistics + fees
+      );
+      expect(await usdc.balanceOf(supplier.address)).to.equal(
+        supplierBalanceBefore + ethers.parseUnits("40000", 6)
+      );
+
+      // check trade status
+      const trade = await escrow.trades(tradeId);
+      expect(trade.status).to.equal(1); // IN_TRANSIT
+    });
+  });
 });
