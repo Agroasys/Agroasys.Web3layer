@@ -308,5 +308,53 @@ describe("AgroasysEscrow: releaseFunds", function () {
       const trade = await escrow.trades(tradeId);
       expect(trade.status).to.equal(2); // CLOSED
     });
+
+    it("Sould execute the full lifecycle: from LOCKED to CLOSED", async function() {
+      // stage 0 (LOCKED)
+      let trade = await escrow.trades(tradeId);
+      expect(trade.status).to.equal(0);
+
+      // stage 1 (IN_TRANSIT)
+      await escrow.connect(oracle).releaseFunds(tradeId, 1);
+      trade = await escrow.trades(tradeId);
+      expect(trade.status).to.equal(1);
+
+      // stage 2 (CLOSED)
+      await escrow.connect(oracle).releaseFunds(tradeId, 2);
+      trade = await escrow.trades(tradeId);
+      expect(trade.status).to.equal(2);
+
+      // escrow should have released all the funds
+      expect(await usdc.balanceOf(await escrow.getAddress())).to.equal(0);
+    });
+  });
+
+  describe("Failure:", function () {
+    it("Should reject someone else than oracle calls releaseFunds",async function () {
+      await expect(escrow.connect(buyer).releaseFunds(tradeId, 1)).to.be.revertedWith("Only oracle can call");
+    });
+
+    it("Should reject if the trade doesn't exist", async function (){
+      await expect(escrow.connect(oracle).releaseFunds(999,1)).to.be.revertedWith("trade doesn't exist");
+    });
+
+    it("Should reject stage 1 if status is not LOCKED", async function () {
+      await escrow.connect(oracle).releaseFunds(tradeId, 1);
+      await expect(escrow.connect(oracle).releaseFunds(tradeId, 1)).to.be.revertedWith("actual status must be LOCKED to release stage 1");
+    });
+
+    it("Should reject stage 2 if status is not IN_TRANSIT", async function () {
+      await expect(escrow.connect(oracle).releaseFunds(tradeId, 2)).to.be.revertedWith("actual status  must be IN_TRANSIT to release stage 2");
+    });
+
+    it("Should reject if called with CLOSED new_status", async function () {
+      await expect(escrow.connect(oracle).releaseFunds(tradeId, 0)).to.be.revertedWith("new status not valid");
+    });
+
+    it("Should reject if trade is already CLOSED", async function () {
+      await escrow.connect(oracle).releaseFunds(tradeId, 1);
+      await escrow.connect(oracle).releaseFunds(tradeId, 2);
+      await expect(escrow.connect(oracle).releaseFunds(tradeId, 1)).to.be.revertedWith("trade not modifiable by the oracle");
+    });
   });
 });
