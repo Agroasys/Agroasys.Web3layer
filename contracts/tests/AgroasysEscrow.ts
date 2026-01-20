@@ -275,9 +275,38 @@ describe("AgroasysEscrow: releaseFunds", function () {
         supplierBalanceBefore + ethers.parseUnits("40000", 6)
       );
 
-      // check trade status
       const trade = await escrow.trades(tradeId);
       expect(trade.status).to.equal(1); // IN_TRANSIT
+    });
+
+
+    it("Sould release stage 2 funds (CLOSED)",async function () {
+      await escrow.connect(oracle).releaseFunds(tradeId,1);
+
+      const supplierBalanceBefore = await usdc.balanceOf(supplier.address);
+
+      const tx = await escrow.connect(oracle).releaseFunds(tradeId,2);
+
+      await expect(tx)
+        .to.emit(escrow,"FundsReleased")
+        .withArgs(
+            tradeId,
+            treasury.address,
+            supplier.address,
+            2, // CLOSED
+            0, // logistics (already released)
+            0, // platform fees (already released)
+            0, // first tranche (already released)
+            ethers.parseUnits("60000", 6), // second tranche
+            ethers.id("1b4f0e9851971998e732078544c96b36c3d01cedf7caa332359d6f1d83567014")
+        );
+
+      expect(await usdc.balanceOf(supplier.address)).to.equal(
+        supplierBalanceBefore + ethers.parseUnits("60000", 6)
+      );
+
+      const trade = await escrow.trades(tradeId);
+      expect(trade.status).to.equal(2); // CLOSED
     });
   });
 });
