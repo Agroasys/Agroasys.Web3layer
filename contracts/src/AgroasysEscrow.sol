@@ -328,7 +328,7 @@ contract AgroasysEscrow is ReentrancyGuard{
 
         Trade storage trade = trades[_tradeId];
 
-        require(trade.status != TradeStatus.CLOSED, "trade already closed");
+        require(trade.status != TradeStatus.CLOSED && trade.status != TradeStatus.DISPUTED, "trade already closed or disputed");
         // admin can solve if oracle was inactive for 7 days
         require(block.timestamp >= trade.updatedAt + 7 days,"must wait 7 days since last oracle update");
 
