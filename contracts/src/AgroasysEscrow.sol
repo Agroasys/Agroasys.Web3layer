@@ -36,6 +36,15 @@ contract AgroasysEscrow is ReentrancyGuard{
         uint256 updatedAt; // necessary to allow an admin to call dispute (If the Oracle goes offline for >7 days)
     }
 
+    struct DisputeProposal {
+        uint256 tradeId;
+        DisputeStatus disputeStatus;
+        uint256 approvalCount;
+        mapping(address=>bool) hasApproved;
+        bool executed;
+        uint256 createdAt;
+    }
+
     mapping(uint256 => Trade) public trades;
 
     uint256 public tradeCounter;
@@ -44,7 +53,11 @@ contract AgroasysEscrow is ReentrancyGuard{
 
     IERC20 public usdcToken;
 
-    mapping(address => bool) public admins;
+    address[] public admins;
+    mapping(address => bool) public isAdmin;
+    uint256 public requiredApprovals;
+    mapping(uint256 => DisputeProposal) public disputeProposals;
+    uint256 disputeCounter;
 
     event TradeLocked(
         uint256 tradeId,
@@ -77,14 +90,40 @@ contract AgroasysEscrow is ReentrancyGuard{
         bytes32 ricardianHash
     );
 
-    constructor(address _usdcToken,address _oracleAddress){
+    event DisputeProposed(
+        uint256 proposalId,
+        uint256 tradeId,
+        DisputeStatus disputeStatus,
+        address proposer
+    );
+
+    event DisputeApproved(
+        uint256 proposalId,
+        address approver,
+        uint256 approvalCount,
+        uint256 requiredApprovals
+    );
+
+
+    constructor(address _usdcToken,address _oracleAddress,address[] memory _admins,uint256 _requiredApprovals){
+        require(_admins.length >= _requiredApprovals, "not enough admins");
+        require(_requiredApprovals > 0, "required approvals must be greater than 0");
+        
         usdcToken = IERC20(_usdcToken);
         oracleAddress = _oracleAddress;
-        admins[msg.sender] = true;
+        requiredApprovals = _requiredApprovals;
+        
+        for (uint256 i = 0; i < _admins.length; i++) {
+            require(_admins[i]!=address(0), "incorrect address");
+            require(!isAdmin[_admins[i]],"admin already known");
+
+            admins.push(_admins[i]);
+            isAdmin[_admins[i]] = true;
+        }
     }
 
     modifier onlyAdmin() {
-        require(admins[msg.sender],"Only admin can call");
+        require(isAdmin[msg.sender],"Only admin can call");
         _;
     }
 
@@ -209,19 +248,19 @@ contract AgroasysEscrow is ReentrancyGuard{
         );
     }
 
-
-    function dispute(
-        uint256 _tradeId,
-        DisputeStatus _disputeStatus
-    ) external onlyAdmin nonReentrant {
-        require(_tradeId < tradeCounter, "trade doesn't exist");
+    // function callable only in the contract by the functions approveDispute and dispute
+    function _dispute(uint256 _proposalId) internal {
+        DisputeProposal storage proposal = disputeProposals[_proposalId];
+        
+        require(!proposal.executed, "already executed");
+        require(proposal.approvalCount >= requiredApprovals, "not enough approvals");
+        
+        proposal.executed = true;
+        
+        uint256 _tradeId = proposal.tradeId;
+        DisputeStatus _disputeStatus = proposal.disputeStatus;
         
         Trade storage trade = trades[_tradeId];
-        
-        require(trade.status != TradeStatus.CLOSED, "trade already closed");
-        
-        // admin can solve if oracle was inactive for 7 days
-        require(block.timestamp >= trade.updatedAt + 7 days,"must wait 7 days since last oracle update");
         
         uint256 availableAmount = 0;
         
@@ -281,5 +320,55 @@ contract AgroasysEscrow is ReentrancyGuard{
             trade.treasuryAddress,
             trade.ricardianHash
         );
+    }
+
+    function proposeDispute(uint256 _tradeId, DisputeStatus _disputeStatus) external onlyAdmin() returns (uint256) {
+
+        require(_tradeId<tradeCounter,"trade doesn't exist");
+
+        Trade storage trade = trades[_tradeId];
+
+        require(trade.status != TradeStatus.CLOSED, "trade already closed");
+        // admin can solve if oracle was inactive for 7 days
+        require(block.timestamp >= trade.updatedAt + 7 days,"must wait 7 days since last oracle update");
+
+        uint256 proposalId = disputeCounter;
+        disputeCounter++;
+        DisputeProposal storage proposal = disputeProposals[proposalId];
+
+        proposal.tradeId = _tradeId;
+        proposal.disputeStatus = _disputeStatus;
+        proposal.approvalCount = 1;
+        proposal.hasApproved[msg.sender] = true;
+        proposal.executed = false;
+        proposal.createdAt = block.timestamp;
+        
+        emit DisputeProposed(proposalId, _tradeId, _disputeStatus, msg.sender);
+        
+        return proposalId;
+    }
+
+    // automically call dispute function
+    function approveDispute(uint256 _proposalId) external onlyAdmin nonReentrant{
+        require(disputeCounter>_proposalId,"dispute not created");
+        DisputeProposal storage proposal = disputeProposals[_proposalId];
+
+        require(!proposal.executed, "proposal already executed");
+        require(!proposal.hasApproved[msg.sender], "already approved by this admin");
+
+        proposal.hasApproved[msg.sender] = true;
+        proposal.approvalCount++;
+
+        emit DisputeApproved(_proposalId, msg.sender, proposal.approvalCount, requiredApprovals);
+
+        if (proposal.approvalCount>=requiredApprovals) {
+            _dispute(_proposalId);
+        }
+    }
+
+    // should not be needed, just in case approveDispute fails to call _dispute
+    function dispute(uint256 _proposalId) external onlyAdmin nonReentrant{
+        require(disputeCounter>_proposalId,"dispute not created");
+        _dispute(_proposalId);
     }
 }
