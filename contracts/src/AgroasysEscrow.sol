@@ -365,10 +365,4 @@ contract AgroasysEscrow is ReentrancyGuard{
             _dispute(_proposalId);
         }
     }
-
-    // should not be needed, just in case approveDispute fails to call _dispute
-    function dispute(uint256 _proposalId) external onlyAdmin nonReentrant{
-        require(disputeCounter>_proposalId,"dispute not created");
-        _dispute(_proposalId);
-    }
 }
