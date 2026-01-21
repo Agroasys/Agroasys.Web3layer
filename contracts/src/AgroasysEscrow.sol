@@ -234,6 +234,8 @@ contract AgroasysEscrow is ReentrancyGuard{
         }
         
         require(availableAmount > 0, "no funds available for dispute");
+
+        TradeStatus oldStatus = trade.status;
         
         trade.status = TradeStatus.DISPUTED;
         trade.updatedAt = block.timestamp;
@@ -243,11 +245,24 @@ contract AgroasysEscrow is ReentrancyGuard{
             // if an issue occured -> refund the buyer
             bool refundSuccess = usdcToken.transfer(trade.buyerAddress, availableAmount);
             require(refundSuccess, "refund transfer failed");
-        } 
+        }
         else if (_disputeStatus == DisputeStatus.RESOLVE) {
             // if everything went right but somehow the oracle failed to call releaseFunds
-            bool resolveSuccess = usdcToken.transfer(trade.supplierAddress, availableAmount);
-            require(resolveSuccess, "resolve transfer failed");
+            if (oldStatus == TradeStatus.LOCKED) {
+                // pay treasury fees + logistics and supplier full amount
+                uint256 treasuryTotal = trade.logisticsAmount + trade.platformFeesAmount;
+                bool treasurySuccess = usdcToken.transfer(trade.treasuryAddress, treasuryTotal);
+                require(treasurySuccess, "transfer to treasury  failed");
+                
+                uint256 supplierTotal = trade.supplierFirstTranche + trade.supplierSecondTranche;
+                bool supplierSuccess = usdcToken.transfer(trade.supplierAddress, supplierTotal);
+                require(supplierSuccess, "transfer to supplier failed");
+            } 
+            else if (oldStatus == TradeStatus.IN_TRANSIT) {
+                // treasury already paid so pay only remaining supplier tranche
+                bool resolveSuccess = usdcToken.transfer(trade.supplierAddress, availableAmount);
+                require(resolveSuccess, "transfer to supplier failed");
+            }
         } 
         else if (_disputeStatus == DisputeStatus.PARTICULAR_ISSUE){
             // let the company solve the particular issue
