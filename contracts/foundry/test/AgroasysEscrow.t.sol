@@ -15,6 +15,8 @@ contract FuzzTest is Test {
     address admin1 = makeAddr("admin1");
     address admin2 = makeAddr("admin2");
     address admin3 = makeAddr("admin3");
+
+    bytes32 ricardianHash = bytes32(bytes("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"));
     
     function setUp() public {
         usdc = new MockUSDC();
@@ -30,6 +32,24 @@ contract FuzzTest is Test {
         vm.prank(buyer);
         usdc.approve(address(escrow), type(uint256).max);
     }
+
+    // helper function
+    function _create_trade(uint256 logistics, uint256 fees, uint256 tranche1, uint256 tranche2) internal returns (uint256){
+        uint256 total = logistics + fees + tranche1 + tranche2;
+
+        vm.prank(buyer);
+
+        return escrow.createTrade(
+            supplier, 
+            treasury, 
+            total, 
+            logistics, 
+            fees, 
+            tranche1, 
+            tranche2, 
+            ricardianHash
+        );
+    }
     
     function test_Setup() public view {
         assertEq(escrow.oracleAddress(), oracle);
@@ -44,13 +64,29 @@ contract FuzzTest is Test {
         
         uint256 total = uint256(logistics) + fees + tranche1 + tranche2;
         vm.assume(total <= 10_000_000e6);
-        
-        vm.prank(buyer);
-        uint256 tradeId = escrow.createTrade(supplier,treasury,total,logistics,fees,tranche1,tranche2,bytes32(bytes("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08")));
-        
-        (,,,,,, uint256 locked,,,,,,) = escrow.trades(tradeId);
-        assertEq(locked, total, "locked amount mismatch");
-        assertEq(usdc.balanceOf(address(escrow)), total, "escrow balance mismatch");
-    }
 
+        uint256 buyerBeforeBalance = usdc.balanceOf(buyer);
+        uint256 escrowBeforeBalance = usdc.balanceOf(address(escrow));
+        
+        uint256 tradeId = _create_trade(logistics,fees,tranche1,tranche2);
+        
+        (uint256 _tradeId,,AgroasysEscrow.TradeStatus _status,address _buyer,address _supplier,address _treasury,uint256 _total,uint256 _logistics,uint256 _fees,uint256 _tranche1,uint256 _tranche2,,) = escrow.trades(tradeId);
+
+        // check that trades values are stored correctly
+        assertEq(_tradeId, tradeId, "trade id mismatch");
+        assertEq(_buyer,buyer,"buyer mismatch");
+        assertEq(_supplier, supplier, "supplier mismatch");
+        assertEq(_treasury, treasury, "treasury mismatch");
+        assertEq(uint8(_status), uint8(AgroasysEscrow.TradeStatus.LOCKED), "status should be LOCKED");
+        assertEq(_total, total, "total mismatch");
+        assertEq(_logistics, logistics, "logistics mismatch");
+        assertEq(_fees, fees, "fees mismatch");
+        assertEq(_tranche1, tranche1, "tranche1 mismatch");
+        assertEq(_tranche2, tranche2, "tranche2 mismatch");
+        assertEq(_total, _logistics + _fees + _tranche1 + _tranche2, "total mismatch sum of logistic+fees+tranche1&2");
+        
+        // check that balances are correct
+        assertEq(usdc.balanceOf(buyer),buyerBeforeBalance-total,"buyer balance mismatch");
+        assertEq(usdc.balanceOf(address(escrow)),escrowBeforeBalance+total,"escrow balance mismatch");
+    }
 }
