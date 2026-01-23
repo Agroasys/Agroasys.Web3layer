@@ -28,27 +28,17 @@ contract FuzzTest is Test {
         admins[2] = admin3;
         
         escrow = new AgroasysEscrow(address(usdc), oracle, admins, 2);
-        
-        vm.prank(buyer);
-        usdc.approve(address(escrow), type(uint256).max);
     }
 
     // helper function
     function _create_trade(uint256 logistics, uint256 fees, uint256 tranche1, uint256 tranche2) internal returns (uint256){
         uint256 total = logistics + fees + tranche1 + tranche2;
 
-        vm.prank(buyer);
-
-        return escrow.createTrade(
-            supplier, 
-            treasury, 
-            total, 
-            logistics, 
-            fees, 
-            tranche1, 
-            tranche2, 
-            ricardianHash
-        );
+        vm.startPrank(buyer);
+        usdc.approve(address(escrow), total); // aprove usdc contract
+        uint256 tradeId = escrow.createTrade(supplier, treasury, total, logistics, fees, tranche1, tranche2, ricardianHash);
+        vm.stopPrank();
+        return tradeId;
     }
     
     function test_Setup() public view {
