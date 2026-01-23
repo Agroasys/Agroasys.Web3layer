@@ -323,7 +323,6 @@ contract AgroasysEscrow is ReentrancyGuard{
     }
 
     function proposeDispute(uint256 _tradeId, DisputeStatus _disputeStatus) external onlyAdmin() returns (uint256) {
-
         require(_tradeId<tradeCounter,"trade doesn't exist");
 
         Trade storage trade = trades[_tradeId];
