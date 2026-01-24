@@ -24,6 +24,8 @@ contract Handler is Test {
     uint256 public totalDeposited;
     uint256 public totalWithdrawn;
     uint256 public tradesCreated;
+    uint256 public releaseStage1Triggered;
+    uint256 public releaseStage2Triggered;
     uint256 public disputedRaised;
 
     constructor(AgroasysEscrow _escrow, MockUSDC _usdc, address _buyer, address _supplier, address _treasury, address _oracle, address _admin1, address _admin2){
@@ -45,9 +47,6 @@ contract Handler is Test {
         
         uint256 total = logistics + fees + tranche1 + tranche2;
 
-        if (10_000_000e6 < total) {
-            return;
-        }
         usdc.mint(buyer, total);
 
         vm.startPrank(buyer);
@@ -77,6 +76,7 @@ contract Handler is Test {
         escrow.releaseFunds(tradeId, AgroasysEscrow.TradeStatus.IN_TRANSIT);
         (,,,,,,, uint256 logistics, uint256 fees, uint256 tranche1,,,) = escrow.trades(tradeId);
         totalWithdrawn += logistics + fees + tranche1;
+        releaseStage1Triggered++;
     }
 
     function releaseFundsStage2(uint96 random_tradeId) public {
@@ -97,6 +97,65 @@ contract Handler is Test {
         escrow.releaseFunds(tradeId, AgroasysEscrow.TradeStatus.CLOSED);
         (,,,,,,,,,,uint256 tranche2,,) = escrow.trades(tradeId);
         totalWithdrawn += tranche2;
+        releaseStage2Triggered++;
+    }
+
+
+    function proposeDispute(uint96 random_tradeId, uint8 _disputeStatus) public {
+        uint256 tradeCount = escrow.tradeCounter();
+        if (tradeCount==0){
+            return;
+        }
+
+        uint256 tradeId = random_tradeId % tradeCount;
+
+        (,,AgroasysEscrow.TradeStatus status,,,,,,,,,,uint256 updatedAt) = escrow.trades(tradeId);
+        if (status==AgroasysEscrow.TradeStatus.CLOSED||status==AgroasysEscrow.TradeStatus.DISPUTED){
+            return;
+        }
+
+        // we just have 3 possibilities
+        _disputeStatus = _disputeStatus% 3;
+
+        vm.warp(updatedAt + 7 days);
+
+        vm.prank(admin1);
+        escrow.proposeDispute(tradeId, AgroasysEscrow.DisputeStatus(_disputeStatus));
+        disputedRaised++;
+    }
+
+
+    function approveDispute(uint96 random_proposalId) public {
+        uint256 disputeCount = escrow.disputeCounter();
+
+        if (disputeCount==0){
+            return;
+        }
+
+        uint256 proposalId = random_proposalId%disputeCount;
+
+        (uint256 tradeId,,,,) = escrow.disputeProposals(proposalId);
+
+
+        (,,AgroasysEscrow.TradeStatus statusOld,,,,,,,,,,) = escrow.trades(tradeId);
+
+        if (statusOld==AgroasysEscrow.TradeStatus.DISPUTED||statusOld==AgroasysEscrow.TradeStatus.CLOSED){
+            return;
+        }
+
+        vm.prank(admin2);
+        escrow.approveDispute(proposalId);
+
+        (,,AgroasysEscrow.TradeStatus statusNew,,,,uint256 total,,,,uint256 tranche2,,) = escrow.trades(tradeId);
+
+        if (statusNew==AgroasysEscrow.TradeStatus.DISPUTED){
+            if (statusOld==AgroasysEscrow.TradeStatus.LOCKED){
+                totalWithdrawn+=total;
+            }
+            else if (statusOld==AgroasysEscrow.TradeStatus.IN_TRANSIT){
+                totalWithdrawn+=tranche2;
+            }
+        }
     }
 }
 
@@ -140,15 +199,16 @@ contract InvariantTest is Test {
 
         targetContract(address(handler));
 
-        bytes4[] memory selectors = new bytes4[](3);
+        bytes4[] memory selectors = new bytes4[](5);
         selectors[0] = Handler.createTrade.selector;
         selectors[1] = Handler.releaseFundsStage1.selector;
         selectors[2] = Handler.releaseFundsStage2.selector;
+        selectors[3] = Handler.proposeDispute.selector;
+        selectors[4] = Handler.approveDispute.selector;
         
-        targetSelector(FuzzSelector({
-            addr: address(handler),
-            selectors: selectors
-        }));
+        targetSelector(
+            FuzzSelector({addr: address(handler),selectors: selectors})
+        );
     }
 
 
@@ -165,14 +225,23 @@ contract InvariantTest is Test {
                 totalLocked += tranche2;
             }
         }
-
         assertEq(usdc.balanceOf(address(escrow)),totalLocked,"Escrow balance doesn't match locked funds");
     }
+
+    function invariant_EscrowFundsConservation() public view{
+        uint256 amountRemaining = handler.totalDeposited()-handler.totalWithdrawn();
+        uint256 escrowBalance = usdc.balanceOf(address(escrow));
+        assertEq(escrowBalance,amountRemaining,
+            "Escrow balance doesn't match 'deposited-withdrawn'"
+        );
+    }
+
 
 
     function invariant_callSummary() public view {
         console2.log("Total trades:", uint256(handler.tradesCreated()));
-        console2.log("Total deposited (USDC):", uint256(handler.totalDeposited() / 1e6));
-        console2.log("Total withdrawn (USDC):", uint256(handler.totalWithdrawn() / 1e6));
+        console2.log("Total locked in the escrow (USDC):", uint256(usdc.balanceOf(address(escrow))));
+        console2.log("Total deposited (USDC):", uint256(handler.totalDeposited()));
+        console2.log("Total withdrawn (USDC):", uint256(handler.totalWithdrawn()));
     }
 }
