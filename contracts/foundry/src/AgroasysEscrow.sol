@@ -57,7 +57,7 @@ contract AgroasysEscrow is ReentrancyGuard{
     mapping(address => bool) public isAdmin;
     uint256 public requiredApprovals;
     mapping(uint256 => DisputeProposal) public disputeProposals;
-    uint256 disputeCounter;
+    uint256 public disputeCounter;
 
     event TradeLocked(
         uint256 tradeId,
@@ -252,7 +252,6 @@ contract AgroasysEscrow is ReentrancyGuard{
     function _dispute(uint256 _proposalId) internal {
         DisputeProposal storage proposal = disputeProposals[_proposalId];
         
-        require(!proposal.executed, "already executed");
         require(proposal.approvalCount >= requiredApprovals, "not enough approvals");
         
         proposal.executed = true;
