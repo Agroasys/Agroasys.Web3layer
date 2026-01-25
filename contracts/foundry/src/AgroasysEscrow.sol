@@ -248,7 +248,7 @@ contract AgroasysEscrow is ReentrancyGuard{
         );
     }
 
-    // function callable only in the contract by the functions approveDispute and dispute
+    // function callable only in the contract by the functions approveDispute
     function _dispute(uint256 _proposalId) internal {
         DisputeProposal storage proposal = disputeProposals[_proposalId];
         
@@ -352,6 +352,11 @@ contract AgroasysEscrow is ReentrancyGuard{
         DisputeProposal storage proposal = disputeProposals[_proposalId];
 
         require(!proposal.executed, "proposal already executed");
+
+        uint256 _tradeId = proposal.tradeId;
+        Trade storage trade = trades[_tradeId];
+        require(trade.status != TradeStatus.DISPUTED,"trade already disputed");
+
         require(!proposal.hasApproved[msg.sender], "already approved by this admin");
 
         proposal.hasApproved[msg.sender] = true;
