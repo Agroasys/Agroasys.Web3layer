@@ -12,5 +12,5 @@ solc_version = "0.8.28"
 via_ir = true
 
 [fuzz]
-runs = 250
+runs = 10000
 depth = 1000

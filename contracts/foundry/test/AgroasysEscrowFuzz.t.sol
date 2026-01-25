@@ -15,8 +15,6 @@ contract FuzzTest is Test {
     address admin1 = makeAddr("admin1");
     address admin2 = makeAddr("admin2");
     address admin3 = makeAddr("admin3");
-
-    bytes32 ricardianHash = bytes32(bytes("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"));
     
     function setUp() public {
         usdc = new MockUSDC();
@@ -31,7 +29,7 @@ contract FuzzTest is Test {
     }
 
     // helper function
-    function _create_trade(uint256 logistics, uint256 fees, uint256 tranche1, uint256 tranche2) internal returns (uint256){
+    function _create_trade(uint256 logistics, uint256 fees, uint256 tranche1, uint256 tranche2, bytes32 ricardianHash) internal returns (uint256){
         uint256 total = logistics + fees + tranche1 + tranche2;
 
         vm.startPrank(buyer);
@@ -46,7 +44,8 @@ contract FuzzTest is Test {
         assertEq(usdc.balanceOf(buyer), 10_000_000e6);
     }
     
-    function testFuzz_CreateTrade(uint96 logistics,uint96 fees,uint96 tranche1,uint96 tranche2) public {
+    function testFuzz_CreateTrade(uint96 logistics,uint96 fees,uint96 tranche1,uint96 tranche2, bytes32 ricardianHash) public {
+        vm.assume(ricardianHash != bytes32(0));
         vm.assume(logistics > 0 && logistics < 1_000_000e6);
         vm.assume(fees > 0 && fees < 1_000_000e6);
         vm.assume(tranche1 > 0 && tranche1 < 1_000_000e6);
@@ -58,7 +57,7 @@ contract FuzzTest is Test {
         uint256 buyerBeforeBalance = usdc.balanceOf(buyer);
         uint256 escrowBeforeBalance = usdc.balanceOf(address(escrow));
         
-        uint256 tradeId = _create_trade(logistics,fees,tranche1,tranche2);
+        uint256 tradeId = _create_trade(logistics,fees,tranche1,tranche2, ricardianHash);
         
         (uint256 _tradeId,,AgroasysEscrow.TradeStatus _status,address _buyer,address _supplier,address _treasury,uint256 _total,uint256 _logistics,uint256 _fees,uint256 _tranche1,uint256 _tranche2,,) = escrow.trades(tradeId);
 
@@ -81,7 +80,8 @@ contract FuzzTest is Test {
     }
 
 
-    function testFuzz_ReleaseFunds(uint96 logistics,uint96 fees,uint96 tranche1,uint96 tranche2) public{
+    function testFuzz_ReleaseFunds(uint96 logistics,uint96 fees,uint96 tranche1,uint96 tranche2, bytes32 ricardianHash) public{
+        vm.assume(ricardianHash != bytes32(0));
         vm.assume(logistics > 0 && logistics < 1_000_000e6);
         vm.assume(fees > 0 && fees < 1_000_000e6);
         vm.assume(tranche1 > 0 && tranche1 < 1_000_000e6);
@@ -90,7 +90,7 @@ contract FuzzTest is Test {
         uint256 total = logistics + fees + tranche1 + tranche2;
         vm.assume(total <= 10_000_000e6);
 
-        uint256 tradeId = _create_trade(logistics,fees,tranche1,tranche2);
+        uint256 tradeId = _create_trade(logistics,fees,tranche1,tranche2, ricardianHash);
 
         uint256 buyerBeforeBalance = usdc.balanceOf(buyer);
         uint256 escrowBeforeBalance = usdc.balanceOf(address(escrow));
@@ -117,7 +117,8 @@ contract FuzzTest is Test {
     }
 
 
-    function testFuzz_Dispute_REFUND_funds_LOCKED(uint96 logistics,uint96 fees,uint96 tranche1,uint96 tranche2) public {
+    function testFuzz_Dispute_REFUND_funds_LOCKED(uint96 logistics,uint96 fees,uint96 tranche1,uint96 tranche2, bytes32 ricardianHash) public {
+        vm.assume(ricardianHash != bytes32(0));
         vm.assume(logistics > 100 && logistics < 100_000e6);
         vm.assume(fees > 100 && fees < 100_000e6);
         vm.assume(tranche1 > 100 && tranche1 < 1_000_000e6);
@@ -126,7 +127,7 @@ contract FuzzTest is Test {
         uint256 total = logistics + fees + tranche1 + tranche2;
         vm.assume(total <= 10_000_000e6);
         
-        uint256 tradeId = _create_trade(logistics, fees, tranche1, tranche2);
+        uint256 tradeId = _create_trade(logistics, fees, tranche1, tranche2, ricardianHash);
 
         uint256 buyerBeforeBalance = usdc.balanceOf(buyer);
         uint256 escrowBeforeBalance = usdc.balanceOf(address(escrow));
@@ -145,7 +146,8 @@ contract FuzzTest is Test {
     }
 
 
-    function testFuzz_Dispute_REFUND_funds_IN_TRANSIT(uint96 logistics,uint96 fees,uint96 tranche1,uint96 tranche2) public {
+    function testFuzz_Dispute_REFUND_funds_IN_TRANSIT(uint96 logistics,uint96 fees,uint96 tranche1,uint96 tranche2, bytes32 ricardianHash) public {
+        vm.assume(ricardianHash != bytes32(0));
         vm.assume(logistics > 100 && logistics < 100_000e6);
         vm.assume(fees > 100 && fees < 100_000e6);
         vm.assume(tranche1 > 100 && tranche1 < 1_000_000e6);
@@ -154,7 +156,7 @@ contract FuzzTest is Test {
         uint256 total = logistics + fees + tranche1 + tranche2;
         vm.assume(total <= 10_000_000e6);
         
-        uint256 tradeId = _create_trade(logistics, fees, tranche1, tranche2);
+        uint256 tradeId = _create_trade(logistics, fees, tranche1, tranche2, ricardianHash);
 
         vm.prank(oracle);
         // release stage 1
@@ -177,7 +179,8 @@ contract FuzzTest is Test {
         assertEq(usdc.balanceOf(address(escrow)),escrowBeforeBalance-tranche2,"escrow balance mismatch");
     }
 
-    function testFuzz_Dispute_RESOLVE_funds_LOCKED(uint96 logistics,uint96 fees,uint96 tranche1,uint96 tranche2) public {
+    function testFuzz_Dispute_RESOLVE_funds_LOCKED(uint96 logistics,uint96 fees,uint96 tranche1,uint96 tranche2, bytes32 ricardianHash) public {
+        vm.assume(ricardianHash != bytes32(0));
         vm.assume(logistics > 100 && logistics < 100_000e6);
         vm.assume(fees > 100 && fees < 100_000e6);
         vm.assume(tranche1 > 100 && tranche1 < 1_000_000e6);
@@ -186,7 +189,7 @@ contract FuzzTest is Test {
         uint256 total = logistics + fees + tranche1 + tranche2;
         vm.assume(total <= 10_000_000e6);
         
-        uint256 tradeId = _create_trade(logistics, fees, tranche1, tranche2);
+        uint256 tradeId = _create_trade(logistics, fees, tranche1, tranche2, ricardianHash);
 
         uint256 treasuryBeforeBalance = usdc.balanceOf(treasury);
         uint256 supplierBeforeBalance = usdc.balanceOf(supplier);
@@ -207,7 +210,8 @@ contract FuzzTest is Test {
     }
 
 
-    function testFuzz_Dispute_RESOLVE_funds_IN_TRANSIT(uint96 logistics,uint96 fees,uint96 tranche1,uint96 tranche2) public {
+    function testFuzz_Dispute_RESOLVE_funds_IN_TRANSIT(uint96 logistics,uint96 fees,uint96 tranche1,uint96 tranche2, bytes32 ricardianHash) public {
+        vm.assume(ricardianHash != bytes32(0));
         vm.assume(logistics > 100 && logistics < 100_000e6);
         vm.assume(fees > 100 && fees < 100_000e6);
         vm.assume(tranche1 > 100 && tranche1 < 1_000_000e6);
@@ -216,7 +220,7 @@ contract FuzzTest is Test {
         uint256 total = logistics + fees + tranche1 + tranche2;
         vm.assume(total <= 10_000_000e6);
         
-        uint256 tradeId = _create_trade(logistics, fees, tranche1, tranche2);
+        uint256 tradeId = _create_trade(logistics, fees, tranche1, tranche2, ricardianHash);
 
         vm.prank(oracle);
         // release stage 1
@@ -239,7 +243,8 @@ contract FuzzTest is Test {
     }
 
 
-    function testFuzz_Dispute_PARTICULAR_ISSUE_funds_LOCKED(uint96 logistics,uint96 fees,uint96 tranche1,uint96 tranche2) public {
+    function testFuzz_Dispute_PARTICULAR_ISSUE_funds_LOCKED(uint96 logistics,uint96 fees,uint96 tranche1,uint96 tranche2, bytes32 ricardianHash) public {
+        vm.assume(ricardianHash != bytes32(0));
         vm.assume(logistics > 100 && logistics < 100_000e6);
         vm.assume(fees > 100 && fees < 100_000e6);
         vm.assume(tranche1 > 100 && tranche1 < 1_000_000e6);
@@ -248,7 +253,7 @@ contract FuzzTest is Test {
         uint256 total = logistics + fees + tranche1 + tranche2;
         vm.assume(total <= 10_000_000e6);
         
-        uint256 tradeId = _create_trade(logistics, fees, tranche1, tranche2);
+        uint256 tradeId = _create_trade(logistics, fees, tranche1, tranche2, ricardianHash);
 
         uint256 treasuryBeforeBalance = usdc.balanceOf(treasury);
         uint256 escrowBeforeBalance = usdc.balanceOf(address(escrow));
@@ -267,7 +272,8 @@ contract FuzzTest is Test {
     }
 
 
-    function testFuzz_Dispute_PARTICULAR_ISSUE_funds_IN_TRANSIT(uint96 logistics,uint96 fees,uint96 tranche1,uint96 tranche2) public {
+    function testFuzz_Dispute_PARTICULAR_ISSUE_funds_IN_TRANSIT(uint96 logistics,uint96 fees,uint96 tranche1,uint96 tranche2, bytes32 ricardianHash) public {
+        vm.assume(ricardianHash != bytes32(0));
         vm.assume(logistics > 100 && logistics < 100_000e6);
         vm.assume(fees > 100 && fees < 100_000e6);
         vm.assume(tranche1 > 100 && tranche1 < 1_000_000e6);
@@ -276,7 +282,7 @@ contract FuzzTest is Test {
         uint256 total = logistics + fees + tranche1 + tranche2;
         vm.assume(total <= 10_000_000e6);
         
-        uint256 tradeId = _create_trade(logistics, fees, tranche1, tranche2);
+        uint256 tradeId = _create_trade(logistics, fees, tranche1, tranche2, ricardianHash);
 
         vm.prank(oracle);
         // release stage 1
