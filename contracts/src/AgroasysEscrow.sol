@@ -57,7 +57,7 @@ contract AgroasysEscrow is ReentrancyGuard{
     mapping(address => bool) public isAdmin;
     uint256 public requiredApprovals;
     mapping(uint256 => DisputeProposal) public disputeProposals;
-    uint256 disputeCounter;
+    uint256 public disputeCounter;
 
     event TradeLocked(
         uint256 tradeId,
@@ -248,11 +248,10 @@ contract AgroasysEscrow is ReentrancyGuard{
         );
     }
 
-    // function callable only in the contract by the functions approveDispute and dispute
+    // function callable only in the contract by the functions approveDispute
     function _dispute(uint256 _proposalId) internal {
         DisputeProposal storage proposal = disputeProposals[_proposalId];
         
-        require(!proposal.executed, "already executed");
         require(proposal.approvalCount >= requiredApprovals, "not enough approvals");
         
         proposal.executed = true;
@@ -323,7 +322,6 @@ contract AgroasysEscrow is ReentrancyGuard{
     }
 
     function proposeDispute(uint256 _tradeId, DisputeStatus _disputeStatus) external onlyAdmin() returns (uint256) {
-
         require(_tradeId<tradeCounter,"trade doesn't exist");
 
         Trade storage trade = trades[_tradeId];
@@ -354,6 +352,11 @@ contract AgroasysEscrow is ReentrancyGuard{
         DisputeProposal storage proposal = disputeProposals[_proposalId];
 
         require(!proposal.executed, "proposal already executed");
+
+        uint256 _tradeId = proposal.tradeId;
+        Trade memory trade = trades[_tradeId];
+        require(trade.status != TradeStatus.DISPUTED,"trade already disputed");
+
         require(!proposal.hasApproved[msg.sender], "already approved by this admin");
 
         proposal.hasApproved[msg.sender] = true;

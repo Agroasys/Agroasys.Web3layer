@@ -354,7 +354,7 @@ contract AgroasysEscrow is ReentrancyGuard{
         require(!proposal.executed, "proposal already executed");
 
         uint256 _tradeId = proposal.tradeId;
-        Trade storage trade = trades[_tradeId];
+        Trade memory trade = trades[_tradeId];
         require(trade.status != TradeStatus.DISPUTED,"trade already disputed");
 
         require(!proposal.hasApproved[msg.sender], "already approved by this admin");
