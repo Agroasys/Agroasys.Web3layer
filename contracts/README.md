@@ -7,44 +7,47 @@ A Solidity-based state machine deployed on PolkaVM. It handles the locking, disp
 ## Architecture
 ```bash
 .
-├── foundry
-│   ├── foundry.toml // fondry config file
-│   ├── src
-│   │   ├── AgroasysEscrow.sol
-│   │   └── MockUSDC.sol
-│   └── test
-│       ├── AgroasysEscrowFuzz.t.sol // Stateless Fuzzing test
-│       └── AgroasysEscrowInvariant.t.sol // Statefull Invariant Tests
 ├── hardhat.config.ts // hardhat config file
 ├── package.json
 ├── README.md
-├── scripts
 ├── src
 │   ├── AgroasysEscrow.sol // Escrow smart contract
 │   └── MockUSDC.sol
 ├── tests
 │   └── AgroasysEscrow.ts // Uint tests
-└── tsconfig.json
+├── tsconfig.json
+├── ignition
+│   └── modules // deployment scripts
+│      ├── AgroasysEscrow.ts 
+│      └── MockUSDC.ts
+├── foundry
+│   ├── foundry.toml // fondry config file
+│   ├── src
+│   │   ├── AgroasysEscrow.sol
+│   │   └── MockUSDC.sol // tmp contract just for testing 
+│   └── test
+│       ├── AgroasysEscrowFuzz.t.sol // Stateless Fuzzing test
+│       └── AgroasysEscrowInvariant.t.sol // Statefull Invariant Tests
 ```
 
 ## Contracts structure
 
 ### Contract: `AgroasysEscrow.sol`
 
-Escrow contract implementing secure trade execution with multi-stage fund releases and dispute resolution mechanisms.
+Escrow contract implementing secure trade execution with multi-stage fund releases and dispute resolution.
 
 
 #### **Enums**
 **`TradeStatus`**
-- `LOCKED` - Initial state, funds deposited in the escrow
-- `IN_TRANSIT` - BOL verified, stage 1 funds released (logistics + fees + first tranche)
-- `CLOSED` - Inspection passed, all funds released (second tranche)
-- `DISPUTED` - Admin intervention executed, trade resolved manually
+- `LOCKED`: Initial state, funds deposited in the escrow
+- `IN_TRANSIT`: BOL verified, stage 1 funds released (logistics + fees + first tranche)
+- `CLOSED`: Inspection passed, all funds released (second tranche)
+- `DISPUTED`: Admin intervention executed, trade resolved manually
 
 **`DisputeStatus`**
-- `REFUND` - Return available funds to buyer
-- `RESOLVE` - Pay supplier normally
-- `PARTICULAR_ISSUE` - Send funds to treasury for complex manual resolution
+- `REFUND`: Return available funds to buyer
+- `RESOLVE`: Pay supplier normally
+- `PARTICULAR_ISSUE`: Send funds to treasury for complex manual resolution
 
 #### **Struct**
 **`Trade`**
@@ -94,7 +97,7 @@ Multi-signature dispute proposal structure:
 **Public/External Functions:**
 
 1. **`createTrade(supplier, treasury, totalAmount, logisticsAmount, platformFeesAmount, supplierFirstTranche, supplierSecondTranche, ricardianHash)`**
-   - Creates new escrow trade
+   - Creates new trade
    - Returns: `tradeId`
    - Emits: `TradeLocked`
    - Access: Anyone (Buyer)
@@ -131,9 +134,9 @@ Multi-signature dispute proposal structure:
 
 
 #### **Modifiers**
-- `onlyOracle` - Restricts to authorized oracle address
-- `onlyAdmin` - Restricts to approved admin addresses
-- `nonReentrant` - OpenZeppelin protection against reentrancy attacks
+- `onlyOracle`: Restricts to authorized oracle address
+- `onlyAdmin`: Restricts to approved admin addresses
+- `nonReentrant`: OpenZeppelin protection against reentrancy attacks
 
 #### **Events**
 - `TradeLocked(tradeId, buyer, supplier, totalAmount, ricardianHash)`: New trade created
@@ -238,6 +241,12 @@ Ran 1 test suite in 3.01s (3.01s CPU time): 9 tests passed, 0 failed, 0 skipped 
 
 ### Statefull Fuzzing Invariant tests `AgroasysEscrowInvariant.t.sol`
 
+**Handler:**
+The handler functions call the contract using valid values derived from fuzzing tests inputs.
+
+Example: If the fuzzing input looks like `tradeId = 999999`, the Handler converts it to a valid ID using `tradeId % tradeCounter` before calling the escrow contract.
+
+
 **Invariants Tested:**
 
 1. **`invariant_EscrowBalanceMatchesLockedFunds`**
@@ -266,7 +275,13 @@ Ran 1 test suite in 3.01s (3.01s CPU time): 9 tests passed, 0 failed, 0 skipped 
 
 
 ## Scripts: 
-
+Deployement Scripts for the 2 contracts in:
+```
+ignition
+└── modules
+    ├── AgroasysEscrow.ts
+    └── MockUSDC.ts
+```
 
 ## Set Up project
 
@@ -304,5 +319,5 @@ forge test --match-contract InvariantTest -vvv
 
 
 ## Next Steps
-- Depolyement Scripts to Testnet
+- Gas optimization
 - Add NatSpec comments
