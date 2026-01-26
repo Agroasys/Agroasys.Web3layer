@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
+import {ECDSA} from "@openzepplin/coontracts/utils/ECDSA.sol";
 
 contract AgroasysEscrow is ReentrancyGuard{
 
@@ -132,6 +132,21 @@ contract AgroasysEscrow is ReentrancyGuard{
         _;
     }
 
+
+    function verifySignature(
+        uint256 _tradeId,
+        address _supplier,
+        address _treasury,
+        uint256 _totalAmount,
+        bytes32 _ricardianHash,
+        bytes memory _signature
+    ) internal returns (address) {
+        bytes32 messageHashRecreated = keccak256(abi.encodePacked(_tradeId,_supplier,_treasury,_totalAmount,_ricardianHash));
+        bytes32 hash_signed = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHashRecreated));
+        return ECDSA.recover(hash_signed,_signature);
+    }
+
+
     function createTrade(
         address _supplier,
         address _treasury,
@@ -140,7 +155,8 @@ contract AgroasysEscrow is ReentrancyGuard{
         uint256 _platformFeesAmount,
         uint256 _supplierFirstTranche,
         uint256 _supplierSecondTranche,
-        bytes32 _ricardianHash
+        bytes32 _ricardianHash,
+        bytes memory _signature
     ) external nonReentrant returns (uint256) {
         // check all args before creating the trade
         require(_ricardianHash!=bytes32(0),"valid ricardian hash is required");
@@ -151,6 +167,8 @@ contract AgroasysEscrow is ReentrancyGuard{
 
         // then create the trade and store it within the contract
         uint256 newTradeId = tradeCounter++;
+
+        require(verifySignature(newTradeId,_supplier,_treasury,_totalAmount,_ricardianHash,_signature)==msg.sender,"incorrect signature");
 
         trades[newTradeId] = Trade({
             tradeId: newTradeId,
