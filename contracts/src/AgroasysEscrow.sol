@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 
 contract AgroasysEscrow is ReentrancyGuard{
@@ -10,14 +11,14 @@ contract AgroasysEscrow is ReentrancyGuard{
     enum TradeStatus {
         LOCKED,  // initial deposit
         IN_TRANSIT, // BOL verified -> Stage1 released
-        CLOSED, // Inspection passed -> Stage 2 released
-        DISPUTED // if admins solved manually an issue
+        ARRIVAL_CONFIRMED, // oracle triggers (24 hours dispute window starts)
+        FROZEN, // if buyer raise dispute within the 24hours windows -> funds froze in the escrow
+        CLOSED // trade closed
     }
 
     enum DisputeStatus {
         REFUND, // refund the buyer if an issue occured 
-        RESOLVE, // pay the supplier if the funds got stuck or the if there is an issue with the oracle
-        PARTICULAR_ISSUE // send the funds to the treasury wallet if a particular issue needs a complex solutiuon
+        RESOLVE // pay the supplier if the funds got stuck or the if there is an issue with the oracle
     }
 
     struct Trade {
@@ -33,7 +34,7 @@ contract AgroasysEscrow is ReentrancyGuard{
         uint256 supplierFirstTranche; // 40% (configurable amount at trade creation)
         uint256 supplierSecondTranche; // 60% (configurable amount at trade creation)
         uint256 createdAt;
-        uint256 updatedAt; // necessary to allow an admin to call dispute (If the Oracle goes offline for >7 days)
+        uint256 arrivalTimestamp;
     }
 
     struct DisputeProposal {
@@ -57,40 +58,34 @@ contract AgroasysEscrow is ReentrancyGuard{
     mapping(address => bool) public isAdmin;
     uint256 public requiredApprovals;
     mapping(uint256 => DisputeProposal) public disputeProposals;
-    uint256 disputeCounter;
+    uint256 public disputeCounter;
 
     event TradeLocked(
         uint256 tradeId,
         address buyer,
         address supplier,
+        address treasury,
         uint256 totalAmount,
         bytes32 ricardianHash
     );
 
-    // new status, example: if the status was LOCKED and became IN_TRANSIT, the event status is gonna be IN_TRANSIT
-    // tracking each amount to know exactly how many funds were released for each releaseFunds call
-    event FundsReleased(
-        uint256 tradeId,
-        address treasury,
-        address supplier,
-        TradeStatus status, 
-        uint256 logisticsAmountReleased,
-        uint256 platformFeesAmountReleased,
-        uint256 supplierFirstTrancheReleased,
-        uint256 supplierSecondTrancheReleased,
-        bytes32 ricardianHash
+    event FundsReleasedStage1(
+        uint256 tradeId
     );
 
-    event DisputeRaised(
-        uint256 tradeId,
-        DisputeStatus status,
-        address buyer,
-        address supplier,
-        address treasury,
-        bytes32 ricardianHash
+    event ArrivalConfirmed(
+        uint256 tradeId
     );
 
-    event DisputeProposed(
+    event FundsReleasedStage2(
+        uint256 tradeId
+    );
+
+    event DisputeOpenedByBuyer(
+        uint256 tradeId
+    );
+
+    event DisputeSolution(
         uint256 proposalId,
         uint256 tradeId,
         DisputeStatus disputeStatus,
@@ -104,6 +99,9 @@ contract AgroasysEscrow is ReentrancyGuard{
         uint256 requiredApprovals
     );
 
+    event DisputeFinalized(
+        uint256 proposalId
+    );
 
     constructor(address _usdcToken,address _oracleAddress,address[] memory _admins,uint256 _requiredApprovals){
         require(_admins.length >= _requiredApprovals, "not enough admins");
@@ -132,6 +130,35 @@ contract AgroasysEscrow is ReentrancyGuard{
         _;
     }
 
+
+    function verifySignature(
+        uint256 _tradeId,
+        address _supplier,
+        address _treasury,
+        uint256 _totalAmount,
+        uint256 _logisticAmount,
+        uint256 _platformFeesAmount,
+        uint256 _supplierFirstTranche,
+        uint256 _supplierSecondTranche,
+        bytes32 _ricardianHash,
+        bytes memory _signature
+    ) internal pure returns (address) {
+        bytes32 messageHashRecreated = keccak256(abi.encodePacked(
+            _tradeId,
+            _supplier,
+            _treasury,
+            _totalAmount,
+            _logisticAmount,
+            _platformFeesAmount,
+            _supplierFirstTranche,
+            _supplierSecondTranche,
+            _ricardianHash
+        ));
+        bytes32 hash_signed = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHashRecreated));
+        return ECDSA.recover(hash_signed,_signature);
+    }
+
+
     function createTrade(
         address _supplier,
         address _treasury,
@@ -140,17 +167,20 @@ contract AgroasysEscrow is ReentrancyGuard{
         uint256 _platformFeesAmount,
         uint256 _supplierFirstTranche,
         uint256 _supplierSecondTranche,
-        bytes32 _ricardianHash
+        bytes32 _ricardianHash,
+        bytes memory _signature
     ) external nonReentrant returns (uint256) {
-        // check all args before creating the trade
+       // check all args before creating the trade
         require(_ricardianHash!=bytes32(0),"valid ricardian hash is required");
         require(_supplier != address(0),"valid supplier address is required");
         require(_treasury != address(0),"valid treasury address is required");
         uint256 totalAmountExpected = _logisticsAmount + _platformFeesAmount + _supplierFirstTranche + _supplierSecondTranche;
         require(_totalAmount==totalAmountExpected,"total amount and payement breakdown are different");
-
+        uint256 newTradeId = tradeCounter;
+        require(verifySignature(newTradeId,_supplier,_treasury,_totalAmount,_logisticsAmount,_platformFeesAmount,_supplierFirstTranche,_supplierSecondTranche,_ricardianHash,_signature)==msg.sender,"incorrect signature");
+ 
         // then create the trade and store it within the contract
-        uint256 newTradeId = tradeCounter++;
+        tradeCounter++;
 
         trades[newTradeId] = Trade({
             tradeId: newTradeId,
@@ -165,7 +195,7 @@ contract AgroasysEscrow is ReentrancyGuard{
             supplierFirstTranche: _supplierFirstTranche,
             supplierSecondTranche: _supplierSecondTranche,
             createdAt: block.timestamp,
-            updatedAt: block.timestamp
+            arrivalTimestamp: 0
         });
 
         // then create the transfer
@@ -174,85 +204,56 @@ contract AgroasysEscrow is ReentrancyGuard{
         require(transferSuccess,"Transfer failed");
 
         // emit the event TradeLocked
-        emit TradeLocked(newTradeId, msg.sender, _supplier, _totalAmount, _ricardianHash);
+        emit TradeLocked(newTradeId, msg.sender, _supplier,_treasury, _totalAmount, _ricardianHash);
 
         return newTradeId;
     }
 
-
-
-    function releaseFunds(
-        uint256 _tradeId,
-        TradeStatus _newStatus // new status, so one step after the current contract trade status
-    ) external onlyOracle nonReentrant{
+    // bol verified: release first tranche and logistics
+    function releaseFundsStage1(uint256 _tradeId) external onlyOracle nonReentrant {
         require(_tradeId<tradeCounter,"trade doesn't exist");
         // use storage the make the changes permanent
         Trade storage trade = trades[_tradeId];
 
-        require(
-            trade.status != TradeStatus.CLOSED &&
-            trade.status != TradeStatus.DISPUTED,
-            "trade not modifiable by the oracle"
-        );
+        require(trade.status == TradeStatus.LOCKED,"trade status should be LOCKED");
 
-        if (_newStatus == TradeStatus.IN_TRANSIT) {
-            require(trade.status == TradeStatus.LOCKED, "actual status must be LOCKED to release stage 1");
-        } else if (_newStatus == TradeStatus.CLOSED) {
-            require(trade.status == TradeStatus.IN_TRANSIT, "actual status  must be IN_TRANSIT to release stage 2");
-        } else {
-            revert("new status not valid");
-        }
+        trade.status = TradeStatus.IN_TRANSIT;
 
-        // track for the FundsReleased event
-        uint256 logisticsReleased = 0;
-        uint256 platformFeesReleased = 0;
-        uint256 supplierFirstTrancheReleased = 0;
-        uint256 supplierSecondTrancheReleased = 0;
+        bool supplierTransferSuccess = usdcToken.transfer(trade.supplierAddress, trade.supplierFirstTranche);
+        require(supplierTransferSuccess,"Transfer failed");
 
-        if (_newStatus==TradeStatus.IN_TRANSIT){
-            trade.status = TradeStatus.IN_TRANSIT;
-            trade.updatedAt = block.timestamp;
-            logisticsReleased = trade.logisticsAmount;
-            platformFeesReleased = trade.platformFeesAmount;
-            supplierFirstTrancheReleased = trade.supplierFirstTranche;
+        // pay logistcis to treasury
+        bool treasuryTransferSuccess = usdcToken.transfer(trade.treasuryAddress, trade.logisticsAmount);
+        require(treasuryTransferSuccess,"Transfer failed");
 
-            // first payement to treasury to pay logistics and fees
-            uint256 treasuryTotal = trade.platformFeesAmount + trade.logisticsAmount;
-            bool treasuryTransferSuccess = usdcToken.transfer(trade.treasuryAddress, treasuryTotal);
-            require(treasuryTransferSuccess,"Transfer failed");
-
-            // second payement to pay the first tranche to the supplier
-            bool supplierTransferSuccess = usdcToken.transfer(trade.supplierAddress, trade.supplierFirstTranche);
-            require(supplierTransferSuccess,"Transfer failed");
-        }
-        else if (_newStatus==TradeStatus.CLOSED){
-            trade.status = TradeStatus.CLOSED;
-            trade.updatedAt = block.timestamp;
-            supplierSecondTrancheReleased = trade.supplierSecondTranche;
-            // third payement to pay the second tranche to the supplier
-            bool supplierTransferSuccess = usdcToken.transfer(trade.supplierAddress, trade.supplierSecondTranche);
-            require(supplierTransferSuccess,"Transfer failed");
-        }
-
-
-        emit FundsReleased(
-            _tradeId,
-            trade.treasuryAddress,
-            trade.supplierAddress,
-            trade.status,
-            logisticsReleased,
-            platformFeesReleased,
-            supplierFirstTrancheReleased,
-            supplierSecondTrancheReleased,
-            trade.ricardianHash
-        );
+        emit FundsReleasedStage1(_tradeId);
     }
 
-    // function callable only in the contract by the functions approveDispute and dispute
+    // order arrived and buyer havne't raised a dispute within the 24 winbdow
+    function releaseFundsStage2(uint256 _tradeId) external onlyOracle nonReentrant {
+        require(_tradeId<tradeCounter,"trade doesn't exist");
+        // use storage the make the changes permanent
+        Trade storage trade = trades[_tradeId];
+        require(block.timestamp>trade.arrivalTimestamp + 24 hours,"called within the 24h window");
+
+        require(trade.status == TradeStatus.ARRIVAL_CONFIRMED,"trade status should be ARRIVAL_CONFIRMED");
+
+        trade.status = TradeStatus.CLOSED;
+
+        bool supplierTransferSuccess = usdcToken.transfer(trade.supplierAddress, trade.supplierSecondTranche);
+        require(supplierTransferSuccess,"Transfer failed");
+
+        // pay fees to treasury
+        bool treasuryTransferSuccess = usdcToken.transfer(trade.treasuryAddress, trade.platformFeesAmount);
+        require(treasuryTransferSuccess,"Transfer failed");
+
+        emit FundsReleasedStage2(_tradeId);
+    }
+
+    // function callable only in the contract by the functions approveDispute
     function _dispute(uint256 _proposalId) internal {
         DisputeProposal storage proposal = disputeProposals[_proposalId];
         
-        require(!proposal.executed, "already executed");
         require(proposal.approvalCount >= requiredApprovals, "not enough approvals");
         
         proposal.executed = true;
@@ -262,75 +263,33 @@ contract AgroasysEscrow is ReentrancyGuard{
         
         Trade storage trade = trades[_tradeId];
         
-        uint256 availableAmount = 0;
-        
-        if (trade.status == TradeStatus.LOCKED) {
-            // nothing was paid so buyer can be entierly refunded
-            availableAmount = trade.totalAmountLocked;
-        } else if (trade.status == TradeStatus.IN_TRANSIT) {
-            // only the second tranche payement is avalaible
-            availableAmount = trade.supplierSecondTranche;
-        }
-        
-        require(availableAmount > 0, "no funds available for dispute");
+        trade.status = TradeStatus.CLOSED;
 
-        TradeStatus oldStatus = trade.status;
-        
-        trade.status = TradeStatus.DISPUTED;
-        trade.updatedAt = block.timestamp;
-        
-        
         if (_disputeStatus == DisputeStatus.REFUND) {
-            // if an issue occured -> refund the buyer
-            bool refundSuccess = usdcToken.transfer(trade.buyerAddress, availableAmount);
-            require(refundSuccess, "refund transfer failed");
+            // if an issue occured -> refund the buyer (tranhche 2 + treasury fees)
+            bool refundBuyerSuccess = usdcToken.transfer(trade.buyerAddress, trade.supplierSecondTranche+trade.platformFeesAmount);
+            require(refundBuyerSuccess, "refund transfer failed");
         }
         else if (_disputeStatus == DisputeStatus.RESOLVE) {
-            // if everything went right but somehow the oracle failed to call releaseFunds
-            if (oldStatus == TradeStatus.LOCKED) {
-                // pay treasury fees + logistics and supplier full amount
-                uint256 treasuryTotal = trade.logisticsAmount + trade.platformFeesAmount;
-                bool treasurySuccess = usdcToken.transfer(trade.treasuryAddress, treasuryTotal);
-                require(treasurySuccess, "transfer to treasury  failed");
-                
-                uint256 supplierTotal = trade.supplierFirstTranche + trade.supplierSecondTranche;
-                bool supplierSuccess = usdcToken.transfer(trade.supplierAddress, supplierTotal);
-                require(supplierSuccess, "transfer to supplier failed");
-            } 
-            else if (oldStatus == TradeStatus.IN_TRANSIT) {
-                // treasury already paid so pay only remaining supplier tranche
-                bool resolveSuccess = usdcToken.transfer(trade.supplierAddress, availableAmount);
-                require(resolveSuccess, "transfer to supplier failed");
-            }
+            // treasury already paid so pay only remaining supplier tranche
+            bool resolveSuccess = usdcToken.transfer(trade.supplierAddress, trade.supplierSecondTranche);
+            require(resolveSuccess, "transfer to supplier failed");
+
+            bool payTreasurySuccess = usdcToken.transfer(trade.treasuryAddress, trade.platformFeesAmount);
+            require(payTreasurySuccess, "refund transfer failed");
         } 
-        else if (_disputeStatus == DisputeStatus.PARTICULAR_ISSUE){
-            // let the company solve the particular issue
-            bool treasuryTransferSuccess = usdcToken.transfer(trade.treasuryAddress, availableAmount);
-            require(treasuryTransferSuccess, "transfer to treasury failed");
-        }
         else {
             revert("invalid dispute status");
         }
-        
-        emit DisputeRaised(
-            _tradeId,
-            _disputeStatus,
-            trade.buyerAddress,
-            trade.supplierAddress,
-            trade.treasuryAddress,
-            trade.ricardianHash
-        );
+        emit DisputeFinalized(_proposalId);
     }
 
-    function proposeDispute(uint256 _tradeId, DisputeStatus _disputeStatus) external onlyAdmin() returns (uint256) {
-
+    function proposeDisputeSolution(uint256 _tradeId, DisputeStatus _disputeStatus) external onlyAdmin() returns (uint256) {
         require(_tradeId<tradeCounter,"trade doesn't exist");
 
         Trade storage trade = trades[_tradeId];
 
-        require(trade.status != TradeStatus.CLOSED && trade.status != TradeStatus.DISPUTED, "trade already closed or disputed");
-        // admin can solve if oracle was inactive for 7 days
-        require(block.timestamp >= trade.updatedAt + 7 days,"must wait 7 days since last oracle update");
+        require(trade.status==TradeStatus.FROZEN, "trade is not frozen");
 
         uint256 proposalId = disputeCounter;
         disputeCounter++;
@@ -341,19 +300,23 @@ contract AgroasysEscrow is ReentrancyGuard{
         proposal.approvalCount = 1;
         proposal.hasApproved[msg.sender] = true;
         proposal.executed = false;
-        proposal.createdAt = block.timestamp;
         
-        emit DisputeProposed(proposalId, _tradeId, _disputeStatus, msg.sender);
+        emit DisputeSolution(proposalId, _tradeId, _disputeStatus, msg.sender);
         
         return proposalId;
     }
 
     // automically call dispute function
-    function approveDispute(uint256 _proposalId) external onlyAdmin nonReentrant{
+    function approveDisputeSolution(uint256 _proposalId) external onlyAdmin nonReentrant{
         require(disputeCounter>_proposalId,"dispute not created");
         DisputeProposal storage proposal = disputeProposals[_proposalId];
 
         require(!proposal.executed, "proposal already executed");
+
+        uint256 _tradeId = proposal.tradeId;
+        Trade memory trade = trades[_tradeId];
+        require(trade.status == TradeStatus.FROZEN,"trade is not frozen");
+
         require(!proposal.hasApproved[msg.sender], "already approved by this admin");
 
         proposal.hasApproved[msg.sender] = true;
@@ -364,5 +327,30 @@ contract AgroasysEscrow is ReentrancyGuard{
         if (proposal.approvalCount>=requiredApprovals) {
             _dispute(_proposalId);
         }
+    }
+
+    // buyer can open dispute within the window
+    function openDispute(uint256 _tradeId) external {
+        require(_tradeId<tradeCounter,"trade doesn't exist");
+        Trade storage trade = trades[_tradeId];
+        require(trade.status==TradeStatus.ARRIVAL_CONFIRMED,"order should be received to call the function");
+        require(block.timestamp<trade.arrivalTimestamp + 24 hours, "the function can be called only in the 24 hours window");
+        require(trade.buyerAddress==msg.sender,"only buyer can open a dispute");
+        trade.status = TradeStatus.FROZEN;
+        emit DisputeOpenedByBuyer(_tradeId);
+    }
+
+    // called by oracle when order arrived: open 24 hour window
+    function confirmArrival(uint256 _tradeId) external onlyOracle {
+        require(_tradeId<tradeCounter,"trade doesn't exist");
+        Trade storage trade = trades[_tradeId];
+        require(trade.status==TradeStatus.IN_TRANSIT,"order status should be IN_TRANSIT");
+        trade.status = TradeStatus.ARRIVAL_CONFIRMED;
+        trade.arrivalTimestamp = block.timestamp;
+        emit ArrivalConfirmed(_tradeId);
+    }
+
+    function getNextTradeId() external view returns (uint256) {
+        return tradeCounter;
     }
 }
