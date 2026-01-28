@@ -11,8 +11,12 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
  * - Milestone escrow (Stage 1 + Stage 2)
  * - Arrival confirmation starts a 24h buyer dispute window
  * - Buyer can freeze during window; admins resolve with 4-eyes approval
- * - Treasury ONLY receives explicit fees (logistics + platform fees); buyer principal never routes to treasury
+ * - Treasury ONLY receives explicit fees (logistics + platform fees) at Stage 1; buyer principal never routes to treasury
  * - Signature uses buyer-scoped nonce (no global tradeId pre-query race) + deadline + domain separation
+ *
+ * Business rule enforced:
+ * - Stage 1 payout (40% milestone) includes: supplierFirstTranche (principal) + logisticsAmount (fee) + platformFeesAmount (fee)
+ * - Stage 2 payout (finalization) includes: supplierSecondTranche (principal) ONLY
  */
 contract AgroasysEscrow is ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -27,15 +31,15 @@ contract AgroasysEscrow is ReentrancyGuard {
     // -----------------------------
     enum TradeStatus {
         LOCKED,            // initial deposit
-        IN_TRANSIT,        // stage1 released (supplier first tranche + logistics paid)
-        ARRIVAL_CONFIRMED, // oracle confirms arrival; dispute window starts
+        IN_TRANSIT,        // stage1 released (supplier first tranche + logistics fee + platform fee paid)
+        ARRIVAL_CONFIRMED, // oracle confirms arrival; 24h dispute window starts
         FROZEN,            // buyer opened dispute within window
         CLOSED             // finalized or resolved
     }
 
     enum DisputeStatus {
-        REFUND,  // refund buyer (remaining principal + unearned platform fees)
-        RESOLVE  // pay supplier remaining tranche (+ pay platform fees to treasury)
+        REFUND,  // admin resolution: refund buyer remaining escrowed principal (typically supplierSecondTranche)
+        RESOLVE  // admin resolution: release remaining escrowed principal to supplier (typically supplierSecondTranche)
     }
 
     struct Trade {
@@ -47,10 +51,10 @@ contract AgroasysEscrow is ReentrancyGuard {
         uint256 totalAmountLocked;
 
         uint256 logisticsAmount;     // paid to treasury at stage1
-        uint256 platformFeesAmount;  // paid to treasury at stage2 (if no refund)
+        uint256 platformFeesAmount;  // paid to treasury at stage1
 
-        uint256 supplierFirstTranche;  // typically 40%
-        uint256 supplierSecondTranche; // typically 60%
+        uint256 supplierFirstTranche;  // typically 40% (principal component released at stage1)
+        uint256 supplierSecondTranche; // typically 60% (principal component released at stage2/finalization)
 
         uint256 createdAt;
         uint256 arrivalTimestamp; // set on confirmArrival
@@ -113,14 +117,30 @@ contract AgroasysEscrow is ReentrancyGuard {
         uint256 logisticsAmount
     );
 
+    // Added: explicit event for platform fee payout in Stage 1 (so indexers/auditors see it)
+    event PlatformFeesPaidStage1(
+        uint256 indexed tradeId,
+        address indexed treasury,
+        uint256 platformFeesAmount
+    );
+
     event ArrivalConfirmed(uint256 indexed tradeId, uint256 arrivalTimestamp);
 
+    // NOTE: Stage 2 now pays supplierSecondTranche ONLY (no treasury payment).
+    // This event is kept as-is for backward compatibility, but is no longer emitted.
     event FundsReleasedStage2(
         uint256 indexed tradeId,
         address indexed supplier,
         uint256 supplierSecondTranche,
         address indexed treasury,
         uint256 platformFeesAmount
+    );
+
+    // Added: explicit final tranche event for Stage 2/finalization
+    event FinalTrancheReleased(
+        uint256 indexed tradeId,
+        address indexed supplier,
+        uint256 supplierSecondTranche
     );
 
     event DisputeOpenedByBuyer(uint256 indexed tradeId);
@@ -322,7 +342,8 @@ contract AgroasysEscrow is ReentrancyGuard {
      * - Only oracle
      * - LOCKED -> IN_TRANSIT
      * - Pay supplier first tranche (principal)
-     * - Pay logistics amount to treasury (explicit logistics fee)
+     * - Pay logistics fee to treasury
+     * - Pay platform fee to treasury
      */
     function releaseFundsStage1(uint256 _tradeId) external onlyOracle nonReentrant {
         require(_tradeId < tradeCounter, "trade not found");
@@ -334,6 +355,7 @@ contract AgroasysEscrow is ReentrancyGuard {
 
         usdcToken.safeTransfer(trade.supplierAddress, trade.supplierFirstTranche);
         usdcToken.safeTransfer(treasuryAddress, trade.logisticsAmount);
+        usdcToken.safeTransfer(treasuryAddress, trade.platformFeesAmount);
 
         emit FundsReleasedStage1(
             _tradeId,
@@ -342,6 +364,8 @@ contract AgroasysEscrow is ReentrancyGuard {
             treasuryAddress,
             trade.logisticsAmount
         );
+
+        emit PlatformFeesPaidStage1(_tradeId, treasuryAddress, trade.platformFeesAmount);
     }
 
     /**
@@ -381,6 +405,9 @@ contract AgroasysEscrow is ReentrancyGuard {
     /**
      * Final settlement after dispute window if no dispute was opened.
      * Permissionless (anyone can call) to avoid funds getting stuck if oracle is down.
+     *
+     * Business rule: Stage 2 releases ONLY remaining supplier principal (supplierSecondTranche).
+     * Treasury fees were already collected at Stage 1.
      */
     function finalizeAfterDisputeWindow(uint256 _tradeId) external nonReentrant {
         require(_tradeId < tradeCounter, "trade not found");
@@ -393,15 +420,8 @@ contract AgroasysEscrow is ReentrancyGuard {
         trade.status = TradeStatus.CLOSED;
 
         usdcToken.safeTransfer(trade.supplierAddress, trade.supplierSecondTranche);
-        usdcToken.safeTransfer(treasuryAddress, trade.platformFeesAmount);
 
-        emit FundsReleasedStage2(
-            _tradeId,
-            trade.supplierAddress,
-            trade.supplierSecondTranche,
-            treasuryAddress,
-            trade.platformFeesAmount
-        );
+        emit FinalTrancheReleased(_tradeId, trade.supplierAddress, trade.supplierSecondTranche);
     }
 
     // -----------------------------
@@ -478,16 +498,13 @@ contract AgroasysEscrow is ReentrancyGuard {
         trade.status = TradeStatus.CLOSED;
         tradeHasActiveDisputeProposal[proposal.tradeId] = false;
 
+        // NOTE: Platform/logistics fees were already paid at Stage 1 and are not refunded via escrow.
         if (proposal.disputeStatus == DisputeStatus.REFUND) {
-            // Refund buyer the remaining principal + unearned platform fees (logistics already paid at stage1)
-            usdcToken.safeTransfer(
-                trade.buyerAddress,
-                trade.supplierSecondTranche + trade.platformFeesAmount
-            );
+            // Refund buyer remaining escrowed principal (supplierSecondTranche)
+            usdcToken.safeTransfer(trade.buyerAddress, trade.supplierSecondTranche);
         } else if (proposal.disputeStatus == DisputeStatus.RESOLVE) {
-            // Pay supplier remaining principal and pay platform fees to treasury
+            // Release remaining escrowed principal to supplier (supplierSecondTranche)
             usdcToken.safeTransfer(trade.supplierAddress, trade.supplierSecondTranche);
-            usdcToken.safeTransfer(treasuryAddress, trade.platformFeesAmount);
         } else {
             revert("invalid dispute status");
         }
