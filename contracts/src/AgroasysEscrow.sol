@@ -234,7 +234,7 @@ contract AgroasysEscrow is ReentrancyGuard{
         require(_tradeId<tradeCounter,"trade doesn't exist");
         // use storage the make the changes permanent
         Trade storage trade = trades[_tradeId];
-        require(block.timestamp>trade.arrivalTimestamp + 24 hours);
+        require(block.timestamp>trade.arrivalTimestamp + 24 hours,"called within the 24h window");
 
         require(trade.status == TradeStatus.ARRIVAL_CONFIRMED,"trade status should be ARRIVAL_CONFIRMED");
 
@@ -289,7 +289,7 @@ contract AgroasysEscrow is ReentrancyGuard{
 
         Trade storage trade = trades[_tradeId];
 
-        require(trade.status==TradeStatus.FROZEN, "trade already arn't frozen");
+        require(trade.status==TradeStatus.FROZEN, "trade is not frozen");
 
         uint256 proposalId = disputeCounter;
         disputeCounter++;
@@ -315,7 +315,7 @@ contract AgroasysEscrow is ReentrancyGuard{
 
         uint256 _tradeId = proposal.tradeId;
         Trade memory trade = trades[_tradeId];
-        require(trade.status == TradeStatus.FROZEN,"trade if not frozen");
+        require(trade.status == TradeStatus.FROZEN,"trade is not frozen");
 
         require(!proposal.hasApproved[msg.sender], "already approved by this admin");
 
@@ -331,6 +331,7 @@ contract AgroasysEscrow is ReentrancyGuard{
 
     // buyer can open dispute within the window
     function openDispute(uint256 _tradeId) external {
+        require(_tradeId<tradeCounter,"trade doesn't exist");
         Trade storage trade = trades[_tradeId];
         require(trade.status==TradeStatus.ARRIVAL_CONFIRMED,"order should be received to call the function");
         require(block.timestamp<trade.arrivalTimestamp + 24 hours, "the function can be called only in the 24 hours window");
@@ -341,6 +342,7 @@ contract AgroasysEscrow is ReentrancyGuard{
 
     // called by oracle when order arrived: open 24 hour window
     function confirmArrival(uint256 _tradeId) external onlyOracle {
+        require(_tradeId<tradeCounter,"trade doesn't exist");
         Trade storage trade = trades[_tradeId];
         require(trade.status==TradeStatus.IN_TRANSIT,"order status should be IN_TRANSIT");
         trade.status = TradeStatus.ARRIVAL_CONFIRMED;
