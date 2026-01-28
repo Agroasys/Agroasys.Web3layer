@@ -170,15 +170,15 @@ contract AgroasysEscrow is ReentrancyGuard{
         bytes32 _ricardianHash,
         bytes memory _signature
     ) external nonReentrant returns (uint256) {
-        uint256 newTradeId = tradeCounter;
-        require(verifySignature(newTradeId,_supplier,_treasury,_totalAmount,_logisticsAmount,_platformFeesAmount,_supplierFirstTranche,_supplierSecondTranche,_ricardianHash,_signature)==msg.sender,"incorrect signature");
-        // check all args before creating the trade
+       // check all args before creating the trade
         require(_ricardianHash!=bytes32(0),"valid ricardian hash is required");
         require(_supplier != address(0),"valid supplier address is required");
         require(_treasury != address(0),"valid treasury address is required");
         uint256 totalAmountExpected = _logisticsAmount + _platformFeesAmount + _supplierFirstTranche + _supplierSecondTranche;
         require(_totalAmount==totalAmountExpected,"total amount and payement breakdown are different");
-
+        uint256 newTradeId = tradeCounter;
+        require(verifySignature(newTradeId,_supplier,_treasury,_totalAmount,_logisticsAmount,_platformFeesAmount,_supplierFirstTranche,_supplierSecondTranche,_ricardianHash,_signature)==msg.sender,"incorrect signature");
+ 
         // then create the trade and store it within the contract
         tradeCounter++;
 
