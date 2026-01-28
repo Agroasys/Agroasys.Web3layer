@@ -87,6 +87,9 @@ contract FuzzTest is Test {
     function test_Setup() public view {
         assertEq(escrow.oracleAddress(), oracle);
         assertEq(usdc.balanceOf(buyer), 10_000_000e6);
+        assertEq(escrow.tradeCounter(), 0, "initial trade counter should be 0");
+        assertEq(escrow.requiredApprovals(), 2, "required approvals should be 2");
+
     }
     
 
@@ -157,8 +160,9 @@ contract FuzzTest is Test {
         vm.prank(oracle);
         escrow.confirmArrival(tradeId);
 
-        (,,AgroasysEscrow.TradeStatus _status3,,,,,,,,,,) = escrow.trades(tradeId);
+        (,,AgroasysEscrow.TradeStatus _status3,,,,,,,,,,uint256 _arrivalTimestamp) = escrow.trades(tradeId);
 
+        assertEq(_arrivalTimestamp, block.timestamp, "arrival timestamp should be set");
         assertEq(uint8(_status3), uint8(AgroasysEscrow.TradeStatus.ARRIVAL_CONFIRMED), "status should be ARRIVAL_CONFIRMED");
         // check that balances are correct
         assertEq(usdc.balanceOf(buyer),buyerBeforeArrivalConfirmationBalance,"buyer balance mismatch");
@@ -258,8 +262,9 @@ contract FuzzTest is Test {
         vm.prank(oracle);
         escrow.confirmArrival(tradeId);
 
-        (,,AgroasysEscrow.TradeStatus _status3,,,,,,,,,,) = escrow.trades(tradeId);
+        (,,AgroasysEscrow.TradeStatus _status3,,,,,,,,,,uint256 _arrivalTimestamp) = escrow.trades(tradeId);
 
+        assertEq(_arrivalTimestamp, block.timestamp, "arrival timestamp should be set");
         assertEq(uint8(_status3), uint8(AgroasysEscrow.TradeStatus.ARRIVAL_CONFIRMED), "status should be ARRIVAL_CONFIRMED");
         // check that balances are correct
         assertEq(usdc.balanceOf(buyer),buyerBeforeArrivalConfirmationBalance,"buyer balance mismatch");
@@ -396,7 +401,9 @@ contract FuzzTest is Test {
         vm.prank(oracle);
         escrow.confirmArrival(tradeId);
 
-        (,,AgroasysEscrow.TradeStatus _status3,,,,,,,,,,) = escrow.trades(tradeId);
+        (,,AgroasysEscrow.TradeStatus _status3,,,,,,,,,,uint256 _arrivalTimestamp) = escrow.trades(tradeId);
+
+        assertEq(_arrivalTimestamp, block.timestamp, "arrival timestamp should be set");
 
         assertEq(uint8(_status3), uint8(AgroasysEscrow.TradeStatus.ARRIVAL_CONFIRMED), "status should be ARRIVAL_CONFIRMED");
         // check that balances are correct
@@ -464,5 +471,68 @@ contract FuzzTest is Test {
         assertEq(usdc.balanceOf(supplier),supplierBeforeApproveSolutionBalance,"supplier balance mismatch");
         assertEq(usdc.balanceOf(treasury),treasuryBeforeApproveSolutionBalance,"treasury balance mismatch");
         assertEq(usdc.balanceOf(address(escrow)),escrowBeforeApproveSolutionBalance-tranche2-fees,"escrow balance mismatch");
+    }
+
+
+    function testFuzz_CannotOpenDisputeBeforeArrival(uint96 logistics, uint96 fees, uint96 tranche1, uint96 tranche2, bytes32 ricardianHash) public {
+        vm.assume(ricardianHash != bytes32(0));
+        logistics = uint96(bound(logistics, 1000e6, 10_000e6));
+        fees = uint96(bound(fees, 500e6, 5_000e6));
+        tranche1 = uint96(bound(tranche1, 10_000e6, 100_000e6));
+        tranche2 = uint96(bound(tranche2, 10_000e6, 100_000e6));
+
+        
+        uint256 tradeId = _create_trade(logistics,fees,tranche1,tranche2, ricardianHash);
+        vm.prank(oracle);
+        escrow.releaseFundsStage1(tradeId);
+        
+        vm.prank(buyer);
+        vm.expectRevert("order should be received to call the function");
+        escrow.openDispute(tradeId);
+    }
+
+    function testFuzz_CannotOpenDisputeAfter24Hours(uint96 logistics, uint96 fees, uint96 tranche1, uint96 tranche2, bytes32 ricardianHash) public {
+        vm.assume(ricardianHash != bytes32(0));
+        logistics = uint96(bound(logistics, 1000e6, 10_000e6));
+        fees = uint96(bound(fees, 500e6, 5_000e6));
+        tranche1 = uint96(bound(tranche1, 10_000e6, 100_000e6));
+        tranche2 = uint96(bound(tranche2, 10_000e6, 100_000e6));
+
+     
+        uint256 tradeId = _create_trade(logistics,fees,tranche1,tranche2, ricardianHash);
+        vm.prank(oracle);
+        escrow.releaseFundsStage1(tradeId);
+
+        vm.prank(oracle);
+        escrow.confirmArrival(tradeId);
+        
+        vm.warp(block.timestamp + 24 hours + 1 seconds);
+        
+        vm.prank(buyer);
+        vm.expectRevert("the function can be called only in the 24 hours window");
+        escrow.openDispute(tradeId);
+    }
+
+
+    function testFuzz_CannotReleaseStage2Before24Hours(uint96 logistics, uint96 fees, uint96 tranche1, uint96 tranche2, bytes32 ricardianHash) public {
+        vm.assume(ricardianHash != bytes32(0));
+        logistics = uint96(bound(logistics, 1000e6, 10_000e6));
+        fees = uint96(bound(fees, 500e6, 5_000e6));
+        tranche1 = uint96(bound(tranche1, 10_000e6, 100_000e6));
+        tranche2 = uint96(bound(tranche2, 10_000e6, 100_000e6));
+
+     
+        uint256 tradeId = _create_trade(logistics,fees,tranche1,tranche2, ricardianHash);
+        vm.prank(oracle);
+        escrow.releaseFundsStage1(tradeId);
+
+        vm.prank(oracle);
+        escrow.confirmArrival(tradeId);
+        
+        vm.warp(block.timestamp + 1 hours);
+        
+        vm.prank(oracle);
+        vm.expectRevert("called within the 24h window");
+        escrow.releaseFundsStage2(tradeId);
     }
 }

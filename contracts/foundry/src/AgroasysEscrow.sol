@@ -34,7 +34,7 @@ contract AgroasysEscrow is ReentrancyGuard{
         uint256 supplierFirstTranche; // 40% (configurable amount at trade creation)
         uint256 supplierSecondTranche; // 60% (configurable amount at trade creation)
         uint256 createdAt;
-        uint256 arrivalTimestamp; // necessary to allow an admin to call dispute (If the Oracle goes offline for >7 days)
+        uint256 arrivalTimestamp;
     }
 
     struct DisputeProposal {
