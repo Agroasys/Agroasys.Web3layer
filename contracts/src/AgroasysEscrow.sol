@@ -69,6 +69,25 @@ contract AgroasysEscrow is ReentrancyGuard {
         address proposer;
     }
 
+    // ---- Governance (timelocked) ----
+    struct OracleUpdateProposal {
+        address newOracle;
+        uint256 approvalCount;
+        bool executed;
+        uint256 createdAt;
+        uint256 eta; // execute-after timestamp (timelock)
+        address proposer;
+    }
+
+    struct AdminAddProposal {
+        address newAdmin;
+        uint256 approvalCount;
+        bool executed;
+        uint256 createdAt;
+        uint256 eta; // execute-after timestamp (timelock)
+        address proposer;
+    }
+
     // -----------------------------
     // Storage
     // -----------------------------
@@ -93,6 +112,17 @@ contract AgroasysEscrow is ReentrancyGuard {
     address[] public admins;
     mapping(address => bool) public isAdmin;
     uint256 public requiredApprovals;
+
+    // ---- Governance (timelocked) storage ----
+    uint256 public governanceTimelock; // delay between approvals and execution for sensitive ops
+
+    mapping(uint256 => OracleUpdateProposal) public oracleUpdateProposals;
+    mapping(uint256 => mapping(address => bool)) public oracleUpdateHasApproved;
+    uint256 public oracleUpdateCounter;
+
+    mapping(uint256 => AdminAddProposal) public adminAddProposals;
+    mapping(uint256 => mapping(address => bool)) public adminAddHasApproved;
+    uint256 public adminAddCounter;
 
     // -----------------------------
     // Events
@@ -165,6 +195,42 @@ contract AgroasysEscrow is ReentrancyGuard {
         DisputeStatus disputeStatus
     );
 
+    // ---- Governance (timelocked) events ----
+    event OracleUpdateProposed(
+        uint256 indexed proposalId,
+        address indexed proposer,
+        address indexed newOracle,
+        uint256 eta
+    );
+
+    event OracleUpdateApproved(
+        uint256 indexed proposalId,
+        address indexed approver,
+        uint256 approvalCount,
+        uint256 requiredApprovals
+    );
+
+    event OracleUpdated(
+        address indexed oldOracle,
+        address indexed newOracle
+    );
+
+    event AdminAddProposed(
+        uint256 indexed proposalId,
+        address indexed proposer,
+        address indexed newAdmin,
+        uint256 eta
+    );
+
+    event AdminAddApproved(
+        uint256 indexed proposalId,
+        address indexed approver,
+        uint256 approvalCount,
+        uint256 requiredApprovals
+    );
+
+    event AdminAdded(address indexed newAdmin);
+
     // -----------------------------
     // Constructor / Modifiers
     // -----------------------------
@@ -193,6 +259,10 @@ contract AgroasysEscrow is ReentrancyGuard {
             admins.push(admin);
             isAdmin[admin] = true;
         }
+
+        // Timelock for sensitive governance operations (oracle/admin updates).
+        // Can be changed in future versions if needed; keeping minimal for now.
+        governanceTimelock = 24 hours;
     }
 
     modifier onlyAdmin() {
@@ -510,6 +580,131 @@ contract AgroasysEscrow is ReentrancyGuard {
         }
 
         emit DisputeFinalized(_proposalId, proposal.tradeId, proposal.disputeStatus);
+    }
+
+    // -----------------------------
+    // Governance (timelocked) - Admin/Oracle rotation
+    // -----------------------------
+
+    // Sensitive operations require at least 2 approvals, even if requiredApprovals == 1.
+    function governanceApprovals() public view returns (uint256) {
+        return requiredApprovals < 2 ? 2 : requiredApprovals;
+    }
+
+    function proposeOracleUpdate(address _newOracle) external onlyAdmin returns (uint256) {
+        require(_newOracle != address(0), "invalid oracle");
+        require(_newOracle != oracleAddress, "same oracle");
+        require(admins.length >= governanceApprovals(), "insufficient admins");
+
+        uint256 proposalId = oracleUpdateCounter;
+        oracleUpdateCounter++;
+
+        oracleUpdateProposals[proposalId] = OracleUpdateProposal({
+            newOracle: _newOracle,
+            approvalCount: 1,
+            executed: false,
+            createdAt: block.timestamp,
+            eta: block.timestamp + governanceTimelock,
+            proposer: msg.sender
+        });
+
+        oracleUpdateHasApproved[proposalId][msg.sender] = true;
+
+        emit OracleUpdateProposed(proposalId, msg.sender, _newOracle, oracleUpdateProposals[proposalId].eta);
+        emit OracleUpdateApproved(proposalId, msg.sender, 1, governanceApprovals());
+
+        return proposalId;
+    }
+
+    function approveOracleUpdate(uint256 _proposalId) external onlyAdmin {
+        require(_proposalId < oracleUpdateCounter, "proposal not found");
+
+        OracleUpdateProposal storage proposal = oracleUpdateProposals[_proposalId];
+        require(proposal.createdAt > 0, "proposal not initialized");
+        require(!proposal.executed, "already executed");
+        require(!oracleUpdateHasApproved[_proposalId][msg.sender], "already approved");
+
+        oracleUpdateHasApproved[_proposalId][msg.sender] = true;
+        proposal.approvalCount++;
+
+        emit OracleUpdateApproved(_proposalId, msg.sender, proposal.approvalCount, governanceApprovals());
+    }
+
+    function executeOracleUpdate(uint256 _proposalId) external onlyAdmin {
+        require(_proposalId < oracleUpdateCounter, "proposal not found");
+
+        OracleUpdateProposal storage proposal = oracleUpdateProposals[_proposalId];
+        require(proposal.createdAt > 0, "proposal not initialized");
+        require(!proposal.executed, "already executed");
+        require(proposal.approvalCount >= governanceApprovals(), "not enough approvals");
+        require(block.timestamp >= proposal.eta, "timelock not elapsed");
+
+        proposal.executed = true;
+
+        address oldOracle = oracleAddress;
+        oracleAddress = proposal.newOracle;
+
+        emit OracleUpdated(oldOracle, proposal.newOracle);
+    }
+
+    function proposeAddAdmin(address _newAdmin) external onlyAdmin returns (uint256) {
+        require(_newAdmin != address(0), "invalid admin");
+        require(!isAdmin[_newAdmin], "already admin");
+        require(admins.length >= governanceApprovals(), "insufficient admins");
+
+        uint256 proposalId = adminAddCounter;
+        adminAddCounter++;
+
+        adminAddProposals[proposalId] = AdminAddProposal({
+            newAdmin: _newAdmin,
+            approvalCount: 1,
+            executed: false,
+            createdAt: block.timestamp,
+            eta: block.timestamp + governanceTimelock,
+            proposer: msg.sender
+        });
+
+        adminAddHasApproved[proposalId][msg.sender] = true;
+
+        emit AdminAddProposed(proposalId, msg.sender, _newAdmin, adminAddProposals[proposalId].eta);
+        emit AdminAddApproved(proposalId, msg.sender, 1, governanceApprovals());
+
+        return proposalId;
+    }
+
+    function approveAddAdmin(uint256 _proposalId) external onlyAdmin {
+        require(_proposalId < adminAddCounter, "proposal not found");
+
+        AdminAddProposal storage proposal = adminAddProposals[_proposalId];
+        require(proposal.createdAt > 0, "proposal not initialized");
+        require(!proposal.executed, "already executed");
+        require(!adminAddHasApproved[_proposalId][msg.sender], "already approved");
+
+        adminAddHasApproved[_proposalId][msg.sender] = true;
+        proposal.approvalCount++;
+
+        emit AdminAddApproved(_proposalId, msg.sender, proposal.approvalCount, governanceApprovals());
+    }
+
+    function executeAddAdmin(uint256 _proposalId) external onlyAdmin {
+        require(_proposalId < adminAddCounter, "proposal not found");
+
+        AdminAddProposal storage proposal = adminAddProposals[_proposalId];
+        require(proposal.createdAt > 0, "proposal not initialized");
+        require(!proposal.executed, "already executed");
+        require(proposal.approvalCount >= governanceApprovals(), "not enough approvals");
+        require(block.timestamp >= proposal.eta, "timelock not elapsed");
+
+        // Re-check target is still valid at execution time
+        require(proposal.newAdmin != address(0), "invalid admin");
+        require(!isAdmin[proposal.newAdmin], "already admin");
+
+        proposal.executed = true;
+
+        admins.push(proposal.newAdmin);
+        isAdmin[proposal.newAdmin] = true;
+
+        emit AdminAdded(proposal.newAdmin);
     }
 
     // -----------------------------
