@@ -224,7 +224,7 @@ describe("AgroasysEscrow", function () {
       expect(await escrow.getBuyerNonce(buyer.address)).to.equal(2);
     });
 
-    it("Should reject invalid signature", async function () {
+    it("Should reject invalid signature (wrong signer)", async function () {
       const nonce = await escrow.getBuyerNonce(buyer.address);
       const blockTimestamp = (await ethers.provider.getBlock('latest'))!.timestamp;
       const deadline = BigInt(blockTimestamp + 3600);
@@ -233,7 +233,7 @@ describe("AgroasysEscrow", function () {
 
       // Signature from wrong signer
       const signature = await createSignature(
-        supplier,
+        supplier, // wrong signer
         await escrow.getAddress(),
         buyer.address,
         supplier.address,
@@ -255,6 +255,66 @@ describe("AgroasysEscrow", function () {
         )
       ).to.be.revertedWith("bad signature");
     });
+
+    it("Should reject replay signature", async function () {
+      const nonce = await escrow.getBuyerNonce(buyer.address);
+      const blockTimestamp = (await ethers.provider.getBlock('latest'))!.timestamp;
+      const deadline = BigInt(blockTimestamp + 3600);
+
+      await usdc.connect(buyer).approve(await escrow.getAddress(), totalAmount);
+
+      const signature = await createSignature(
+        buyer,
+        await escrow.getAddress(),
+        buyer.address,
+        supplier.address,
+        totalAmount,
+        logisticsAmount,
+        platformFeesAmount,
+        supplierFirstTranche,
+        supplierSecondTranche,
+        ricardianHash,
+        nonce,
+        deadline
+      );
+
+      const tx = await escrow.connect(buyer).createTrade(
+        supplier.address,
+        totalAmount,
+        logisticsAmount,
+        platformFeesAmount,
+        supplierFirstTranche,
+        supplierSecondTranche,
+        ricardianHash,
+        nonce,
+        deadline,
+        signature
+      );
+
+      await expect(tx)
+        .to.emit(escrow, "TradeLocked")
+        .withArgs(
+          0,
+          buyer.address,
+          supplier.address,
+          totalAmount,
+          logisticsAmount,
+          platformFeesAmount,
+          supplierFirstTranche,
+          supplierSecondTranche,
+          ricardianHash
+        );
+
+      // try to create a trade with the same signature
+      await expect(
+        escrow.connect(buyer).createTrade(
+          supplier.address, totalAmount, logisticsAmount, platformFeesAmount,
+          supplierFirstTranche, supplierSecondTranche, ricardianHash,
+          nonce, deadline, signature
+        )
+      ).to.be.revertedWith("bad nonce"); // got rejected because of the nonce
+    });
+
 
     it("Should reject with invalid parameters (zero addresses, bad hash, mismatched amounts)", async function () {
       const nonce = await escrow.getBuyerNonce(buyer.address);
