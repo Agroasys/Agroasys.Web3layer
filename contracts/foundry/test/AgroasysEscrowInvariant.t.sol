@@ -50,32 +50,20 @@ contract Handler is Test {
         tranche2 = uint96(bound(tranche2, 10_000e6, 100_000e6));
 
         uint256 total = logistics + fees + tranche1 + tranche2;
-        uint256 tradeId = escrow.tradeCounter();
 
-        bytes32 messageHashRecreated = keccak256(abi.encodePacked(
-            tradeId,
-            supplier,
-            treasury,
-            total,
-            uint256(logistics), 
-            uint256(fees),
-            uint256(tranche1),
-            uint256(tranche2),
-            ricardianHash
-        ));
-
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHashRecreated));
-        uint256 buyerPk = uint256(bound(privateKey,0,1000));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(buyerPk, ethSignedMessageHash);
-        bytes memory signature = abi.encodePacked(r, s, v);
-
+        uint256 buyerPk = uint256(bound(privateKey,1,1000));
         address buyer = vm.addr(buyerPk);
         usdc.mint(buyer, total);
 
-        vm.startPrank(buyer);
-        usdc.approve(address(escrow), total);
-        escrow.createTrade(
-            supplier,
+        uint256 nonce = escrow.getBuyerNonce(buyer);
+
+        uint256 deadline = block.timestamp + 1 hours;
+
+        bytes32 messageHashRecreated = keccak256(abi.encode(
+            block.chainid,
+            address(escrow),
+            buyer,
+            supplier, 
             treasury,
             total,
             logistics,
@@ -83,6 +71,27 @@ contract Handler is Test {
             tranche1,
             tranche2,
             ricardianHash,
+            nonce,
+            deadline
+        ));
+
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHashRecreated));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(buyerPk, ethSignedMessageHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+
+        vm.startPrank(buyer);
+        usdc.approve(address(escrow), total);
+        escrow.createTrade(
+            supplier,
+            total,
+            logistics,
+            fees,
+            tranche1,
+            tranche2,
+            ricardianHash,
+            nonce,
+            deadline,
             signature
         );
         totalDeposited += total;
@@ -102,8 +111,8 @@ contract Handler is Test {
 
         vm.prank(oracle);
         escrow.releaseFundsStage1(tradeId);
-        (,,,,,,, uint256 logistics,, uint256 tranche1,,,) = escrow.trades(tradeId);
-        totalWithdrawn += logistics + tranche1;
+        (,,,,,, uint256 logistics,uint256 fees, uint256 tranche1,,,) = escrow.trades(tradeId);
+        totalWithdrawn += logistics + tranche1 + fees;
         releaseStage1Triggered++;
     }
 
@@ -120,7 +129,7 @@ contract Handler is Test {
         escrow.confirmArrival(tradeId);
     }
 
-    function releaseFundsStage2(uint96 random_tradeId) public {
+    function finalizeAfterDisputeWindow(uint96 random_tradeId) public {
         uint256 tradeCount = escrow.tradeCounter();
         if (tradeCount==0){
             return;
@@ -128,14 +137,14 @@ contract Handler is Test {
 
         uint256 tradeId = random_tradeId % tradeCount;
 
-        (,,,,,,,,,,,,uint256 arrivalTimestamp) = escrow.trades(tradeId);
+        (,,,,,,,,,,,uint256 arrivalTimestamp) = escrow.trades(tradeId);
 
         vm.warp(arrivalTimestamp + 24 hours + 1);
 
         vm.prank(oracle);
-        escrow.releaseFundsStage2(tradeId);
-        (,,,,,,,,uint256 fees,,uint256 tranche2,,) = escrow.trades(tradeId);
-        totalWithdrawn += tranche2 + fees;
+        escrow.finalizeAfterDisputeWindow(tradeId);
+        (,,,,,,,,,uint256 tranche2,,) = escrow.trades(tradeId);
+        totalWithdrawn += tranche2;
         releaseStage2Triggered++;
     }
 
@@ -145,7 +154,7 @@ contract Handler is Test {
             return;
         }
         uint256 tradeId = random_tradeId % tradeCount;
-        (,,, address buyer,,,,,,,,,) = escrow.trades(tradeId);
+        (,,,address buyer,,,,,,,,) = escrow.trades(tradeId);
         
 
         vm.prank(buyer);
@@ -173,19 +182,19 @@ contract Handler is Test {
         }
         uint256 proposalId = random_proposalId % disputeCount;
         
-        (uint256 tradeId,,, bool executed,) = escrow.disputeProposals(proposalId);
+        (uint256 tradeId,,,bool executed,,) = escrow.disputeProposals(proposalId);
         
-        (,,,,,,,, uint256 fees,, uint256 tranche2,,) = escrow.trades(tradeId);
+        (,,,,,,, ,, uint256 tranche2,,) = escrow.trades(tradeId);
         
 
         vm.prank(admin2);
         escrow.approveDisputeSolution(proposalId);
         
-        (,,, bool executedNow,) = escrow.disputeProposals(proposalId);
+        (,,, bool executedNow,,) = escrow.disputeProposals(proposalId);
         
         if (executedNow && !executed) {
             disputeSolved++;
-            totalWithdrawn += tranche2 + fees;
+            totalWithdrawn += tranche2;
         }
     }
 }
@@ -217,7 +226,7 @@ contract InvariantTest is Test {
         admins[1] = admin2;
         admins[2] = admin3;
 
-        escrow = new AgroasysEscrow(address(usdc), oracle, admins, 2);
+        escrow = new AgroasysEscrow(address(usdc), oracle,treasury ,admins, 2);
 
         handler = new Handler(escrow,usdc,treasury,oracle,admin1,admin2);
 
@@ -227,7 +236,7 @@ contract InvariantTest is Test {
         selectors[0] = Handler.createTrade.selector;
         selectors[1] = Handler.releaseFundsStage1.selector;
         selectors[2] = Handler.confirmArrival.selector;
-        selectors[3] = Handler.releaseFundsStage2.selector;
+        selectors[3] = Handler.finalizeAfterDisputeWindow.selector;
         selectors[4] = Handler.openDisputeByBuyer.selector;
         selectors[5] = Handler.proposeDisputeSolution.selector;
         selectors[6] = Handler.approveDisputeSolution.selector;
@@ -254,7 +263,7 @@ contract InvariantTest is Test {
         uint256 totalLocked = 0;
         
         for (uint256 i = 0; i < escrow.tradeCounter(); i++) {
-            (,,AgroasysEscrow.TradeStatus status,,,,uint256 total,,uint256 fees,,uint256 tranche2,,) = escrow.trades(i);
+            (,,AgroasysEscrow.TradeStatus status,,,uint256 total,,,,uint256 tranche2,,) = escrow.trades(i);
             
             if (status == AgroasysEscrow.TradeStatus.LOCKED) {
                 totalLocked += total;
@@ -263,7 +272,7 @@ contract InvariantTest is Test {
                 status == AgroasysEscrow.TradeStatus.ARRIVAL_CONFIRMED || 
                 status == AgroasysEscrow.TradeStatus.FROZEN
             ) {
-                totalLocked += tranche2 + fees;
+                totalLocked += tranche2;
             }
         }
         assertEq(usdc.balanceOf(address(escrow)), totalLocked, "escrow balance doesn't match logical locked funds");
@@ -290,7 +299,7 @@ contract InvariantTest is Test {
     function invariant_DisputesSolvedMatches() public view {
         uint256 disputedCount = 0;
         for (uint256 i = 0; i < escrow.disputeCounter(); i++) {
-            (,,,bool executed,) = escrow.disputeProposals(i);
+            (,,,bool executed,,) = escrow.disputeProposals(i);
             
             if (executed) {
                 disputedCount ++;

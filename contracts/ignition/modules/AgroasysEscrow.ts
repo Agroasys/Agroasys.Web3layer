@@ -3,6 +3,7 @@ import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 export default buildModule("AgroasysEscrowModule", (m) => {
     const usdcAddress = "";
     const oracleAddress = "";
+    const treasuryAddress = "";
     const admin1 = "";
     const admin2 = "";
     const admin3 = "";
@@ -12,6 +13,7 @@ export default buildModule("AgroasysEscrowModule", (m) => {
     const agroasysEscrow = m.contract("AgroasysEscrow", [
         usdcAddress,
         oracleAddress,
+        treasuryAddress,
         admins,
         requiredApprovals
     ]);

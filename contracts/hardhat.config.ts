@@ -6,7 +6,10 @@ const config: HardhatUserConfig = {
   solidity: {
     version:"0.8.28",
     settings: {
-      viaIR:true
+      viaIR:true,
+      optimizer: {
+        enabled: true
+      }
     }
   },
   paths: {
