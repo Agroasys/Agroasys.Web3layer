@@ -1,4 +1,4 @@
-# **Agroasys Settlement Protocol**
+# **Agroasys: A commercial trade settlement protocol**
 
 _**The trustless settlement engine for cross-border commodities trade.**_
 
