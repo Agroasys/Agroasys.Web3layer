@@ -1,0 +1,29 @@
+type Trade @entity {
+  id: ID!
+  tradeId: String! @index
+  buyer: String! @index
+  supplier: String! @index
+  status: TradeStatus!
+  totalAmountLocked: BigInt!
+  ricardianHash: String!
+  createdAt: DateTime!
+  
+  events: [TradeEvent!]! @derivedFrom(field: "trade")
+}
+
+type TradeEvent @entity {
+  id: ID!
+  trade: Trade!
+  eventName: String! @index
+  blockNumber: Int!
+  timestamp: DateTime!
+  txHash: String!
+}
+
+enum TradeStatus {
+  LOCKED
+  IN_TRANSIT
+  ARRIVAL_CONFIRMED
+  FROZEN
+  CLOSED
+}
