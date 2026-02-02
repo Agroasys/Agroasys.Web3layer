@@ -386,6 +386,15 @@ forge test --match-contract FuzzTest -vvv
 forge test --match-contract InvariantTest -vvv
 ```
 
+## Addresses
+
+- escrow: 0x53A51E24503f48aeEA0dBc3808E28faf5E4861E9
+- mock-usdc: 0xb763eDEc531649a7cC8897E5daa0454681581418
+
+## Script
+```
+npx hardhat run scripts/test-trade.ts --network polkadotTestnet
+```
 
 ## Next Steps
 - Gas optimization
