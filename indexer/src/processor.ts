@@ -7,7 +7,7 @@ export const ESCROW_ADDRESS = "0x53A51E24503f48aeEA0dBc3808E28faf5E4861E9".toLow
 export const processor = new SubstrateBatchProcessor()
     .setGateway("https://v2.archive.subsquid.io/network/asset-hub-paseo")
     .setRpcEndpoint({
-        url: "https://testnet-passet-hub.polkadot.io/",
+        url: "https://sys.ibp.network/asset-hub-paseo",
         rateLimit: 10
     })
     .setBlockRange({ from: 4872426 })
@@ -15,6 +15,9 @@ export const processor = new SubstrateBatchProcessor()
         name: ['Revive.ContractEmitted']
     })
     .setFields({
+        event: {
+            args: true
+        },
         block: {
             timestamp: true
         },

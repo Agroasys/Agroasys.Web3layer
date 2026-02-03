@@ -9,19 +9,19 @@ processor.run(new TypeormDatabase(), async (ctx) => {
 
     for (let block of ctx.blocks) {
         for (let event of block.events) {
-            if (event.name !== 'Revive.ContractEmitted') continue; 
+            if (event.name !== 'Revive.ContractEmitted') continue;
 
             try {
-                const { contract, data } = extractContractEvent(event);
+                const { contract, data, topics } = event.args;
 
                 if (contract.toLowerCase() !== ESCROW_ADDRESS) continue;
 
-                const decoded = decodeEvent(data, event);
+                const decoded = contractInterface.parseLog({ topics, data });
                 if (!decoded) continue;
 
                 const eventId = `${block.header.height}-${event.index}`;
                 const timestamp = new Date(block.header.timestamp || 0);
-                const txHash = event.extrinsic?.id || 'unknown';
+                const txHash = event.extrinsic?.hash || 'unknown';
 
                 switch (decoded.name) {
                     case 'TradeLocked':
@@ -45,23 +45,6 @@ processor.run(new TypeormDatabase(), async (ctx) => {
     ctx.log.info(`Processed ${trades.size} trades, ${events.length} events`);
 });
 
-function extractContractEvent(event: any): { contract: string; data: string } {
-    const args = event.args;
-    return {
-        contract: args.contract || args[0] || '',
-        data: args.data || args[1] || ''
-    };
-}
-
-function decodeEvent(data: string, event: any): any {
-    try {
-        const topics = event.topics || [];
-        return contractInterface.parseLog({ topics, data });
-    } catch {
-        return null;
-    }
-}
-
 function handleTradeLocked(
     log: any,
     trades: Map<string, Trade>,
@@ -71,21 +54,30 @@ function handleTradeLocked(
     timestamp: Date,
     txHash: string
 ) {
-    const args = log.args;
-    const tradeId = args.tradeId.toString();
+    const [
+        tradeId,
+        buyer,
+        supplier,
+        totalAmount,
+        logisticsAmount,
+        platformFeesAmount,
+        supplierFirstTranche,
+        supplierSecondTranche,
+        ricardianHash
+    ] = log.args;
 
     const trade = new Trade({
-        id: tradeId,
-        tradeId,
-        buyer: args.buyer.toLowerCase(),
-        supplier: args.supplier.toLowerCase(),
+        id: tradeId.toString(),
+        tradeId: tradeId.toString(),
+        buyer: buyer.toLowerCase(),
+        supplier: supplier.toLowerCase(),
         status: TradeStatus.LOCKED,
-        totalAmountLocked: args.totalAmount.toBigInt(),
-        ricardianHash: args.ricardianHash,
+        totalAmountLocked: totalAmount,
+        ricardianHash: ricardianHash,
         createdAt: timestamp
     });
 
-    trades.set(tradeId, trade);
+    trades.set(tradeId.toString(), trade);
 
     events.push(new TradeEvent({
         id: eventId,
@@ -96,7 +88,7 @@ function handleTradeLocked(
         txHash
     }));
 
-    console.log(`Trade ${tradeId} locked by ${trade.buyer}`);
+    console.log(`Trade ${tradeId} locked by ${buyer}`);
 }
 
 function handleFundsReleasedStage1(
@@ -108,16 +100,15 @@ function handleFundsReleasedStage1(
     timestamp: Date,
     txHash: string
 ) {
-    const args = log.args;
-    const tradeId = args.tradeId.toString();
+    const [tradeId, supplier, supplierFirstTranche, treasury, logisticsAmount] = log.args;
 
-    let trade = trades.get(tradeId);
+    let trade = trades.get(tradeId.toString());
     if (!trade) {
         trade = new Trade({
-            id: tradeId,
-            tradeId,
+            id: tradeId.toString(),
+            tradeId: tradeId.toString(),
             buyer: 'unknown',
-            supplier: args.supplier.toLowerCase(),
+            supplier: supplier.toLowerCase(),
             status: TradeStatus.IN_TRANSIT,
             totalAmountLocked: 0n,
             ricardianHash: '',
@@ -127,7 +118,7 @@ function handleFundsReleasedStage1(
         trade.status = TradeStatus.IN_TRANSIT;
     }
 
-    trades.set(tradeId, trade);
+    trades.set(tradeId.toString(), trade);
 
     events.push(new TradeEvent({
         id: eventId,
