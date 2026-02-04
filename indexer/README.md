@@ -1,4 +1,4 @@
-# Agroasys Indexer
+# Indexer
 
 Indexer module
 
@@ -25,7 +25,7 @@ npm run build
 
 # run the indexer
 node -r dotenv/config lib/main.js
-``` 
+```
 
 Edit shema.graphql
 ```bash
