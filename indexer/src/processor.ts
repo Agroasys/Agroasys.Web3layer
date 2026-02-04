@@ -10,9 +10,13 @@ export const processor = new SubstrateBatchProcessor()
         url: "https://sys.ibp.network/asset-hub-paseo",
         rateLimit: 10
     })
-    .setBlockRange({ from: 4872426 })
+    .setBlockRange({ 
+        from: 4872426,
+        to: 4872428
+    })
     .addEvent({
-        name: ['Revive.ContractEmitted']
+        name: ['Revive.ContractEmitted'],
+        extrinsic: true
     })
     .setFields({
         event: {
