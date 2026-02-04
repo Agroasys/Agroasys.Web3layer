@@ -11,8 +11,7 @@ export const processor = new SubstrateBatchProcessor()
         rateLimit: 10
     })
     .setBlockRange({ 
-        from: 4872426,
-        to: 4872428
+        from: 4872426
     })
     .addEvent({
         name: ['Revive.ContractEmitted'],
