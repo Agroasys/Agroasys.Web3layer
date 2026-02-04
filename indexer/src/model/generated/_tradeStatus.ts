@@ -1,0 +1,7 @@
+export enum TradeStatus {
+    LOCKED = "LOCKED",
+    IN_TRANSIT = "IN_TRANSIT",
+    ARRIVAL_CONFIRMED = "ARRIVAL_CONFIRMED",
+    FROZEN = "FROZEN",
+    CLOSED = "CLOSED",
+}

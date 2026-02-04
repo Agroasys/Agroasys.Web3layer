@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:17
+    container_name: indexer-db
+    environment:
+      POSTGRES_DB: squid
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    shm_size: 1gb
+    ports:
+      - "5433:5432"
+    # volumes:
+    #   - postgres_data:/var/lib/postgresql/data
+    networks:
+      - indexer-network
+  indexer:
+    build: .
+    container_name: indexer-service
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: squid
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+    restart: unless-stopped
+    networks:
+      - indexer-network
+
+
+
+# volumes:
+#   postgres_data:
+
+
+networks:
+  indexer-network:

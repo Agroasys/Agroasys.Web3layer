@@ -1,0 +1,191 @@
+## TRADES
+
+type Trade @entity {
+  id: ID!
+  tradeId: String! @index
+  buyer: String! @index
+  supplier: String! @index
+  status: TradeStatus! @index
+  totalAmountLocked: BigInt!
+  logisticsAmount: BigInt!
+  platformFeesAmount: BigInt!
+  supplierFirstTranche: BigInt!
+  supplierSecondTranche: BigInt!
+  ricardianHash: String!
+  createdAt: DateTime! @index
+  arrivalTimestamp: DateTime
+  
+  events: [TradeEvent!]! @derivedFrom(field: "trade")
+  disputes: [DisputeProposal!]! @derivedFrom(field: "trade")
+}
+
+type TradeEvent @entity {
+  # fields for all events
+  id: ID!
+  trade: Trade!
+  eventName: String! @index
+  blockNumber: Int! @index
+  timestamp: DateTime! @index
+  txHash: String! @index
+  extrinsicIndex: Int!
+
+  # TradeLocked specific
+  totalAmount: BigInt
+  logisticsAmount: BigInt
+  platformFeesAmount: BigInt
+  supplierFirstTranche: BigInt
+  supplierSecondTranche: BigInt
+
+  # FundsReleasedStage1 specific
+  releasedFirstTranche: BigInt
+  releasedLogisticsAmount: BigInt
+  treasuryAddress: String
+
+  # PlatformFeesPaidStage1 specific
+  paidPlatformFees: BigInt
+
+  # ArrivalConfirmed specific
+  arrivalTimestamp: BigInt
+
+  # FinalTrancheReleased specific
+  finalTranche: BigInt
+  finalRecipient: String
+
+  # DisputeOpenedByBuyer (no specific fields)
+}
+
+enum TradeStatus {
+  LOCKED
+  IN_TRANSIT
+  ARRIVAL_CONFIRMED
+  FROZEN
+  CLOSED
+}
+
+
+
+## DISPUTES
+
+type DisputeProposal @entity {
+  id: ID!
+  proposalId: String! @index
+  trade: Trade!
+  disputeStatus: DisputeStatus! @index
+  approvalCount: Int!
+  executed: Boolean! @index
+  createdAt: DateTime! @index
+  proposer: String! @index
+
+  events: [DisputeEvent!]! @derivedFrom(field: "dispute")
+}
+
+type DisputeEvent @entity {
+  # fields for all events
+  id: ID!
+  dispute: DisputeProposal!
+  eventName: String! @index
+  blockNumber: Int! @index
+  timestamp: DateTime! @index
+  txHash: String! @index
+  extrinsicIndex: Int!
+
+  # DisputeSolutionProposed specific
+  proposedDisputeStatus: DisputeStatus
+  proposer: String
+
+  # DisputeApproved specific
+  approver: String
+  approvalCount: Int
+  requiredApprovals: Int
+
+  # DisputeFinalized specific
+  finalDisputeStatus: DisputeStatus
+}
+
+enum DisputeStatus {
+  REFUND
+  RESOLVE
+}
+
+
+
+## ORACLE UPDATES
+
+type OracleUpdateProposal @entity {
+  id: ID!
+  proposalId: String! @index
+  newOracle: String! @index
+  approvalCount: Int!
+  executed: Boolean! @index
+  createdAt: DateTime! @index
+  eta: BigInt!
+  proposer: String! @index
+
+  events: [OracleEvent!]! @derivedFrom(field: "oracleUpdate")
+}
+
+type OracleEvent @entity {
+  # fields for all events
+  id: ID!
+  oracleUpdate: OracleUpdateProposal!
+  eventName: String! @index
+  blockNumber: Int! @index
+  timestamp: DateTime! @index
+  txHash: String! @index
+  extrinsicIndex: Int!
+
+  # OracleUpdateProposed specific
+  proposedOracle: String
+  eta: BigInt
+  proposer: String
+
+  # OracleUpdateApproved specific
+  approver: String
+  approvalCount: Int
+  requiredApprovals: Int
+
+  # OracleUpdated specific
+  oldOracle: String
+  newOracle: String
+}
+
+
+
+## ADMIN UPDATES
+
+type AdminAddProposal @entity {
+  id: ID!
+  proposalId: String! @index
+  newAdmin: String! @index
+  approvalCount: Int!
+  executed: Boolean! @index
+  createdAt: DateTime! @index
+  eta: BigInt!
+  proposer: String! @index
+
+  events: [AdminEvent!]! @derivedFrom(field: "adminAddProposal")
+}
+
+type AdminEvent @entity {
+  # fields for all events
+  id: ID!
+  adminAddProposal: AdminAddProposal!
+  eventName: String! @index
+  blockNumber: Int! @index
+  timestamp: DateTime! @index
+  txHash: String! @index
+  extrinsicIndex: Int!
+
+  # AdminAddProposed specific
+  proposedAdmin: String
+  eta: BigInt
+  proposer: String
+
+  # AdminAddApproved specific
+  approver: String
+  approvalCount: Int
+  requiredApprovals: Int
+
+  # AdminAdded specific
+  addedAdmin: String
+}
