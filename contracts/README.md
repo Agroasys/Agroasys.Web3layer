@@ -386,14 +386,33 @@ forge test --match-contract FuzzTest -vvv
 forge test --match-contract InvariantTest -vvv
 ```
 
+## Deploy Contracts
+```bash
+npx hardhat ignition deploy ignition/modules/MockUSDC.ts --network polkadotTestnet
+npx hardhat ignition deploy ignition/modules/AgroasysEscrow.ts --network polkadotTestnet
+```
+
 ## Addresses
 
-- escrow: 0x53A51E24503f48aeEA0dBc3808E28faf5E4861E9
-- mock-usdc: 0xb763eDEc531649a7cC8897E5daa0454681581418
+- mock-usdc: 0xEea5766E43D0c7032463134Afc121e63C9f9C260
+- escrow: 0x8E1F0924a5aA0D22fB71e5f34f25111FF487379a
 
 ## Script
+```bash
+npx hardhat run scripts/trade/createTrade.ts --network polkadotTestnet
+npx hardhat run scripts/trade/releaseStage1.ts --network polkadotTestnet
+npx hardhat run scripts/trade/confirmArrival.ts --network polkadotTestnet
+npx hardhat run scripts/trade/releaseFinalTranche.ts --network polkadotTestnet
+npx hardhat run scripts/trade/openDisputeByBuyer.ts --network polkadotTestnet
 ```
-npx hardhat run scripts/test-trade.ts --network polkadotTestnet
+
+```bash
+```
+
+```bash
+```
+
+```bash
 ```
 
 ## Next Steps

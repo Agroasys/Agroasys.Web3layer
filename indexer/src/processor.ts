@@ -1,8 +1,7 @@
 import { SubstrateBatchProcessor, SubstrateBatchProcessorFields} from "@subsquid/substrate-processor"
-import { TypeormDatabase } from "@subsquid/typeorm-store"
 
 
-export const ESCROW_ADDRESS = "0x53A51E24503f48aeEA0dBc3808E28faf5E4861E9".toLowerCase();
+export const ESCROW_ADDRESS = "0x8E1F0924a5aA0D22fB71e5f34f25111FF487379a".toLowerCase();
 
 export const processor = new SubstrateBatchProcessor()
     .setGateway("https://v2.archive.subsquid.io/network/asset-hub-paseo")
@@ -11,7 +10,7 @@ export const processor = new SubstrateBatchProcessor()
         rateLimit: 10
     })
     .setBlockRange({ 
-        from: 4872426
+        from: 4955340
     })
     .addEvent({
         name: ['Revive.ContractEmitted'],
