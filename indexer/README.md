@@ -35,6 +35,12 @@ The indexer is expected to capture and store the following escrow events:
 - `DisputeSolutionProposed`
 - `DisputeApproved`
 - `DisputeFinalized`
+- `OracleUpdateProposed`
+- `OracleUpdateApproved`
+- `OracleUpdated`
+- `AdminAddProposed`
+- `AdminAddApproved`
+- `AdminAdded`
 
 > Note: If the contract changes event names/arguments, update:
 > - the ABI/event decoder
