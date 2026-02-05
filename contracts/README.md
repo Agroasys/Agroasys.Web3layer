@@ -481,19 +481,35 @@ npx hardhat ignition deploy ignition/modules/AgroasysEscrow.ts --network polkado
 - escrow: 0x8E1F0924a5aA0D22fB71e5f34f25111FF487379a
 
 ## Scripts
+Trade flow
 ```bash
 npx hardhat run scripts/trade/createTrade.ts --network polkadotTestnet
 npx hardhat run scripts/trade/releaseStage1.ts --network polkadotTestnet
 npx hardhat run scripts/trade/confirmArrival.ts --network polkadotTestnet
 npx hardhat run scripts/trade/releaseFinalTranche.ts --network polkadotTestnet
-npx hardhat run scripts/trade/openDisputeByBuyer.ts --network polkadotTestnet
 ```
 
-```bash
-```
+Dispute flow
 
 ```bash
+npx hardhat run scripts/dispute/openDisputeByBuyer.ts --network polkadotTestnet
+npx hardhat run scripts/dispute/proposeSolution.ts --network polkadotTestnet
+npx hardhat run scripts/dispute/approveSolution.ts --network polkadotTestnet
 ```
 
+Update oracle
+
 ```bash
+npx hardhat run scripts/updateOracle/propose.ts --network polkadotTestnet
+npx hardhat run scripts/updateOracle/approve.ts --network polkadotTestnet
+npx hardhat run scripts/updateOracle/execute.ts --network polkadotTestnet
+```
+
+
+Update admins
+
+```bash
+npx hardhat run scripts/updateAdmins/propose.ts --network polkadotTestnet
+npx hardhat run scripts/updateAdmins/approve.ts --network polkadotTestnet
+npx hardhat run scripts/updateAdmins/execute.ts --network polkadotTestnet
 ```
