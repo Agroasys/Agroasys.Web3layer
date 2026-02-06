@@ -8,9 +8,9 @@ async function main() {
   console.log("Buyer address:", buyer.address);
   const escrow = await ethers.getContractAt("AgroasysEscrow", ESCROW_ADDRESS);
 
-  const tradeId = 0;
+  const tradeId = 1;
 
-  console.log(`\nppening dispute for trade ${tradeId}`);
+  console.log(`\opening dispute for trade ${tradeId}`);
   
   const tx = await escrow.openDispute(tradeId);
   

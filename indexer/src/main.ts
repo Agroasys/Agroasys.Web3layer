@@ -28,6 +28,7 @@ processor.run(new TypeormDatabase(), async (ctx) => {
                 const decoded = contractInterface.parseLog({ topics, data });
 
                 if (!decoded) {
+                    ctx.log.warn(`Failed to decode event at block ${block.header.height}`);
                     continue;
                 }
                 const eventId = event.id;
