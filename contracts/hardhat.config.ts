@@ -23,7 +23,16 @@ const config: HardhatUserConfig = {
     polkadotTestnet: {
       url: 'https://services.polkadothub-rpc.com/testnet',
       chainId: 420420417,
-      accounts: [vars.get('PRIVATE_KEY'),vars.get('PRIVATE_KEY2')],
+      accounts: (() => {
+        const accounts = [vars.get('PRIVATE_KEY')];
+        try {
+          const secondKey = vars.get('PRIVATE_KEY2');
+          if (secondKey) accounts.push(secondKey);
+        } catch {
+          // PRIVATE_KEY2 is optional
+        }
+        return accounts;
+      })(),
     },
   },
 };
