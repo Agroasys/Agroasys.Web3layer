@@ -1,0 +1,25 @@
+export interface OracleUpdateProposal {
+    proposalId: string;
+    newOracle: string;
+    approvalCount: number;
+    executed: boolean;
+    createdAt: Date;
+    eta: bigint;
+    proposer: string;
+}
+
+export interface AdminAddProposal {
+    proposalId: string;
+    newAdmin: string;
+    approvalCount: number;
+    executed: boolean;
+    createdAt: Date;
+    eta: bigint;
+    proposer: string;
+}
+
+export interface GovernanceResult {
+    proposalId: string;
+    txHash: string;
+    blockNumber: number;
+}

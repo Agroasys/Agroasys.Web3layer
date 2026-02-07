@@ -5,8 +5,16 @@ export interface TradeParameters {
     platformFeesAmount: bigint;
     supplierFirstTranche: bigint;
     supplierSecondTranche: bigint;
-    ricardianhash: string;
-    deadline: number;
+    ricardianHash: string;
+    deadline?: number;
+}
+
+export interface TradeResult {
+    tradeId: string;
+    txHash: string;
+    blockNumber: number;
+    buyer: string;
+    supplier: string;
 }
 
 export enum TradeStatus {
