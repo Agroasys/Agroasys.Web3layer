@@ -10,7 +10,7 @@ services:
     ports:
       - "${DB_PORT}:${DB_DOCKER_PORT}"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -33,6 +33,7 @@ services:
       GATEWAY_URL: ${GATEWAY_URL}
       RPC_ENDPOINT: ${RPC_ENDPOINT}
       START_BLOCK: ${START_BLOCK}
+      RATE_LIMIT: ${RATE_LIMIT}
       CONTRACT_ADDRESS: ${CONTRACT_ADDRESS}
       GRAPHQL_PORT: ${GRAPHQL_PORT}
     restart: unless-stopped

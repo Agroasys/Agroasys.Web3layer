@@ -10,7 +10,7 @@ async function main() {
 
   const tradeId = 1;
 
-  console.log(`\opening dispute for trade ${tradeId}`);
+  console.log(`\nopening dispute for trade ${tradeId}`);
   
   const tx = await escrow.openDispute(tradeId);
   
