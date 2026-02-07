@@ -3,35 +3,64 @@ services:
     image: postgres:17
     container_name: indexer-db
     environment:
-      POSTGRES_DB: squid
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     shm_size: 1gb
     ports:
-      - "5433:5432"
-    # volumes:
-    #   - postgres_data:/var/lib/postgresql/data
+      - "${DB_PORT}:${DB_DOCKER_PORT}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - indexer-network
   indexer:
     build: .
     container_name: indexer-service
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: squid
-      DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PORT: ${DB_DOCKER_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      GATEWAY_URL: ${GATEWAY_URL}
+      RPC_ENDPOINT: ${RPC_ENDPOINT}
+      START_BLOCK: ${START_BLOCK}
+      CONTRACT_ADDRESS: ${CONTRACT_ADDRESS}
+      GRAPHQL_PORT: ${GRAPHQL_PORT}
+    restart: unless-stopped
+    networks:
+      - indexer-network
+  graphql:
+    build: .
+    container_name: indexer-graphql
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: ${DB_DOCKER_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      GQL_PORT: ${GRAPHQL_PORT}
+    ports:
+      - "${GRAPHQL_PORT}:${GRAPHQL_PORT}"
+    command: ["npx", "squid-graphql-server"]
     restart: unless-stopped
     networks:
       - indexer-network
 
 
-
-# volumes:
-#   postgres_data:
+volumes:
+  postgres_data:
 
 
 networks:

@@ -1,16 +1,18 @@
 import { SubstrateBatchProcessor, SubstrateBatchProcessorFields} from "@subsquid/substrate-processor"
+import {loadConfig} from "./config"
 
+const config = loadConfig();
 
-export const ESCROW_ADDRESS = "0x8E1F0924a5aA0D22fB71e5f34f25111FF487379a".toLowerCase();
+export const ESCROW_ADDRESS = config.contractAddress;
 
 export const processor = new SubstrateBatchProcessor()
-    .setGateway("https://v2.archive.subsquid.io/network/asset-hub-paseo")
+    .setGateway(config.gatewayUrl)
     .setRpcEndpoint({
-        url: "https://sys.ibp.network/asset-hub-paseo",
-        rateLimit: 10
+        url: config.rpcEndpoint,
+        rateLimit: config.rateLimit
     })
     .setBlockRange({ 
-        from: 4955340
+        from: config.startBlock
     })
     .addEvent({
         name: ['Revive.ContractEmitted'],
