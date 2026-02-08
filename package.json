@@ -1,8 +1,8 @@
 {
-  "private":true,
+  "private": true,
   "name": "Agroasys.Web3layer",
-  "license":"Apache-2.0",
-  "workspaces":[
+  "license": "Apache-2.0",
+  "workspaces": [
     "contracts",
     "indexer",
     "oracle",
