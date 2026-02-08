@@ -30,13 +30,6 @@ export class ValidationError extends AgroasysSDKError {
     }
 }
 
-export class NonceError extends AgroasysSDKError {
-    constructor(message: string, context?: Record<string, any>) {
-        super(message, 'NONCE_ERROR', context);
-        this.name = 'NonceError';
-    }
-}
-
 export class AuthorizationError extends AgroasysSDKError {
     constructor(message: string, context?: Record<string, any>) {
         super(message, 'AUTHORIZATION_ERROR', context);

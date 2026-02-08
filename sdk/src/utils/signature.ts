@@ -38,7 +38,6 @@ export function createTradeMessageHash(
             ]
         )
     );
-    
     return messageHash;
 }
 

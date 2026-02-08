@@ -55,10 +55,10 @@ export function validateTradeParameters(params: TradeParameters): void {
     }
     
     // should be 32 bytes
-    if (params.ricardianHash.length!==64) {
+    if (!/^0x[a-fA-F0-9]{64}$/.test(params.ricardianHash)) {
         throw new ValidationError(
             'ricardianHash must be a 32-byte hex string (0x...)',
-            { ricardianHash: params.ricardianHash }
+            { ricardianHash: params.ricardianHash, length: params.ricardianHash.length }
         );
     }
 }

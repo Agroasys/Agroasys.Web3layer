@@ -81,19 +81,17 @@ export class BuyerSDK extends Client {
         }
     }
     
-    async createTrade(params: TradeParameters,buyerSigner: ethers.Signer,autoApprove: boolean = true): Promise<TradeResult> {
+    async createTrade(params: TradeParameters,buyerSigner: ethers.Signer): Promise<TradeResult> {
         validateTradeParameters(params);
         
         const buyerAddress = await buyerSigner.getAddress();
         
-        if (autoApprove) {
-            const currentAllowance = await this.getUSDCAllowance(buyerAddress);
-            
-            if (currentAllowance < params.totalAmount) {
-                await this.approveUSDC(params.totalAmount, buyerSigner);
-            }
-        }
+        const currentAllowance = await this.getUSDCAllowance(buyerAddress);
         
+        if (currentAllowance < params.totalAmount) {
+            await this.approveUSDC(params.totalAmount, buyerSigner);
+        }
+
         const nonce = await this.getBuyerNonce(buyerAddress);
         
         const deadline = params.deadline || Math.floor(Date.now() / 1000) + 3600;
