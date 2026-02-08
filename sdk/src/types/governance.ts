@@ -19,7 +19,6 @@ export interface AdminAddProposal {
 }
 
 export interface GovernanceResult {
-    proposalId: string;
     txHash: string;
     blockNumber: number;
 }

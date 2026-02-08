@@ -14,7 +14,6 @@ export interface DisputeProposal {
 }
 
 export interface DisputeResult {
-    proposalId: string;
     txHash: string;
     blockNumber: number;
 }

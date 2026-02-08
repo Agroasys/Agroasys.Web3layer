@@ -10,11 +10,8 @@ export interface TradeParameters {
 }
 
 export interface TradeResult {
-    tradeId: string;
     txHash: string;
     blockNumber: number;
-    buyer: string;
-    supplier: string;
 }
 
 export enum TradeStatus {

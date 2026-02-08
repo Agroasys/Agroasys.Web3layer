@@ -6,10 +6,4 @@ export interface Config {
     // contracts
     escrowAddress: string;
     usdcAddress: string;
-
-    // graphql indexer
-    indexerUrl: string;
-
-    // key
-    privateKey: string
 }
