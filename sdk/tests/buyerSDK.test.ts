@@ -1,12 +1,21 @@
 import { BuyerSDK } from '../src/modules/buyerSDK';
-import { TEST_CONFIG, getBuyerSigner, generateTestRicardianHash, parseUSDC } from './setup';
+import {
+    TEST_CONFIG,
+    assertRequiredEnv,
+    getBuyerSigner,
+    generateTestRicardianHash,
+    hasRequiredEnv,
+    parseUSDC
+} from './setup';
 
+const describeIntegration = hasRequiredEnv ? describe : describe.skip;
 
-describe('BuyerSDK', () => {
+describeIntegration('BuyerSDK', () => {
     let buyerSDK: BuyerSDK;
     let buyerSigner: any;
 
     beforeAll(() => {
+        assertRequiredEnv();
         buyerSDK = new BuyerSDK(TEST_CONFIG);
         buyerSigner = getBuyerSigner();
     });

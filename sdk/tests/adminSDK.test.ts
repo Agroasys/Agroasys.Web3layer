@@ -1,13 +1,16 @@
 import { AdminSDK } from '../src/modules/adminSDK';
 import { DisputeStatus } from '../src/types/dispute';
-import { TEST_CONFIG, getAdminSigner } from './setup';
+import { TEST_CONFIG, assertRequiredEnv, getAdminSigner, hasRequiredEnv } from './setup';
 
-describe('AdminSDK', () => {
+const describeIntegration = hasRequiredEnv ? describe : describe.skip;
+
+describeIntegration('AdminSDK', () => {
     let adminSDK: AdminSDK;
     let adminSigner1: any;
     let adminSigner2: any;
 
     beforeAll(() => {
+        assertRequiredEnv();
         adminSDK = new AdminSDK(TEST_CONFIG);
         adminSigner1 = getAdminSigner(1);
         adminSigner2 = getAdminSigner(2);
@@ -17,7 +20,7 @@ describe('AdminSDK', () => {
         const adminAddress1 = await adminSigner1.getAddress();
         const isAdmin1 = await adminSDK.isAdmin(adminAddress1);
 
-        const adminAddress2 = await adminSigner1.getAddress();
+        const adminAddress2 = await adminSigner2.getAddress();
         const isAdmin2 = await adminSDK.isAdmin(adminAddress2);
         
         expect(isAdmin1).toBe(true);

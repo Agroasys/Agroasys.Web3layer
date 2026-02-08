@@ -1,11 +1,14 @@
 import { OracleSDK } from '../src/modules/oracleSDK';
-import { TEST_CONFIG, getOracleSigner } from './setup';
+import { TEST_CONFIG, assertRequiredEnv, getOracleSigner, hasRequiredEnv } from './setup';
 
-describe('OracleSDK', () => {
+const describeIntegration = hasRequiredEnv ? describe : describe.skip;
+
+describeIntegration('OracleSDK', () => {
     let oracleSDK: OracleSDK;
     let oracleSigner: any;
 
     beforeAll(() => {
+        assertRequiredEnv();
         oracleSDK = new OracleSDK(TEST_CONFIG);
         oracleSigner = getOracleSigner();
     });
@@ -38,7 +41,7 @@ describe('OracleSDK', () => {
         
         const txHash = await oracleSDK.finalizeAfterDisputeWindow(tradeId, oracleSigner);
         
-        expect(txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+        expect(txHash.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
         
         console.log(`trade finalized: ${txHash.txHash}`);
     });

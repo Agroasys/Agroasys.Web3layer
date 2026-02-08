@@ -58,7 +58,7 @@ import { BuyerSDK } from '@agroasys/sdk';
 
 const config = {
   rpc: '',
-  chainId: '',
+  chainId: 420420417,
   escrowAddress: '',
   usdcAddress: ''
 };
@@ -110,6 +110,8 @@ const result = await buyerSDK.createTrade(tradeParams, buyerSigner);
 
 
 ## Testing
+
+Integration tests require the `.env` values below. If required values are missing, the SDK integration suites are skipped.
 
 ```
 npm run test:buyer
