@@ -7,8 +7,5 @@
     "indexer",
     "oracle",
     "sdk"
-  ],
-  "dependencies": {
-    "@agroasys/sdk": "^1.0.0"
-  }
+  ]
 }
