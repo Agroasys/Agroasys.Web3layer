@@ -26,7 +26,7 @@ export interface IndexerConfig {
 
 function validateEnv(name: string): string {
     const value = process.env[name];
-    assert(value, `${name} is missiing`);
+    assert(value, `${name} is missing`);
     return value;
 }
 
