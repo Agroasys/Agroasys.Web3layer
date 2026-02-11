@@ -40,7 +40,7 @@ services:
       RETRY_ATTEMPTS: ${RETRY_ATTEMPTS}
       RETRY_DELAY: ${RETRY_DELAY}
     ports:
-      - "${PORT}"
+      - "${PORT}:3001"
     networks:
       - oracle-network
     restart: unless-stopped

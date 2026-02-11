@@ -5,7 +5,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "ts-node src/server.ts"
+    "dev": "ts-node src/server.ts",
+    "test": "jest --runInBand"
   },
   "dependencies": {
     "express": "^5.2.1",
@@ -22,7 +23,10 @@
     "@types/pg": "^8.10.9",
     "typescript": ">=4.5.0",
     "ts-node": "^10.9.2",
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.0.2",
+    "@types/jest": "^30.0.0",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6"
   },
   "license": "Apache-2.0"
 }
