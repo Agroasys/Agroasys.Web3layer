@@ -24,7 +24,16 @@ contract AgroasysEscrow is ReentrancyGuard {
     // -----------------------------
     // Constants
     // -----------------------------
+    /// @notice Buyer dispute window after arrival confirmation.
     uint256 public constant DISPUTE_WINDOW = 24 hours;
+    /// @notice Maximum time a trade can remain LOCKED before buyer can cancel for full refund.
+    uint256 public constant LOCK_TIMEOUT = 7 days;
+    /// @notice Maximum time a trade can remain IN_TRANSIT without arrival confirmation before buyer principal refund.
+    uint256 public constant IN_TRANSIT_TIMEOUT = 14 days;
+    /// @notice Time-to-live for dispute proposals before they must be replaced or cancelled.
+    uint256 public constant DISPUTE_PROPOSAL_TTL = 7 days;
+    /// @notice Time-to-live for governance proposals (oracle/admin updates).
+    uint256 public constant GOVERNANCE_PROPOSAL_TTL = 7 days;
 
     // -----------------------------
     // Enums / Structs
@@ -101,11 +110,24 @@ contract AgroasysEscrow is ReentrancyGuard {
     mapping(uint256 => DisputeProposal) public disputeProposals;
     mapping(uint256 => mapping(address => bool)) public disputeHasApproved;
     mapping(uint256 => bool) public tradeHasActiveDisputeProposal;
+    /// @notice Active dispute proposal id by trade id.
+    mapping(uint256 => uint256) public tradeActiveDisputeProposalId;
+    /// @notice Expiration timestamp for each dispute proposal id.
+    mapping(uint256 => uint256) public disputeProposalExpiresAt;
+    /// @notice True when a dispute proposal has been cancelled after expiry.
+    mapping(uint256 => bool) public disputeProposalCancelled;
     uint256 public disputeCounter;
+
+    /// @notice Timestamp when a trade moved to IN_TRANSIT.
+    mapping(uint256 => uint256) public inTransitSince;
 
     // roles
     address public oracleAddress;
     address public treasuryAddress;
+    /// @notice Global pause flag for normal protocol operations.
+    bool public paused;
+    /// @notice Emergency switch to disable oracle-triggered transitions.
+    bool public oracleActive;
 
     IERC20 public usdcToken;
 
@@ -118,10 +140,18 @@ contract AgroasysEscrow is ReentrancyGuard {
 
     mapping(uint256 => OracleUpdateProposal) public oracleUpdateProposals;
     mapping(uint256 => mapping(address => bool)) public oracleUpdateHasApproved;
+    /// @notice Expiration timestamp for each oracle-update proposal id.
+    mapping(uint256 => uint256) public oracleUpdateProposalExpiresAt;
+    /// @notice True when an oracle-update proposal has been cancelled after expiry.
+    mapping(uint256 => bool) public oracleUpdateProposalCancelled;
     uint256 public oracleUpdateCounter;
 
     mapping(uint256 => AdminAddProposal) public adminAddProposals;
     mapping(uint256 => mapping(address => bool)) public adminAddHasApproved;
+    /// @notice Expiration timestamp for each admin-add proposal id.
+    mapping(uint256 => uint256) public adminAddProposalExpiresAt;
+    /// @notice True when an admin-add proposal has been cancelled after expiry.
+    mapping(uint256 => bool) public adminAddProposalCancelled;
     uint256 public adminAddCounter;
 
     // -----------------------------
@@ -231,6 +261,34 @@ contract AgroasysEscrow is ReentrancyGuard {
 
     event AdminAdded(address indexed newAdmin);
 
+    event Paused(address indexed by);
+    event Unpaused(address indexed by);
+    event OracleDisabledEmergency(address indexed by, address indexed previousOracle);
+    event TradeCancelledAfterLockTimeout(
+        uint256 indexed tradeId,
+        address indexed buyer,
+        uint256 refundedAmount
+    );
+    event InTransitTimeoutRefunded(
+        uint256 indexed tradeId,
+        address indexed buyer,
+        uint256 refundedAmount
+    );
+    event DisputeProposalExpiredCancelled(
+        uint256 indexed proposalId,
+        uint256 indexed tradeId,
+        address indexed cancelledBy
+    );
+    event DisputePayout(
+        uint256 indexed tradeId,
+        uint256 indexed proposalId,
+        address indexed recipient,
+        uint256 amount,
+        DisputeStatus payoutType
+    );
+    event OracleUpdateProposalExpiredCancelled(uint256 indexed proposalId, address indexed cancelledBy);
+    event AdminAddProposalExpiredCancelled(uint256 indexed proposalId, address indexed cancelledBy);
+
     // -----------------------------
     // Constructor / Modifiers
     // -----------------------------
@@ -263,6 +321,7 @@ contract AgroasysEscrow is ReentrancyGuard {
         // Timelock for sensitive governance operations (oracle/admin updates).
         // Can be changed in future versions if needed; keeping minimal for now.
         governanceTimelock = 24 hours;
+        oracleActive = true;
     }
 
     modifier onlyAdmin() {
@@ -273,6 +332,48 @@ contract AgroasysEscrow is ReentrancyGuard {
     modifier onlyOracle() {
         require(msg.sender == oracleAddress, "only oracle");
         _;
+    }
+
+    modifier whenNotPaused() {
+        require(!paused, "paused");
+        _;
+    }
+
+    modifier onlyOracleActive() {
+        require(oracleActive, "oracle disabled");
+        _;
+    }
+
+    /**
+     * @notice Pauses normal protocol operations for emergency containment.
+     */
+    function pause() external onlyAdmin {
+        require(!paused, "already paused");
+        paused = true;
+        emit Paused(msg.sender);
+    }
+
+    /**
+     * @notice Unpauses normal protocol operations once oracle flows are re-enabled.
+     */
+    function unpause() external onlyAdmin {
+        require(paused, "not paused");
+        require(oracleActive, "oracle disabled");
+        paused = false;
+        emit Unpaused(msg.sender);
+    }
+
+    /**
+     * @notice Emergency kill switch to disable oracle-triggered transitions and pause protocol.
+     */
+    function disableOracleEmergency() external onlyAdmin {
+        require(oracleActive, "oracle disabled");
+        oracleActive = false;
+        if (!paused) {
+            paused = true;
+            emit Paused(msg.sender);
+        }
+        emit OracleDisabledEmergency(msg.sender, oracleAddress);
     }
 
     // -----------------------------
@@ -334,7 +435,7 @@ contract AgroasysEscrow is ReentrancyGuard {
         uint256 _buyerNonce,
         uint256 _deadline,
         bytes memory _signature
-    ) external nonReentrant returns (uint256) {
+    ) external whenNotPaused nonReentrant returns (uint256) {
         require(_ricardianHash != bytes32(0), "ricardian hash required");
         require(_supplier != address(0), "supplier required");
 
@@ -415,13 +516,14 @@ contract AgroasysEscrow is ReentrancyGuard {
      * - Pay logistics fee to treasury
      * - Pay platform fee to treasury
      */
-    function releaseFundsStage1(uint256 _tradeId) external onlyOracle nonReentrant {
+    function releaseFundsStage1(uint256 _tradeId) external onlyOracle onlyOracleActive whenNotPaused nonReentrant {
         require(_tradeId < tradeCounter, "trade not found");
         Trade storage trade = trades[_tradeId];
 
         require(trade.status == TradeStatus.LOCKED, "status must be LOCKED");
 
         trade.status = TradeStatus.IN_TRANSIT;
+        inTransitSince[_tradeId] = block.timestamp;
 
         usdcToken.safeTransfer(trade.supplierAddress, trade.supplierFirstTranche);
         usdcToken.safeTransfer(treasuryAddress, trade.logisticsAmount);
@@ -442,7 +544,7 @@ contract AgroasysEscrow is ReentrancyGuard {
      * Arrival confirmation starts dispute window.
      * Only oracle can confirm arrival.
      */
-    function confirmArrival(uint256 _tradeId) external onlyOracle nonReentrant {
+    function confirmArrival(uint256 _tradeId) external onlyOracle onlyOracleActive whenNotPaused nonReentrant {
         require(_tradeId < tradeCounter, "trade not found");
         Trade storage trade = trades[_tradeId];
 
@@ -450,6 +552,7 @@ contract AgroasysEscrow is ReentrancyGuard {
 
         trade.status = TradeStatus.ARRIVAL_CONFIRMED;
         trade.arrivalTimestamp = block.timestamp;
+        inTransitSince[_tradeId] = 0;
 
         emit ArrivalConfirmed(_tradeId, trade.arrivalTimestamp);
     }
@@ -458,7 +561,7 @@ contract AgroasysEscrow is ReentrancyGuard {
      * Buyer can open a dispute within 24h after arrival confirmation.
      * This freezes remaining funds until admin resolution.
      */
-    function openDispute(uint256 _tradeId) external nonReentrant {
+    function openDispute(uint256 _tradeId) external whenNotPaused nonReentrant {
         require(_tradeId < tradeCounter, "trade not found");
         Trade storage trade = trades[_tradeId];
 
@@ -479,7 +582,7 @@ contract AgroasysEscrow is ReentrancyGuard {
      * Business rule: Stage 2 releases ONLY remaining supplier principal (supplierSecondTranche).
      * Treasury fees were already collected at Stage 1.
      */
-    function finalizeAfterDisputeWindow(uint256 _tradeId) external nonReentrant {
+    function finalizeAfterDisputeWindow(uint256 _tradeId) external whenNotPaused nonReentrant {
         require(_tradeId < tradeCounter, "trade not found");
         Trade storage trade = trades[_tradeId];
 
@@ -488,10 +591,51 @@ contract AgroasysEscrow is ReentrancyGuard {
         require(block.timestamp > trade.arrivalTimestamp + DISPUTE_WINDOW, "window not elapsed");
 
         trade.status = TradeStatus.CLOSED;
+        inTransitSince[_tradeId] = 0;
 
         usdcToken.safeTransfer(trade.supplierAddress, trade.supplierSecondTranche);
 
         emit FinalTrancheReleased(_tradeId, trade.supplierAddress, trade.supplierSecondTranche);
+    }
+
+    /**
+     * @notice Buyer escape hatch: cancel a LOCKED trade after timeout and recover full locked amount.
+     */
+    function cancelLockedTradeAfterTimeout(uint256 _tradeId) external nonReentrant {
+        require(_tradeId < tradeCounter, "trade not found");
+        Trade storage trade = trades[_tradeId];
+
+        require(trade.buyerAddress == msg.sender, "only buyer");
+        require(trade.status == TradeStatus.LOCKED, "status must be LOCKED");
+        require(block.timestamp > trade.createdAt + LOCK_TIMEOUT, "lock timeout not elapsed");
+
+        trade.status = TradeStatus.CLOSED;
+
+        usdcToken.safeTransfer(trade.buyerAddress, trade.totalAmountLocked);
+
+        emit TradeCancelledAfterLockTimeout(_tradeId, trade.buyerAddress, trade.totalAmountLocked);
+    }
+
+    /**
+     * @notice Buyer escape hatch: refund only remaining escrowed principal when IN_TRANSIT timeout elapses.
+     */
+    function refundInTransitAfterTimeout(uint256 _tradeId) external nonReentrant {
+        require(_tradeId < tradeCounter, "trade not found");
+        Trade storage trade = trades[_tradeId];
+
+        require(trade.buyerAddress == msg.sender, "only buyer");
+        require(trade.status == TradeStatus.IN_TRANSIT, "status must be IN_TRANSIT");
+
+        uint256 transitStart = inTransitSince[_tradeId];
+        require(transitStart > 0, "in-transit timestamp not set");
+        require(block.timestamp > transitStart + IN_TRANSIT_TIMEOUT, "in-transit timeout not elapsed");
+
+        trade.status = TradeStatus.CLOSED;
+        inTransitSince[_tradeId] = 0;
+
+        usdcToken.safeTransfer(trade.buyerAddress, trade.supplierSecondTranche);
+
+        emit InTransitTimeoutRefunded(_tradeId, trade.buyerAddress, trade.supplierSecondTranche);
     }
 
     // -----------------------------
@@ -500,13 +644,27 @@ contract AgroasysEscrow is ReentrancyGuard {
     function proposeDisputeSolution(uint256 _tradeId, DisputeStatus _disputeStatus)
         external
         onlyAdmin
+        whenNotPaused
         returns (uint256)
     {
         require(_tradeId < tradeCounter, "trade not found");
         Trade storage trade = trades[_tradeId];
 
         require(trade.status == TradeStatus.FROZEN, "trade not frozen");
-        require(!tradeHasActiveDisputeProposal[_tradeId], "active proposal exists");
+
+        if (tradeHasActiveDisputeProposal[_tradeId]) {
+            uint256 activeProposalId = tradeActiveDisputeProposalId[_tradeId];
+            bool activeExpired = block.timestamp > disputeProposalExpiresAt[activeProposalId];
+
+            if (activeExpired && !disputeProposalCancelled[activeProposalId]) {
+                disputeProposalCancelled[activeProposalId] = true;
+                tradeHasActiveDisputeProposal[_tradeId] = false;
+                tradeActiveDisputeProposalId[_tradeId] = 0;
+                emit DisputeProposalExpiredCancelled(activeProposalId, _tradeId, msg.sender);
+            } else {
+                revert("active proposal exists");
+            }
+        }
 
         uint256 proposalId = disputeCounter;
         disputeCounter++;
@@ -522,6 +680,8 @@ contract AgroasysEscrow is ReentrancyGuard {
 
         disputeHasApproved[proposalId][msg.sender] = true;
         tradeHasActiveDisputeProposal[_tradeId] = true;
+        tradeActiveDisputeProposalId[_tradeId] = proposalId;
+        disputeProposalExpiresAt[proposalId] = block.timestamp + DISPUTE_PROPOSAL_TTL;
 
         emit DisputeSolutionProposed(proposalId, _tradeId, _disputeStatus, msg.sender);
 
@@ -533,12 +693,14 @@ contract AgroasysEscrow is ReentrancyGuard {
         return proposalId;
     }
 
-    function approveDisputeSolution(uint256 _proposalId) external onlyAdmin nonReentrant {
+    function approveDisputeSolution(uint256 _proposalId) external onlyAdmin whenNotPaused nonReentrant {
         require(_proposalId < disputeCounter, "proposal not found");
 
         DisputeProposal storage proposal = disputeProposals[_proposalId];
         require(proposal.createdAt > 0, "proposal not initialized");
         require(!proposal.executed, "already executed");
+        require(!disputeProposalCancelled[_proposalId], "proposal cancelled");
+        require(block.timestamp <= disputeProposalExpiresAt[_proposalId], "proposal expired");
 
         Trade storage trade = trades[proposal.tradeId];
         require(trade.status == TradeStatus.FROZEN, "trade not frozen");
@@ -559,6 +721,8 @@ contract AgroasysEscrow is ReentrancyGuard {
         DisputeProposal storage proposal = disputeProposals[_proposalId];
 
         require(!proposal.executed, "already executed");
+        require(!disputeProposalCancelled[_proposalId], "proposal cancelled");
+        require(block.timestamp <= disputeProposalExpiresAt[_proposalId], "proposal expired");
         require(proposal.approvalCount >= requiredApprovals, "not enough approvals");
 
         Trade storage trade = trades[proposal.tradeId];
@@ -567,19 +731,49 @@ contract AgroasysEscrow is ReentrancyGuard {
         proposal.executed = true;
         trade.status = TradeStatus.CLOSED;
         tradeHasActiveDisputeProposal[proposal.tradeId] = false;
+        tradeActiveDisputeProposalId[proposal.tradeId] = 0;
+        inTransitSince[proposal.tradeId] = 0;
+
+        address recipient;
+        uint256 payoutAmount = trade.supplierSecondTranche;
 
         // NOTE: Platform/logistics fees were already paid at Stage 1 and are not refunded via escrow.
         if (proposal.disputeStatus == DisputeStatus.REFUND) {
             // Refund buyer remaining escrowed principal (supplierSecondTranche)
-            usdcToken.safeTransfer(trade.buyerAddress, trade.supplierSecondTranche);
+            recipient = trade.buyerAddress;
+            usdcToken.safeTransfer(recipient, payoutAmount);
         } else if (proposal.disputeStatus == DisputeStatus.RESOLVE) {
             // Release remaining escrowed principal to supplier (supplierSecondTranche)
-            usdcToken.safeTransfer(trade.supplierAddress, trade.supplierSecondTranche);
+            recipient = trade.supplierAddress;
+            usdcToken.safeTransfer(recipient, payoutAmount);
         } else {
             revert("invalid dispute status");
         }
 
+        emit DisputePayout(proposal.tradeId, _proposalId, recipient, payoutAmount, proposal.disputeStatus);
         emit DisputeFinalized(_proposalId, proposal.tradeId, proposal.disputeStatus);
+    }
+
+    /**
+     * @notice Cancels an expired dispute proposal to unblock replacement proposals.
+     */
+    function cancelExpiredDisputeProposal(uint256 _proposalId) external onlyAdmin whenNotPaused {
+        require(_proposalId < disputeCounter, "proposal not found");
+
+        DisputeProposal storage proposal = disputeProposals[_proposalId];
+        require(proposal.createdAt > 0, "proposal not initialized");
+        require(!proposal.executed, "already executed");
+        require(!disputeProposalCancelled[_proposalId], "already cancelled");
+        require(block.timestamp > disputeProposalExpiresAt[_proposalId], "proposal not expired");
+
+        disputeProposalCancelled[_proposalId] = true;
+        if (tradeHasActiveDisputeProposal[proposal.tradeId] && tradeActiveDisputeProposalId[proposal.tradeId] == _proposalId)
+        {
+            tradeHasActiveDisputeProposal[proposal.tradeId] = false;
+            tradeActiveDisputeProposalId[proposal.tradeId] = 0;
+        }
+
+        emit DisputeProposalExpiredCancelled(_proposalId, proposal.tradeId, msg.sender);
     }
 
     // -----------------------------
@@ -609,6 +803,7 @@ contract AgroasysEscrow is ReentrancyGuard {
         });
 
         oracleUpdateHasApproved[proposalId][msg.sender] = true;
+        oracleUpdateProposalExpiresAt[proposalId] = block.timestamp + GOVERNANCE_PROPOSAL_TTL;
 
         emit OracleUpdateProposed(proposalId, msg.sender, _newOracle, oracleUpdateProposals[proposalId].eta);
         emit OracleUpdateApproved(proposalId, msg.sender, 1, governanceApprovals());
@@ -622,6 +817,8 @@ contract AgroasysEscrow is ReentrancyGuard {
         OracleUpdateProposal storage proposal = oracleUpdateProposals[_proposalId];
         require(proposal.createdAt > 0, "proposal not initialized");
         require(!proposal.executed, "already executed");
+        require(!oracleUpdateProposalCancelled[_proposalId], "proposal cancelled");
+        require(block.timestamp <= oracleUpdateProposalExpiresAt[_proposalId], "proposal expired");
         require(!oracleUpdateHasApproved[_proposalId][msg.sender], "already approved");
 
         oracleUpdateHasApproved[_proposalId][msg.sender] = true;
@@ -636,6 +833,8 @@ contract AgroasysEscrow is ReentrancyGuard {
         OracleUpdateProposal storage proposal = oracleUpdateProposals[_proposalId];
         require(proposal.createdAt > 0, "proposal not initialized");
         require(!proposal.executed, "already executed");
+        require(!oracleUpdateProposalCancelled[_proposalId], "proposal cancelled");
+        require(block.timestamp <= oracleUpdateProposalExpiresAt[_proposalId], "proposal expired");
         require(proposal.approvalCount >= governanceApprovals(), "not enough approvals");
         require(block.timestamp >= proposal.eta, "timelock not elapsed");
 
@@ -643,8 +842,26 @@ contract AgroasysEscrow is ReentrancyGuard {
 
         address oldOracle = oracleAddress;
         oracleAddress = proposal.newOracle;
+        oracleActive = true;
 
         emit OracleUpdated(oldOracle, proposal.newOracle);
+    }
+
+    /**
+     * @notice Cancels an expired oracle update proposal.
+     */
+    function cancelExpiredOracleUpdateProposal(uint256 _proposalId) external onlyAdmin {
+        require(_proposalId < oracleUpdateCounter, "proposal not found");
+
+        OracleUpdateProposal storage proposal = oracleUpdateProposals[_proposalId];
+        require(proposal.createdAt > 0, "proposal not initialized");
+        require(!proposal.executed, "already executed");
+        require(!oracleUpdateProposalCancelled[_proposalId], "already cancelled");
+        require(block.timestamp > oracleUpdateProposalExpiresAt[_proposalId], "proposal not expired");
+
+        oracleUpdateProposalCancelled[_proposalId] = true;
+
+        emit OracleUpdateProposalExpiredCancelled(_proposalId, msg.sender);
     }
 
     function proposeAddAdmin(address _newAdmin) external onlyAdmin returns (uint256) {
@@ -665,6 +882,7 @@ contract AgroasysEscrow is ReentrancyGuard {
         });
 
         adminAddHasApproved[proposalId][msg.sender] = true;
+        adminAddProposalExpiresAt[proposalId] = block.timestamp + GOVERNANCE_PROPOSAL_TTL;
 
         emit AdminAddProposed(proposalId, msg.sender, _newAdmin, adminAddProposals[proposalId].eta);
         emit AdminAddApproved(proposalId, msg.sender, 1, governanceApprovals());
@@ -678,6 +896,8 @@ contract AgroasysEscrow is ReentrancyGuard {
         AdminAddProposal storage proposal = adminAddProposals[_proposalId];
         require(proposal.createdAt > 0, "proposal not initialized");
         require(!proposal.executed, "already executed");
+        require(!adminAddProposalCancelled[_proposalId], "proposal cancelled");
+        require(block.timestamp <= adminAddProposalExpiresAt[_proposalId], "proposal expired");
         require(!adminAddHasApproved[_proposalId][msg.sender], "already approved");
 
         adminAddHasApproved[_proposalId][msg.sender] = true;
@@ -692,6 +912,8 @@ contract AgroasysEscrow is ReentrancyGuard {
         AdminAddProposal storage proposal = adminAddProposals[_proposalId];
         require(proposal.createdAt > 0, "proposal not initialized");
         require(!proposal.executed, "already executed");
+        require(!adminAddProposalCancelled[_proposalId], "proposal cancelled");
+        require(block.timestamp <= adminAddProposalExpiresAt[_proposalId], "proposal expired");
         require(proposal.approvalCount >= governanceApprovals(), "not enough approvals");
         require(block.timestamp >= proposal.eta, "timelock not elapsed");
 
@@ -705,6 +927,23 @@ contract AgroasysEscrow is ReentrancyGuard {
         isAdmin[proposal.newAdmin] = true;
 
         emit AdminAdded(proposal.newAdmin);
+    }
+
+    /**
+     * @notice Cancels an expired admin-add proposal.
+     */
+    function cancelExpiredAddAdminProposal(uint256 _proposalId) external onlyAdmin {
+        require(_proposalId < adminAddCounter, "proposal not found");
+
+        AdminAddProposal storage proposal = adminAddProposals[_proposalId];
+        require(proposal.createdAt > 0, "proposal not initialized");
+        require(!proposal.executed, "already executed");
+        require(!adminAddProposalCancelled[_proposalId], "already cancelled");
+        require(block.timestamp > adminAddProposalExpiresAt[_proposalId], "proposal not expired");
+
+        adminAddProposalCancelled[_proposalId] = true;
+
+        emit AdminAddProposalExpiredCancelled(_proposalId, msg.sender);
     }
 
     // -----------------------------
