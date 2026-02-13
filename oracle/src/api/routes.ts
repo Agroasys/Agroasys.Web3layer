@@ -1,33 +1,44 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
+import { authMiddleware, hmacMiddleware } from '../middleware/middleware';
 import { OracleController } from './controller';
-import { authMiddleware, idempotencyMiddleware } from './middleware';
-
-const router = Router();
 
 
-router.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) {
+    return (req: Request, res: Response, next: NextFunction) => {
+        Promise.resolve(fn(req, res, next)).catch(next);
+    };
+}
 
-router.post(
-    '/release-stage1',
-    authMiddleware,
-    idempotencyMiddleware,
-    OracleController.releaseStage1
-);
+export function createRouter(controller: OracleController): Router {
+    const router = Router();
 
-router.post(
-    '/confirm-arrival',
-    authMiddleware,
-    idempotencyMiddleware,
-    OracleController.confirmArrival
-);
+    router.get('/health', (req, res) => {
+        res.json({ 
+            status: 'ok', 
+            timestamp: new Date().toISOString()
+        });
+    });
 
-router.post(
-    '/finalize-trade',
-    authMiddleware,
-    idempotencyMiddleware,
-    OracleController.finalizeTrade
-);
+    router.post(
+        '/release-stage1',
+        authMiddleware,
+        hmacMiddleware,
+        asyncHandler((req, res) => controller.releaseStage1(req, res))
+    );
 
-export default router;
+    router.post(
+        '/confirm-arrival',
+        authMiddleware,
+        hmacMiddleware,
+        asyncHandler((req, res) => controller.confirmArrival(req, res))
+    );
+
+    router.post(
+        '/finalize-trade',
+        authMiddleware,
+        hmacMiddleware,
+        asyncHandler((req, res) => controller.finalizeTrade(req, res))
+    );
+
+    return router;
+}

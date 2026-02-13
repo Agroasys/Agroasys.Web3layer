@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 import { strict as assert } from 'assert';
-import { OracleConfig } from './types/types';
+import { OracleConfig } from './types';
 
 dotenv.config();
 
@@ -17,13 +17,13 @@ function validateEnvNumber(name: string): number {
     return num;
 }
 
-
 export function loadConfig(): OracleConfig {
     try {
         const config: OracleConfig = {
             // server
             port: validateEnvNumber('PORT'),
             apiKey: validateEnv('API_KEY'),
+            hmacSecret: validateEnv('HMAC_SECRET'),
             
             // network
             rpcUrl: validateEnv('RPC_URL'),
@@ -32,12 +32,15 @@ export function loadConfig(): OracleConfig {
             usdcAddress: validateEnv('USDC_ADDRESS').toLowerCase(),
             oraclePrivateKey: validateEnv('ORACLE_PRIVATE_KEY'),
             
-            // db
+            // oracle db
             dbHost: validateEnv('DB_HOST'),
             dbPort: validateEnvNumber('DB_PORT'),
             dbName: validateEnv('DB_NAME'),
             dbUser: validateEnv('DB_USER'),
             dbPassword: validateEnv('DB_PASSWORD'),
+            
+            // indexer graphql api
+            indexerGraphqlUrl: validateEnv('INDEXER_GRAPHQL_URL'),
             
             // retry
             retryAttempts: validateEnvNumber('RETRY_ATTEMPTS'),

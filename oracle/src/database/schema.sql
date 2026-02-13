@@ -1,20 +1,18 @@
 CREATE TABLE IF NOT EXISTS oracle_triggers (
-    id SERIAL PRIMARY KEY,
-    trigger_id UUID UNIQUE NOT NULL,
+    id SERIAL,
+    idempotency_key VARCHAR(255) PRIMARY KEY,
     
-    idempotency_key VARCHAR(255) UNIQUE NOT NULL,
     request_id VARCHAR(255),
     
     trade_id VARCHAR(100) NOT NULL,
     trigger_type VARCHAR(50) NOT NULL, -- (RELEASE_STAGE_1, CONFIRM_ARRIVAL, FINALIZE_TRADE)
-    request_hash VARCHAR(66), -- SHA256 of request body
+    request_hash VARCHAR(66), -- HMAC signature
     
     attempt_count INT DEFAULT 0,
     status VARCHAR(20) NOT NULL, -- (PENDING, EXECUTING, SUBMITTED, CONFIRMED, FAILED, RETRY_EXHAUSTED, TERMINAL_FAILURE)
     
     tx_hash VARCHAR(66),
     block_number BIGINT,
-    gas_used BIGINT,
     
     indexer_confirmed BOOLEAN DEFAULT false,
     indexer_confirmed_at TIMESTAMP,
@@ -29,18 +27,14 @@ CREATE TABLE IF NOT EXISTS oracle_triggers (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_trigger_id ON oracle_triggers(trigger_id);
-
-CREATE INDEX IF NOT EXISTS idx_idempotency_key ON oracle_triggers(idempotency_key);
-
 CREATE INDEX IF NOT EXISTS idx_trade_id ON oracle_triggers(trade_id);
-
 CREATE INDEX IF NOT EXISTS idx_status ON oracle_triggers(status);
-
 CREATE INDEX IF NOT EXISTS idx_created_at ON oracle_triggers(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_request_id ON oracle_triggers(request_id);
 
-CREATE INDEX IF NOT EXISTS idx_submitted_unconfirmed ON oracle_triggers(status, submitted_at) WHERE status = 'SUBMITTED' AND indexer_confirmed = false;
-
+CREATE INDEX IF NOT EXISTS idx_submitted_unconfirmed 
+ON oracle_triggers(status, submitted_at) 
+WHERE status = 'SUBMITTED' AND indexer_confirmed = false;
 
 DO $$ 
 BEGIN

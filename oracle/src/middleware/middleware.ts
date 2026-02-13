@@ -1,19 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
-import { config } from './config';
-import { Logger } from './logger';
-import { ErrorResponse } from './types/types';
-import { getIdempotencyResponse } from './idempotency';
+import { config } from '../config';
+import { Logger } from '../utils/logger';
+import { ErrorResponse } from '../types';
+import { verifyRequestSignature } from '../utils/crypto';
 
-export function authMiddleware(req: Request,res: Response<ErrorResponse>,next: NextFunction): void {
+export function authMiddleware(req: Request, res: Response<ErrorResponse>, next: NextFunction): void {
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
         Logger.warn('Missing authorization header', { ip: req.ip });
         res.status(401).json({
-        success: false,
-        error: 'Unauthorized',
-        message: 'Missing authorization header',
-        timestamp: new Date().toISOString(),
+            success: false,
+            error: 'Unauthorized',
+            message: 'Missing authorization header',
+            timestamp: new Date().toISOString(),
         });
         return;
     }
@@ -23,10 +23,10 @@ export function authMiddleware(req: Request,res: Response<ErrorResponse>,next: N
     if (token !== config.apiKey) {
         Logger.warn('Invalid API key', { ip: req.ip });
         res.status(401).json({
-        success: false,
-        error: 'Unauthorized',
-        message: 'Invalid API key',
-        timestamp: new Date().toISOString(),
+            success: false,
+            error: 'Unauthorized',
+            message: 'Invalid API key',
+            timestamp: new Date().toISOString(),
         });
         return;
     }
@@ -34,43 +34,46 @@ export function authMiddleware(req: Request,res: Response<ErrorResponse>,next: N
     next();
 }
 
-export async function idempotencyMiddleware(req: Request,res: Response,next: NextFunction): Promise<void> {
-    const idempotencyKey = req.headers['idempotency-key'] as string;
+export function hmacMiddleware(req: Request, res: Response<ErrorResponse>, next: NextFunction): void {
+    const timestamp = req.headers['x-timestamp'] as string;
+    const signature = req.headers['x-signature'] as string;
 
-    if (!idempotencyKey) {
-        Logger.warn('Missing idempotency key', { path: req.path });
-        res.status(400).json({
-        success: false,
-        error: 'BadRequest',
-        message: 'Idempotency-Key header is required',
-        timestamp: new Date().toISOString(),
+    if (!timestamp || !signature) {
+        Logger.warn('Missing HMAC headers', { ip: req.ip });
+        res.status(401).json({
+            success: false,
+            error: 'Unauthorized',
+            message: 'Missing X-Timestamp or X-Signature headers',
+            timestamp: new Date().toISOString(),
         });
         return;
     }
 
     try {
-        const cached = await getIdempotencyResponse(idempotencyKey);
+        const body = JSON.stringify(req.body);
+        verifyRequestSignature(timestamp, body, signature, config.hmacSecret);
         
-        if (cached) {
-        Logger.info('Returning cached response from database', { idempotencyKey });
-        res.status(200).json(cached);
-        return;
-        }
-
-        (req as any).idempotencyKey = idempotencyKey;
+        Logger.info('HMAC signature verified', { 
+            timestamp,
+            ip: req.ip
+        });
+        
         next();
-    } catch (error) {
-        Logger.error('Idempotency check failed', error);
-        res.status(500).json({
-        success: false,
-        error: 'InternalServerError',
-        message: 'Failed to process idempotency check',
-        timestamp: new Date().toISOString(),
+    } catch (error: any) {
+        Logger.warn('HMAC verification failed', { 
+            error: error.message,
+            ip: req.ip 
+        });
+        res.status(401).json({
+            success: false,
+            error: 'Unauthorized',
+            message: error.message,
+            timestamp: new Date().toISOString(),
         });
     }
 }
 
-export function errorHandler(err: any,req: Request,res: Response<ErrorResponse>,next: NextFunction): void {
+export function errorHandler(err: any, req: Request, res: Response<ErrorResponse>, next: NextFunction): void {
     Logger.error('Unhandled error', err);
 
     res.status(500).json({
