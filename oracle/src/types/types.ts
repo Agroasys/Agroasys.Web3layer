@@ -1,3 +1,6 @@
+// src/types/types.ts
+
+// Existing types...
 export interface OracleConfig {
     port: number;
     apiKey: string;
@@ -14,7 +17,6 @@ export interface OracleConfig {
     retryAttempts: number;
     retryDelay: number;
 }
-
 
 export interface OracleResponse {
     success: boolean;
@@ -33,12 +35,18 @@ export interface ErrorResponse {
 
 export interface ReleaseStage1Request {
     tradeId: string;
+    requestId: string; // ← Ajouter pour v2
 }
 
 export interface ConfirmArrivalRequest {
     tradeId: string;
+    requestId: string; // ← Ajouter pour v2
 }
 
 export interface FinalizeTradeRequest {
     tradeId: string;
+    requestId: string; // ← Ajouter pour v2
 }
+
+// Re-export trigger types
+export * from './trigger';

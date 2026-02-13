@@ -5,8 +5,8 @@ import helmet from 'helmet';
 import { config } from './config';
 import routes from './routes';
 import { errorHandler } from './middleware';
-import { Logger } from './logger';
-import { initializeDatabase } from './database';
+import { Logger } from './utils/logger';
+import { initializeDatabase } from './database/database';
 
 async function bootstrap() {
     await initializeDatabase();

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { OracleService } from './service';
 import { Logger } from './logger';
-import {ReleaseStage1Request,ConfirmArrivalRequest,FinalizeTradeRequest,OracleResponse,ErrorResponse} from './types';
+import {ReleaseStage1Request,ConfirmArrivalRequest,FinalizeTradeRequest,OracleResponse,ErrorResponse} from './types/types';
 import { storeIdempotencyResponse } from './idempotency';
 
 const oracleService = new OracleService();

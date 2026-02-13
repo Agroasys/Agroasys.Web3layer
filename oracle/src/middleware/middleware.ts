@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { config } from './config';
 import { Logger } from './logger';
-import { ErrorResponse } from './types';
+import { ErrorResponse } from './types/types';
 import { getIdempotencyResponse } from './idempotency';
 
 export function authMiddleware(req: Request,res: Response<ErrorResponse>,next: NextFunction): void {

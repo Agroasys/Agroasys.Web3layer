@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 import { strict as assert } from 'assert';
-import { OracleConfig } from './types';
+import { OracleConfig } from './types/types';
 
 dotenv.config();
 

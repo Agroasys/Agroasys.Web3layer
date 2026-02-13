@@ -1,6 +1,6 @@
-import { pool } from './database';
-import { OracleResponse } from './types';
-import { Logger } from './logger';
+import { pool } from './database/database';
+import { OracleResponse } from './types/types';
+import { Logger } from './utils/logger';
 
 const TTL_HOURS = 24;
 

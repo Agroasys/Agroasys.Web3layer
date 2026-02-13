@@ -2,7 +2,7 @@ import { ethers } from 'ethers';
 import { OracleSDK } from '@agroasys/sdk';
 import { config } from './config';
 import { Logger } from './logger';
-import { OracleResponse } from './types';
+import { OracleResponse } from './types/types';
 import { retryWithBackoff } from './retry';
 
 export class OracleService {
