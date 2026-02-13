@@ -29,6 +29,7 @@ export class OracleController {
                 tradeId,
                 requestId,
                 triggerType: TriggerType.RELEASE_STAGE_1,
+                requestHash: req.hmacSignature,
             });
 
             res.status(200).json({
@@ -74,6 +75,7 @@ export class OracleController {
                 tradeId,
                 requestId,
                 triggerType: TriggerType.CONFIRM_ARRIVAL,
+                requestHash: req.hmacSignature,
             });
 
             res.status(200).json({
@@ -119,6 +121,7 @@ export class OracleController {
                 tradeId,
                 requestId,
                 triggerType: TriggerType.FINALIZE_TRADE,
+                requestHash: req.hmacSignature,
             });
 
             res.status(200).json({

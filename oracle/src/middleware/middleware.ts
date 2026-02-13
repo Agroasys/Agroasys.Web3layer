@@ -4,6 +4,15 @@ import { Logger } from '../utils/logger';
 import { ErrorResponse } from '../types';
 import { verifyRequestSignature } from '../utils/crypto';
 
+
+declare global {
+    namespace Express {
+        interface Request {
+            hmacSignature?: string;
+        }
+    }
+}
+
 export function authMiddleware(req: Request, res: Response<ErrorResponse>, next: NextFunction): void {
     const authHeader = req.headers.authorization;
 
@@ -53,9 +62,12 @@ export function hmacMiddleware(req: Request, res: Response<ErrorResponse>, next:
         const body = JSON.stringify(req.body);
         verifyRequestSignature(timestamp, body, signature, config.hmacSecret);
         
+        req.hmacSignature = signature;
+        
         Logger.info('HMAC signature verified', { 
             timestamp,
-            ip: req.ip
+            ip: req.ip,
+            signature: signature.substring(0, 16) + '...'
         });
         
         next();
