@@ -138,6 +138,7 @@ type OracleUpdateProposal @entity {
   createdAt: DateTime! @index
   eta: BigInt!
   proposer: String! @index
+  emergencyFastTrack: Boolean
   expiresAt: DateTime
   cancelled: Boolean! @index
 

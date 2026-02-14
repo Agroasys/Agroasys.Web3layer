@@ -36,6 +36,9 @@ export class OracleUpdateProposal {
     @StringColumn_({nullable: false})
     proposer!: string
 
+    @BooleanColumn_({nullable: true})
+    emergencyFastTrack!: boolean | undefined | null
+
     @DateTimeColumn_({nullable: true})
     expiresAt!: Date | undefined | null
 

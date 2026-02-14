@@ -52,7 +52,7 @@ The oracle automatically executes trade state transitions (release funds, confir
 
 * Idempotency - No double execution
 * Resilience - Automatic retries with exponential backoff
-* Verification - Confirmation via indexer and on-chain state
+* Verification - Execution safety checks use on-chain state; indexer is for confirmation/observability
 
 
 ## Main Flow
@@ -62,8 +62,8 @@ The oracle automatically executes trade state transitions (release funds, confir
 
 2. Oracle API
 
-   * Generates `action_key` and `request_id`
-   * Checks idempotency (database lookup)
+   * Accepts caller-provided `tradeId` + `requestId`
+   * Derives `action_key` from (`triggerType`, `tradeId`) and checks idempotency in DB
 
 3. Trigger Manager
 
@@ -117,3 +117,14 @@ All requests require HMAC signature verification and API key.
 * POST /redrive
 * GET /health
 
+
+
+## Request Contract
+
+For `POST /release-stage1`, `POST /confirm-arrival`, and `POST /finalize-trade`:
+
+* JSON body must include `tradeId` and `requestId`
+* Headers must include:
+  * `Authorization: Bearer <API_KEY>`
+  * `X-Timestamp`
+  * `X-Signature` (HMAC-SHA256 of `timestamp + rawBody`)

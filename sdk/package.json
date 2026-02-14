@@ -21,7 +21,8 @@
     "test": "jest --runInBand",
     "test:buyer": "jest tests/buyerSDK.test.ts --runInBand",
     "test:oracle": "jest tests/oracleSDK.test.ts --runInBand",
-    "test:admin": "jest tests/adminSDK.test.ts --runInBand"
+    "test:admin": "jest tests/adminSDK.test.ts --runInBand",
+    "lint": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "ethers": "^6.4.0"

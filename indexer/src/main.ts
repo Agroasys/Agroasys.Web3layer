@@ -753,6 +753,7 @@ async function handleOracleUpdateProposed(
         createdAt: timestamp,
         eta: eta,
         proposer: proposer.toLowerCase(),
+        emergencyFastTrack: Boolean(emergencyFastTrack),
         expiresAt: expiresAt,
         cancelled: false
     });

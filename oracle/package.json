@@ -6,7 +6,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "express": "^5.2.1",

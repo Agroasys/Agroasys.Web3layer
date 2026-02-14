@@ -6,7 +6,8 @@
   },
   "scripts": {
     "build": "rm -rf lib && tsc",
-    "start": "node -r dotenv/config lib/main.js"
+    "start": "node -r dotenv/config lib/main.js",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@subsquid/graphql-server": "^4.6.0",
