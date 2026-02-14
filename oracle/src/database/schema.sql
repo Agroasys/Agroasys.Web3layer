@@ -1,15 +1,16 @@
 CREATE TABLE IF NOT EXISTS oracle_triggers (
     id SERIAL,
-    idempotency_key VARCHAR(255) PRIMARY KEY,
     
-    request_id VARCHAR(255),
+    action_key VARCHAR(255) NOT NULL, -- tradeId X triggerType
+    request_id VARCHAR(255) NOT NULL, -- unique per execution attempt
+    idempotency_key VARCHAR(255) PRIMARY KEY, -- action_key X request_id combined
     
     trade_id VARCHAR(100) NOT NULL,
     trigger_type VARCHAR(50) NOT NULL, -- (RELEASE_STAGE_1, CONFIRM_ARRIVAL, FINALIZE_TRADE)
     request_hash VARCHAR(66), -- HMAC signature
     
     attempt_count INT DEFAULT 0,
-    status VARCHAR(20) NOT NULL, -- (PENDING, EXECUTING, SUBMITTED, CONFIRMED, FAILED, RETRY_EXHAUSTED, TERMINAL_FAILURE)
+    status VARCHAR(30) NOT NULL, -- (PENDING, EXECUTING, SUBMITTED, CONFIRMED, FAILED, EXHAUSTED_NEEDS_REDRIVE, TERMINAL_FAILURE)
     
     tx_hash VARCHAR(66),
     block_number BIGINT,
@@ -19,7 +20,10 @@ CREATE TABLE IF NOT EXISTS oracle_triggers (
     indexer_event_id VARCHAR(255),
     
     last_error TEXT,
-    error_type VARCHAR(50), -- (VALIDATION, NETWORK, CONTRACT, TERMINAL, INDEXER_LAG, RETRY_EXHAUSTED)
+    error_type VARCHAR(50), -- (VALIDATION, NETWORK, CONTRACT, TERMINAL, INDEXER_LAG)
+    
+    on_chain_verified BOOLEAN DEFAULT false, -- flag to track if on-chain status was checked before re-drive
+    on_chain_verified_at TIMESTAMP,
     
     created_at TIMESTAMP DEFAULT NOW(),
     submitted_at TIMESTAMP,
@@ -27,6 +31,7 @@ CREATE TABLE IF NOT EXISTS oracle_triggers (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_action_key ON oracle_triggers(action_key);
 CREATE INDEX IF NOT EXISTS idx_trade_id ON oracle_triggers(trade_id);
 CREATE INDEX IF NOT EXISTS idx_status ON oracle_triggers(status);
 CREATE INDEX IF NOT EXISTS idx_created_at ON oracle_triggers(created_at DESC);
@@ -36,11 +41,15 @@ CREATE INDEX IF NOT EXISTS idx_submitted_unconfirmed
 ON oracle_triggers(status, submitted_at) 
 WHERE status = 'SUBMITTED' AND indexer_confirmed = false;
 
+CREATE INDEX IF NOT EXISTS idx_exhausted_needs_redrive 
+ON oracle_triggers(status, updated_at) 
+WHERE status = 'EXHAUSTED_NEEDS_REDRIVE';
+
 DO $$ 
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_status') THEN
         ALTER TABLE oracle_triggers ADD CONSTRAINT check_status 
-        CHECK (status IN ('PENDING', 'EXECUTING', 'SUBMITTED', 'CONFIRMED', 'FAILED', 'RETRY_EXHAUSTED', 'TERMINAL_FAILURE'));
+        CHECK (status IN ('PENDING', 'EXECUTING', 'SUBMITTED', 'CONFIRMED', 'FAILED', 'EXHAUSTED_NEEDS_REDRIVE', 'TERMINAL_FAILURE'));
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_trigger_type') THEN
@@ -50,6 +59,6 @@ BEGIN
 
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_error_type') THEN
         ALTER TABLE oracle_triggers ADD CONSTRAINT check_error_type
-        CHECK (error_type IN ('VALIDATION', 'NETWORK', 'CONTRACT', 'TERMINAL', 'INDEXER_LAG', 'RETRY_EXHAUSTED'));
+        CHECK (error_type IN ('VALIDATION', 'NETWORK', 'CONTRACT', 'TERMINAL', 'INDEXER_LAG'));
     END IF;
 END $$;

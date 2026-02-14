@@ -4,8 +4,8 @@ import { TriggerStatus } from '../types/trigger';
 import { Logger } from '../utils/logger';
 
 const POLL_INTERVAL_MS = 10000; // 10 secs
-const CONFIRMATION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes: timeout soft (warning)
-const HARD_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes: timeout hard (failed)
+const CONFIRMATION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes: soft timeout (warning)
+const HARD_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes: hard timeout (moves to exhausted)
 const BATCH_SIZE = 100;
 
 export class ConfirmationWorker {
@@ -49,7 +49,6 @@ export class ConfirmationWorker {
         Logger.info('ConfirmationWorker stopped');
     }
 
-
     private async pollConfirmations(): Promise<void> {
         try {
             const submittedTriggers = await getTriggersByStatus(
@@ -79,7 +78,8 @@ export class ConfirmationWorker {
         try {
             if (!trigger.tx_hash) {
                 Logger.warn('Trigger has no tx_hash', { 
-                    idempotencyKey: trigger.idempotency_key.substring(0, 16) + '...'
+                    idempotencyKey: trigger.idempotency_key.substring(0, 32),
+                    actionKey: trigger.action_key,
                 });
                 return;
             }
@@ -89,10 +89,10 @@ export class ConfirmationWorker {
             const ageMs = now - submittedAt;
             const ageMinutes = ageMs / 60000;
 
-
             if (ageMs > CONFIRMATION_TIMEOUT_MS && ageMs <= HARD_TIMEOUT_MS) {
                 Logger.warn('Confirmation taking longer than expected', {
-                    idempotencyKey: trigger.idempotency_key.substring(0, 16) + '...',
+                    idempotencyKey: trigger.idempotency_key.substring(0, 32),
+                    actionKey: trigger.action_key,
                     txHash: trigger.tx_hash,
                     ageMinutes: ageMinutes.toFixed(1),
                     status: 'INDEXER_MAY_BE_LAGGING',
@@ -102,33 +102,34 @@ export class ConfirmationWorker {
 
             if (ageMs > HARD_TIMEOUT_MS) {
                 Logger.error('Confirmation hard timeout exceeded', {
-                    idempotencyKey: trigger.idempotency_key.substring(0, 16) + '...',
+                    idempotencyKey: trigger.idempotency_key.substring(0, 32),
+                    actionKey: trigger.action_key,
                     txHash: trigger.tx_hash,
                     tradeId: trigger.trade_id,
                     ageMinutes: ageMinutes.toFixed(1),
                     status: 'TIMEOUT',
-                    action: 'MARKING_AS_RETRY_EXHAUSTED',
+                    action: 'MOVING_TO_EXHAUSTED_NEEDS_REDRIVE',
                 });
 
                 await updateTrigger(trigger.idempotency_key, {
-                    status: TriggerStatus.RETRY_EXHAUSTED,
-                    last_error: `Confirmation timeout after ${ageMinutes.toFixed(1)} minutes. Transaction may have failed or indexer is severely lagging. Manual investigation required.`,
+                    status: TriggerStatus.EXHAUSTED_NEEDS_REDRIVE,
+                    last_error: `Confirmation timeout after ${ageMinutes.toFixed(1)} minutes. Transaction may have failed or indexer is lagging. Re-drive will verify on-chain status.`,
                     error_type: 'INDEXER_LAG' as any,
                 });
 
-                Logger.audit('CONFIRMATION_TIMEOUT_CRITICAL', trigger.trade_id, {
+                Logger.audit('CONFIRMATION_TIMEOUT_NEEDS_REDRIVE', trigger.trade_id, {
                     idempotencyKey: trigger.idempotency_key,
+                    actionKey: trigger.action_key,
                     triggerType: trigger.trigger_type,
                     txHash: trigger.tx_hash,
                     ageMinutes: ageMinutes.toFixed(1),
-                    severity: 'CRITICAL',
-                    requiresManualInvestigation: true,
+                    severity: 'HIGH',
+                    requiresRedrive: true,
                 });
 
                 return;
             }
 
-            // check indexer for confirmation
             const event = await this.indexerClient.findConfirmationEvent(
                 trigger.tx_hash,
                 trigger.trade_id
@@ -136,7 +137,8 @@ export class ConfirmationWorker {
 
             if (event) {
                 Logger.info('Transaction confirmed in indexer', {
-                    idempotencyKey: trigger.idempotency_key.substring(0, 16) + '...',
+                    idempotencyKey: trigger.idempotency_key.substring(0, 32),
+                    actionKey: trigger.action_key,
                     txHash: trigger.tx_hash,
                     eventId: event.id,
                     eventName: event.eventName,
@@ -153,7 +155,8 @@ export class ConfirmationWorker {
                 });
 
                 Logger.audit('TRIGGER_CONFIRMED', trigger.trade_id, {
-                    idempotencyKey: trigger.idempotency_key.substring(0, 16) + '...',
+                    idempotencyKey: trigger.idempotency_key.substring(0, 32),
+                    actionKey: trigger.action_key,
                     triggerType: trigger.trigger_type,
                     txHash: trigger.tx_hash,
                     eventName: event.eventName,
@@ -162,7 +165,8 @@ export class ConfirmationWorker {
                 });
             } else {
                 Logger.info('Event not yet indexed, will retry', {
-                    idempotencyKey: trigger.idempotency_key.substring(0, 16) + '...',
+                    idempotencyKey: trigger.idempotency_key.substring(0, 32),
+                    actionKey: trigger.action_key,
                     txHash: trigger.tx_hash,
                     ageSeconds: (ageMs / 1000).toFixed(0),
                     ageMinutes: ageMinutes.toFixed(1),
@@ -171,7 +175,8 @@ export class ConfirmationWorker {
 
         } catch (error: any) {
             Logger.error('Failed to check confirmation', {
-                idempotencyKey: trigger.idempotency_key.substring(0, 16) + '...',
+                idempotencyKey: trigger.idempotency_key.substring(0, 32),
+                actionKey: trigger.action_key,
                 error: error.message,
             });
         }

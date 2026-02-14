@@ -1,7 +1,6 @@
 import { ErrorType, TriggerStatus } from '../types/trigger';
 import { Logger } from './logger';
 
-
 export class OracleError extends Error {
     constructor(
         message: string,
@@ -13,14 +12,12 @@ export class OracleError extends Error {
     }
 }
 
-
 export class ValidationError extends OracleError {
     constructor(message: string) {
         super(message, ErrorType.VALIDATION, true);
         this.name = 'ValidationError';
     }
 }
-
 
 export class NetworkError extends OracleError {
     constructor(message: string) {
@@ -29,14 +26,12 @@ export class NetworkError extends OracleError {
     }
 }
 
-
 export class ContractError extends OracleError {
     constructor(message: string, isTerminal: boolean = false) {
         super(message, ErrorType.CONTRACT, isTerminal);
         this.name = 'ContractError';
     }
 }
-
 
 export function classifyError(error: any): OracleError {
     const message = error.message || error.toString();
@@ -49,6 +44,7 @@ export function classifyError(error: any): OracleError {
         return error;
     }
 
+    // Terminal validation errors (business logic violations)
     if (
         message.includes('Cannot release stage 1') ||
         message.includes('Cannot confirm arrival') ||
@@ -63,6 +59,7 @@ export function classifyError(error: any): OracleError {
         return new ValidationError(message);
     }
 
+    // Network errors (retryable)
     if (
         message.includes('network') ||
         message.includes('timeout') ||
@@ -76,6 +73,7 @@ export function classifyError(error: any): OracleError {
         return new NetworkError(message);
     }
 
+    // Contract errors (some terminal, some retryable)
     if (
         message.includes('execution reverted') ||
         message.includes('revert') ||
@@ -100,21 +98,24 @@ export function determineNextStatus(
     attemptCount: number,
     maxAttempts: number
 ): TriggerStatus {
+    // terminal errors immediately fail (validation/business logic)
     if (error.isTerminal) {
-        Logger.warn('Terminal error - no retry', { 
+        Logger.warn('Terminal error - no retry possible', { 
             errorType: error.errorType 
         });
         return TriggerStatus.TERMINAL_FAILURE;
     }
 
+    // Max attempts reached - move to recoverable exhausted state
     if (attemptCount >= maxAttempts) {
-        Logger.warn('Max attempts reached', { 
+        Logger.warn('Max attempts reached - moving to EXHAUSTED_NEEDS_REDRIVE', { 
             attemptCount, 
             maxAttempts 
         });
-        return TriggerStatus.RETRY_EXHAUSTED;
+        return TriggerStatus.EXHAUSTED_NEEDS_REDRIVE;
     }
 
+    // Still retryable
     Logger.info('Error is retryable', { 
         attemptCount, 
         maxAttempts,

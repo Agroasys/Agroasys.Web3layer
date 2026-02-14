@@ -35,6 +35,7 @@ export class OracleController {
             res.status(200).json({
                 success: true,
                 idempotencyKey: result.idempotencyKey,
+                actionKey: result.actionKey,
                 status: result.status,
                 txHash: result.txHash,
                 blockNumber: result.blockNumber,
@@ -81,6 +82,7 @@ export class OracleController {
             res.status(200).json({
                 success: true,
                 idempotencyKey: result.idempotencyKey,
+                actionKey: result.actionKey,
                 status: result.status,
                 txHash: result.txHash,
                 blockNumber: result.blockNumber,
@@ -127,6 +129,7 @@ export class OracleController {
             res.status(200).json({
                 success: true,
                 idempotencyKey: result.idempotencyKey,
+                actionKey: result.actionKey,
                 status: result.status,
                 txHash: result.txHash,
                 blockNumber: result.blockNumber,
@@ -135,6 +138,60 @@ export class OracleController {
             });
         } catch (error: any) {
             Logger.error('Controller error in finalizeTrade', error);
+            
+            const statusCode = error instanceof ValidationError ? 400 : 500;
+            res.status(statusCode).json({
+                success: false,
+                error: error.name || 'ContractError',
+                message: error.message,
+                timestamp: new Date().toISOString(),
+            });
+        }
+    }
+
+    async redriveTrigger(
+        req: Request<{}, {}, { tradeId: string; triggerType: TriggerType; requestId: string }>,
+        res: Response<OracleResponse | ErrorResponse>
+    ): Promise<void> {
+        try {
+            const { tradeId, triggerType, requestId } = req.body;
+
+            if (!tradeId || !triggerType || !requestId) {
+                res.status(400).json({
+                    success: false,
+                    error: 'ValidationError',
+                    message: 'tradeId, triggerType, and requestId are required',
+                    timestamp: new Date().toISOString(),
+                });
+                return;
+            }
+
+            Logger.info('Re-drive request received', {
+                tradeId,
+                triggerType,
+                requestId,
+            });
+
+            const result = await this.triggerManager.executeTrigger({
+                tradeId,
+                requestId,
+                triggerType,
+                requestHash: req.hmacSignature,
+                isRedrive: true,
+            });
+
+            res.status(200).json({
+                success: true,
+                idempotencyKey: result.idempotencyKey,
+                actionKey: result.actionKey,
+                status: result.status,
+                txHash: result.txHash,
+                blockNumber: result.blockNumber,
+                message: result.message,
+                timestamp: new Date().toISOString(),
+            });
+        } catch (error: any) {
+            Logger.error('Controller error in redriveTrigger', error);
             
             const statusCode = error instanceof ValidationError ? 400 : 500;
             res.status(statusCode).json({

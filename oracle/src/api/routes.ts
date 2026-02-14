@@ -40,5 +40,12 @@ export function createRouter(controller: OracleController): Router {
         asyncHandler((req, res) => controller.finalizeTrade(req, res))
     );
 
+    router.post(
+        '/redrive',
+        authMiddleware,
+        hmacMiddleware,
+        asyncHandler((req, res) => controller.redriveTrigger(req, res))
+    );
+
     return router;
 }

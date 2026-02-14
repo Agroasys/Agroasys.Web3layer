@@ -40,22 +40,10 @@ export class SDKClient {
         });
     }
 
-    // try indexer if it fails get from the contract using sdk
     async getTrade(tradeId: string): Promise<Trade> {
-        const indexerTrade = await this.indexer.getTrade(tradeId);
-        
-        if (indexerTrade) {
-            Logger.info('Using indexer data', { 
-                tradeId, 
-                status: TradeStatus[indexerTrade.status]
-            });
-            return this.mapIndexerTradeToSDK(indexerTrade);
-        }
-
-        Logger.info('Using RPC (indexer unavailable)', { tradeId });
+        Logger.info('Querying on-chain trade state', { tradeId });
         return await this.sdk.getTrade(tradeId);
     }
-
 
     private mapIndexerTradeToSDK(indexerTrade: IndexerTrade): Trade {
         return {

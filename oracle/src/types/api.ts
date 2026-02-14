@@ -1,6 +1,7 @@
 export interface OracleResponse {
     success: boolean;
     idempotencyKey: string;
+    actionKey?: string;
     status: string;
     txHash?: string;
     blockNumber?: number;

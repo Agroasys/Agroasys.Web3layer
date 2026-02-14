@@ -4,8 +4,8 @@ export enum TriggerStatus {
     SUBMITTED = 'SUBMITTED',
     CONFIRMED = 'CONFIRMED',
     FAILED = 'FAILED',
-    RETRY_EXHAUSTED = 'RETRY_EXHAUSTED',
-    TERMINAL_FAILURE = 'TERMINAL_FAILURE'
+    EXHAUSTED_NEEDS_REDRIVE = 'EXHAUSTED_NEEDS_REDRIVE',
+    TERMINAL_FAILURE = 'TERMINAL_FAILURE' // for validation/business logic errors (should never happen)
 }
 
 export enum TriggerType {
@@ -19,15 +19,15 @@ export enum ErrorType {
     NETWORK = 'NETWORK',
     CONTRACT = 'CONTRACT',
     TERMINAL = 'TERMINAL',
-    INDEXER_LAG = 'INDEXER_LAG',
-    RETRY_EXHAUSTED = 'RETRY_EXHAUSTED'
+    INDEXER_LAG = 'INDEXER_LAG'
 }
 
 export interface Trigger {
     id: number;
-    idempotency_key: string;
-    
-    request_id: string | null;
+
+    action_key: string;
+    request_id: string;
+    idempotency_key: string; // combined action_key:request_id
     
     trade_id: string;
     trigger_type: TriggerType;
@@ -46,6 +46,9 @@ export interface Trigger {
     last_error: string | null;
     error_type: ErrorType | null;
     
+    on_chain_verified: boolean;
+    on_chain_verified_at: Date | null;
+    
     created_at: Date;
     submitted_at: Date | null;
     confirmed_at: Date | null;
@@ -53,8 +56,9 @@ export interface Trigger {
 }
 
 export interface CreateTriggerData {
+    actionKey: string;
+    requestId: string;
     idempotencyKey: string;
-    requestId: string | null;
     tradeId: string;
     triggerType: TriggerType;
     requestHash: string | null;
@@ -73,4 +77,6 @@ export interface UpdateTriggerData {
     error_type?: ErrorType;
     submitted_at?: Date;
     confirmed_at?: Date;
+    on_chain_verified?: boolean;
+    on_chain_verified_at?: Date;
 }

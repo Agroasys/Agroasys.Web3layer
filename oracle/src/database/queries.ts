@@ -6,12 +6,13 @@ export async function createTrigger(data: CreateTriggerData): Promise<Trigger> {
     try {
         const result = await pool.query(
             `INSERT INTO oracle_triggers 
-            (idempotency_key, request_id, trade_id, trigger_type, request_hash, status)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            (action_key, request_id, idempotency_key, trade_id, trigger_type, request_hash, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING *`,
             [
-                data.idempotencyKey,
+                data.actionKey,
                 data.requestId,
+                data.idempotencyKey,
                 data.tradeId,
                 data.triggerType,
                 data.requestHash,
@@ -20,7 +21,8 @@ export async function createTrigger(data: CreateTriggerData): Promise<Trigger> {
         );
 
         Logger.info('Trigger created', {
-            idempotencyKey: data.idempotencyKey.substring(0, 16),
+            actionKey: data.actionKey,
+            requestId: data.requestId.substring(0, 16),
             tradeId: data.tradeId,
             type: data.triggerType
         });
@@ -36,6 +38,22 @@ export async function getTriggerByIdempotencyKey(idempotencyKey: string): Promis
     const result = await pool.query(
         'SELECT * FROM oracle_triggers WHERE idempotency_key = $1',
         [idempotencyKey]
+    );
+    return result.rows[0] || null;
+}
+
+export async function getTriggersByActionKey(actionKey: string): Promise<Trigger[]> {
+    const result = await pool.query(
+        'SELECT * FROM oracle_triggers WHERE action_key = $1 ORDER BY created_at DESC',
+        [actionKey]
+    );
+    return result.rows;
+}
+
+export async function getLatestTriggerByActionKey(actionKey: string): Promise<Trigger | null> {
+    const result = await pool.query(
+        'SELECT * FROM oracle_triggers WHERE action_key = $1 ORDER BY created_at DESC LIMIT 1',
+        [actionKey]
     );
     return result.rows[0] || null;
 }
@@ -56,6 +74,16 @@ export async function getTriggersByStatus(status: TriggerStatus, limit: number =
     return result.rows;
 }
 
+export async function getExhaustedTriggersForRedrive(limit: number = 50): Promise<Trigger[]> {
+    const result = await pool.query(
+        `SELECT * FROM oracle_triggers 
+         WHERE status = $1 
+         ORDER BY updated_at ASC 
+         LIMIT $2`,
+        [TriggerStatus.EXHAUSTED_NEEDS_REDRIVE, limit]
+    );
+    return result.rows;
+}
 
 const ALLOWED_UPDATE_COLUMNS = new Set([
     'status',
@@ -69,6 +97,8 @@ const ALLOWED_UPDATE_COLUMNS = new Set([
     'error_type',
     'submitted_at',
     'confirmed_at',
+    'on_chain_verified',
+    'on_chain_verified_at',
 ]);
 
 export async function updateTrigger(idempotencyKey: string, updates: UpdateTriggerData): Promise<void> {

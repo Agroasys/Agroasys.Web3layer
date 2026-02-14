@@ -1,8 +1,8 @@
 import { SDKClient, BlockchainResult } from '../blockchain/sdk-client';
 import { StateValidator } from './state-validator';
-import {Trigger,TriggerType,TriggerStatus,CreateTriggerData,} from '../types/trigger';
-import {createTrigger,getTriggerByIdempotencyKey,updateTrigger,} from '../database/queries';
-import {generateIdempotencyKey,calculateBackoff,} from '../utils/crypto';
+import { Trigger, TriggerType, TriggerStatus, CreateTriggerData } from '../types/trigger';
+import {createTrigger,getTriggerByIdempotencyKey,getLatestTriggerByActionKey,updateTrigger,} from '../database/queries';
+import {generateActionKey,generateRequestId,generateIdempotencyKey,calculateBackoff,} from '../utils/crypto';
 import {classifyError,determineNextStatus,OracleError,} from '../utils/errors';
 import { Logger } from '../utils/logger';
 
@@ -14,10 +14,13 @@ export interface TriggerRequest {
     requestId: string;
     triggerType: TriggerType;
     requestHash?: string;
+    isRedrive?: boolean;
 }
 
 export interface TriggerResponse {
     idempotencyKey: string;
+    actionKey: string;
+    requestId: string;
     status: TriggerStatus;
     txHash?: string;
     blockNumber?: number;
@@ -34,37 +37,177 @@ export class TriggerManager {
             tradeId: request.tradeId,
             requestId: request.requestId,
             triggerType: request.triggerType,
+            isRedrive: request.isRedrive || false,
         });
+
+        const actionKey = generateActionKey(request.triggerType, request.tradeId);
+
+        const latestTrigger = await getLatestTriggerByActionKey(actionKey);
+        
+        if (latestTrigger && this.isActionAlreadyCompleted(latestTrigger)) {
+            Logger.info('Action already completed', {
+                actionKey,
+                status: latestTrigger.status,
+                txHash: latestTrigger.tx_hash,
+            });
+            
+            return {
+                idempotencyKey: latestTrigger.idempotency_key,
+                actionKey,
+                requestId: latestTrigger.request_id,
+                status: latestTrigger.status,
+                txHash: latestTrigger.tx_hash || undefined,
+                blockNumber: latestTrigger.block_number ? Number(latestTrigger.block_number) : undefined,
+                message: 'Action already completed (idempotent)',
+            };
+        }
+
+        if (request.isRedrive && latestTrigger?.status === TriggerStatus.EXHAUSTED_NEEDS_REDRIVE) {
+            return await this.handleRedrive(latestTrigger, request);
+        }
+
+        const existingRequestIdKey = generateIdempotencyKey(actionKey, request.requestId);
+        const existingRequest = await getTriggerByIdempotencyKey(existingRequestIdKey);
+        
+        if (existingRequest) {
+            return this.handleExistingTrigger(existingRequest, actionKey);
+        }
 
         const trade = await this.sdkClient.getTrade(request.tradeId);
         StateValidator.validateTradeState(trade, request.triggerType);
 
-        const idempotencyKey = generateIdempotencyKey(
-            request.triggerType,
-            request.tradeId
-        );
-
-        Logger.info('Trade state validated, checking idempotency', {
+        Logger.info('Trade state validated, creating new trigger', {
             tradeId: request.tradeId,
             triggerType: request.triggerType,
             tradeStatus: trade.status,
-            idempotencyKey: idempotencyKey.substring(0, 16) + '...',
+            actionKey,
         });
 
-        const existing = await getTriggerByIdempotencyKey(idempotencyKey);
-        
-        if (existing) {
-            return this.handleExistingTrigger(existing);
-        }
+        const trigger = await this.createNewTrigger(request, actionKey);
 
-        const trigger = await this.createNewTrigger(request, idempotencyKey);
-
-        return await this.executeWithRetry(trigger);
+        return await this.executeWithRetry(trigger, actionKey);
     }
 
-    private handleExistingTrigger(trigger: Trigger): TriggerResponse {
-        Logger.info('Found existing trigger (idempotent)', {
-            idempotencyKey: trigger.idempotency_key.substring(0, 16) + '...',
+    private isActionAlreadyCompleted(trigger: Trigger): boolean {
+        return (
+            trigger.status === TriggerStatus.CONFIRMED ||
+            trigger.status === TriggerStatus.SUBMITTED
+        );
+    }
+
+    private async handleRedrive(
+        exhaustedTrigger: Trigger,
+        request: TriggerRequest
+    ): Promise<TriggerResponse> {
+        Logger.info('Handling re-drive for exhausted trigger', {
+            actionKey: exhaustedTrigger.action_key,
+            previousAttempts: exhaustedTrigger.attempt_count,
+        });
+
+        const onChainStatus = await this.verifyOnChainStatus(
+            exhaustedTrigger.trade_id,
+            exhaustedTrigger.trigger_type
+        );
+
+        if (onChainStatus.alreadyExecuted) {
+            Logger.info('Re-drive check: action already executed on-chain', {
+                actionKey: exhaustedTrigger.action_key,
+                txHash: onChainStatus.txHash,
+            });
+
+            await updateTrigger(exhaustedTrigger.idempotency_key, {
+                status: TriggerStatus.CONFIRMED,
+                on_chain_verified: true,
+                on_chain_verified_at: new Date(),
+                tx_hash: onChainStatus.txHash || exhaustedTrigger.tx_hash || undefined,
+                confirmed_at: new Date(),
+            });
+
+            return {
+                idempotencyKey: exhaustedTrigger.idempotency_key,
+                actionKey: exhaustedTrigger.action_key,
+                requestId: exhaustedTrigger.request_id,
+                status: TriggerStatus.CONFIRMED,
+                txHash: onChainStatus.txHash || exhaustedTrigger.tx_hash || undefined,
+                message: 'Action already executed on-chain (verified during re-drive)',
+            };
+        }
+
+        Logger.info('Re-drive check: action still pending, creating new attempt', {
+            actionKey: exhaustedTrigger.action_key,
+        });
+
+        const newRequestId = generateRequestId();
+        const newIdempotencyKey = generateIdempotencyKey(exhaustedTrigger.action_key, newRequestId);
+
+        const newTrigger = await createTrigger({
+            actionKey: exhaustedTrigger.action_key,
+            requestId: newRequestId,
+            idempotencyKey: newIdempotencyKey,
+            tradeId: exhaustedTrigger.trade_id,
+            triggerType: exhaustedTrigger.trigger_type,
+            requestHash: request.requestHash || null,
+            status: TriggerStatus.PENDING,
+        });
+
+        Logger.info('Re-drive trigger created', {
+            actionKey: newTrigger.action_key,
+            newRequestId: newRequestId.substring(0, 16),
+            previousRequestId: exhaustedTrigger.request_id.substring(0, 16),
+        });
+
+        return await this.executeWithRetry(newTrigger, exhaustedTrigger.action_key);
+    }
+
+    private async verifyOnChainStatus(
+        tradeId: string,
+        triggerType: TriggerType
+    ): Promise<{ alreadyExecuted: boolean; txHash?: string }> {
+        try {
+            const trade = await this.sdkClient.getTrade(tradeId);
+
+            Logger.info('Verifying on-chain status', {
+                tradeId,
+                triggerType,
+                currentStatus: trade.status,
+            });
+
+            let alreadyExecuted = false;
+
+            switch (triggerType) {
+                case TriggerType.RELEASE_STAGE_1:
+                    alreadyExecuted = trade.status >= 2; // IN_TRANSIT = 2
+                    break;
+                case TriggerType.CONFIRM_ARRIVAL:
+                    alreadyExecuted = trade.status >= 3; // ARRIVAL_CONFIRMED = 3
+                    break;
+                case TriggerType.FINALIZE_TRADE:
+                    alreadyExecuted = trade.status >= 4; // COMPLETED = 4
+                    break;
+            }
+
+            Logger.info('On-chain verification result', {
+                tradeId,
+                triggerType,
+                tradeStatus: trade.status,
+                alreadyExecuted,
+            });
+
+            return { alreadyExecuted };
+        } catch (error: any) {
+            Logger.error('Failed to verify on-chain status', {
+                tradeId,
+                triggerType,
+                error: error.message,
+            });
+            return { alreadyExecuted: false };
+        }
+    }
+
+    private handleExistingTrigger(trigger: Trigger, actionKey: string): TriggerResponse {
+        Logger.info('Found existing trigger for this request_id', {
+            idempotencyKey: trigger.idempotency_key.substring(0, 32),
+            actionKey,
             status: trigger.status,
             txHash: trigger.tx_hash,
         });
@@ -75,37 +218,55 @@ export class TriggerManager {
         ) {
             return {
                 idempotencyKey: trigger.idempotency_key,
+                actionKey,
+                requestId: trigger.request_id,
                 status: trigger.status,
                 txHash: trigger.tx_hash || undefined,
-                blockNumber: trigger.block_number 
-                    ? Number(trigger.block_number) 
-                    : undefined,
-                message: 'Trigger already executed (idempotent)',
+                blockNumber: trigger.block_number ? Number(trigger.block_number) : undefined,
+                message: 'Trigger already executed for this request (idempotent)',
             };
         }
 
-        if (
-            trigger.status === TriggerStatus.TERMINAL_FAILURE ||
-            trigger.status === TriggerStatus.RETRY_EXHAUSTED
-        ) {
+        if (trigger.status === TriggerStatus.TERMINAL_FAILURE) {
             return {
                 idempotencyKey: trigger.idempotency_key,
+                actionKey,
+                requestId: trigger.request_id,
                 status: trigger.status,
-                message: trigger.last_error || 'Trigger failed',
+                message: trigger.last_error || 'Trigger failed with terminal error',
+            };
+        }
+
+        if (trigger.status === TriggerStatus.EXHAUSTED_NEEDS_REDRIVE) {
+            return {
+                idempotencyKey: trigger.idempotency_key,
+                actionKey,
+                requestId: trigger.request_id,
+                status: trigger.status,
+                message: 'Trigger exhausted retries. Use re-drive endpoint to retry with on-chain verification.',
             };
         }
 
         return {
             idempotencyKey: trigger.idempotency_key,
+            actionKey,
+            requestId: trigger.request_id,
             status: trigger.status,
             message: 'Trigger in progress',
         };
     }
 
-    private async createNewTrigger(request: TriggerRequest,idempotencyKey: string): Promise<Trigger> {
+    private async createNewTrigger(
+        request: TriggerRequest,
+        actionKey: string
+    ): Promise<Trigger> {
+        const newRequestId = request.isRedrive ? generateRequestId() : request.requestId;
+        const idempotencyKey = generateIdempotencyKey(actionKey, newRequestId);
+
         const data: CreateTriggerData = {
+            actionKey,
+            requestId: newRequestId,
             idempotencyKey,
-            requestId: request.requestId,
             tradeId: request.tradeId,
             triggerType: request.triggerType,
             requestHash: request.requestHash || null,
@@ -115,13 +276,14 @@ export class TriggerManager {
         return await createTrigger(data);
     }
 
-    private async executeWithRetry(trigger: Trigger): Promise<TriggerResponse> {
+    private async executeWithRetry(trigger: Trigger, actionKey: string): Promise<TriggerResponse> {
         let attempt = 1;
 
         while (attempt <= MAX_ATTEMPTS) {
             try {
                 Logger.info('Executing trigger attempt', {
-                    idempotencyKey: trigger.idempotency_key.substring(0, 16) + '...',
+                    idempotencyKey: trigger.idempotency_key.substring(0, 32),
+                    actionKey,
                     attempt,
                     maxAttempts: MAX_ATTEMPTS,
                 });
@@ -147,13 +309,16 @@ export class TriggerManager {
                 });
 
                 Logger.info('Trigger submitted successfully', {
-                    idempotencyKey: trigger.idempotency_key.substring(0, 16) + '...',
+                    idempotencyKey: trigger.idempotency_key.substring(0, 32),
+                    actionKey,
                     txHash: result.txHash,
                     blockNumber: result.blockNumber,
                 });
 
                 return {
                     idempotencyKey: trigger.idempotency_key,
+                    actionKey,
+                    requestId: trigger.request_id,
                     status: TriggerStatus.SUBMITTED,
                     txHash: result.txHash,
                     blockNumber: result.blockNumber,
@@ -164,7 +329,8 @@ export class TriggerManager {
                 const oracleError = classifyError(error);
 
                 Logger.error('Trigger execution failed', {
-                    idempotencyKey: trigger.idempotency_key.substring(0, 16) + '...',
+                    idempotencyKey: trigger.idempotency_key.substring(0, 32),
+                    actionKey,
                     attempt,
                     errorType: oracleError.errorType,
                     isTerminal: oracleError.isTerminal,
@@ -187,23 +353,28 @@ export class TriggerManager {
                 if (nextStatus === TriggerStatus.TERMINAL_FAILURE) {
                     return {
                         idempotencyKey: trigger.idempotency_key,
+                        actionKey,
+                        requestId: trigger.request_id,
                         status: nextStatus,
                         message: oracleError.message,
                     };
                 }
 
-                if (nextStatus === TriggerStatus.RETRY_EXHAUSTED) {
+                if (nextStatus === TriggerStatus.EXHAUSTED_NEEDS_REDRIVE) {
                     return {
                         idempotencyKey: trigger.idempotency_key,
+                        actionKey,
+                        requestId: trigger.request_id,
                         status: nextStatus,
-                        message: `Failed after ${MAX_ATTEMPTS} attempts: ${oracleError.message}`,
+                        message: `Exhausted ${MAX_ATTEMPTS} attempts: ${oracleError.message}. Use re-drive endpoint to retry.`,
                     };
                 }
 
                 if (attempt < MAX_ATTEMPTS && !oracleError.isTerminal) {
                     const backoffMs = calculateBackoff(attempt, BASE_DELAY_MS);
                     Logger.info('Retrying after backoff', {
-                        idempotencyKey: trigger.idempotency_key.substring(0, 16) + '...',
+                        idempotencyKey: trigger.idempotency_key.substring(0, 32),
+                        actionKey,
                         backoffMs,
                         nextAttempt: attempt + 1,
                     });
@@ -219,7 +390,10 @@ export class TriggerManager {
         throw new Error('Unexpected retry loop exit');
     }
 
-    private async executeBlockchainAction(triggerType: TriggerType,tradeId: string): Promise<BlockchainResult> {
+    private async executeBlockchainAction(
+        triggerType: TriggerType,
+        tradeId: string
+    ): Promise<BlockchainResult> {
         switch (triggerType) {
             case TriggerType.RELEASE_STAGE_1:
                 return await this.sdkClient.releaseFundsStage1(tradeId);
