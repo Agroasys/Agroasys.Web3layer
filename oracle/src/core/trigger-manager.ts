@@ -3,7 +3,7 @@ import { StateValidator } from './state-validator';
 import { Trigger, TriggerType, TriggerStatus, CreateTriggerData } from '../types/trigger';
 import {createTrigger,getTriggerByIdempotencyKey,getLatestTriggerByActionKey,updateTrigger,} from '../database/queries';
 import {generateActionKey,generateRequestId,generateIdempotencyKey,calculateBackoff,} from '../utils/crypto';
-import {classifyError,determineNextStatus,OracleError,} from '../utils/errors';
+import {classifyError,determineNextStatus,OracleError,ValidationError,} from '../utils/errors';
 import { Logger } from '../utils/logger';
 
 const MAX_ATTEMPTS = 5;
@@ -104,103 +104,65 @@ export class TriggerManager {
             previousAttempts: exhaustedTrigger.attempt_count,
         });
 
-        const onChainStatus = await this.verifyOnChainStatus(
-            exhaustedTrigger.trade_id,
-            exhaustedTrigger.trigger_type
-        );
-
-        if (onChainStatus.alreadyExecuted) {
-            Logger.info('Re-drive check: action already executed on-chain', {
-                actionKey: exhaustedTrigger.action_key,
-                txHash: onChainStatus.txHash,
-            });
-
-            await updateTrigger(exhaustedTrigger.idempotency_key, {
-                status: TriggerStatus.CONFIRMED,
-                on_chain_verified: true,
-                on_chain_verified_at: new Date(),
-                tx_hash: onChainStatus.txHash || exhaustedTrigger.tx_hash || undefined,
-                confirmed_at: new Date(),
-            });
-
-            return {
-                idempotencyKey: exhaustedTrigger.idempotency_key,
-                actionKey: exhaustedTrigger.action_key,
-                requestId: exhaustedTrigger.request_id,
-                status: TriggerStatus.CONFIRMED,
-                txHash: onChainStatus.txHash || exhaustedTrigger.tx_hash || undefined,
-                message: 'Action already executed on-chain (verified during re-drive)',
-            };
-        }
-
-        Logger.info('Re-drive check: action still pending, creating new attempt', {
-            actionKey: exhaustedTrigger.action_key,
-        });
-
-        const newRequestId = generateRequestId();
-        const newIdempotencyKey = generateIdempotencyKey(exhaustedTrigger.action_key, newRequestId);
-
-        const newTrigger = await createTrigger({
-            actionKey: exhaustedTrigger.action_key,
-            requestId: newRequestId,
-            idempotencyKey: newIdempotencyKey,
-            tradeId: exhaustedTrigger.trade_id,
-            triggerType: exhaustedTrigger.trigger_type,
-            requestHash: request.requestHash || null,
-            status: TriggerStatus.PENDING,
-        });
-
-        Logger.info('Re-drive trigger created', {
-            actionKey: newTrigger.action_key,
-            newRequestId: newRequestId.substring(0, 16),
-            previousRequestId: exhaustedTrigger.request_id.substring(0, 16),
-        });
-
-        return await this.executeWithRetry(newTrigger, exhaustedTrigger.action_key);
-    }
-
-    private async verifyOnChainStatus(
-        tradeId: string,
-        triggerType: TriggerType
-    ): Promise<{ alreadyExecuted: boolean; txHash?: string }> {
         try {
-            const trade = await this.sdkClient.getTrade(tradeId);
+            const trade = await this.sdkClient.getTrade(exhaustedTrigger.trade_id);
+            StateValidator.validateTradeState(trade, exhaustedTrigger.trigger_type);
 
-            Logger.info('Verifying on-chain status', {
-                tradeId,
-                triggerType,
-                currentStatus: trade.status,
+            Logger.info('Re-drive check: action still pending, creating new attempt', {
+                actionKey: exhaustedTrigger.action_key,
+                tradeStatus: trade.status,
             });
 
-            let alreadyExecuted = false;
+            const newRequestId = generateRequestId();
+            const newIdempotencyKey = generateIdempotencyKey(exhaustedTrigger.action_key, newRequestId);
 
-            switch (triggerType) {
-                case TriggerType.RELEASE_STAGE_1:
-                    alreadyExecuted = trade.status >= 2; // IN_TRANSIT = 2
-                    break;
-                case TriggerType.CONFIRM_ARRIVAL:
-                    alreadyExecuted = trade.status >= 3; // ARRIVAL_CONFIRMED = 3
-                    break;
-                case TriggerType.FINALIZE_TRADE:
-                    alreadyExecuted = trade.status >= 4; // COMPLETED = 4
-                    break;
+            const newTrigger = await createTrigger({
+                actionKey: exhaustedTrigger.action_key,
+                requestId: newRequestId,
+                idempotencyKey: newIdempotencyKey,
+                tradeId: exhaustedTrigger.trade_id,
+                triggerType: exhaustedTrigger.trigger_type,
+                requestHash: request.requestHash || null,
+                status: TriggerStatus.PENDING,
+            });
+
+            Logger.info('Re-drive trigger created', {
+                actionKey: newTrigger.action_key,
+                newRequestId: newRequestId.substring(0, 16),
+                previousRequestId: exhaustedTrigger.request_id.substring(0, 16),
+            });
+
+            return await this.executeWithRetry(newTrigger, exhaustedTrigger.action_key);
+
+        } catch (error: any) {
+            if (error instanceof ValidationError) {
+                Logger.info('Re-drive check: action already executed on-chain', {
+                    actionKey: exhaustedTrigger.action_key,
+                    validationError: error.message,
+                });
+
+                await updateTrigger(exhaustedTrigger.idempotency_key, {
+                    status: TriggerStatus.CONFIRMED,
+                    on_chain_verified: true,
+                    on_chain_verified_at: new Date(),
+                    confirmed_at: new Date()
+                });
+
+                return {
+                    idempotencyKey: exhaustedTrigger.idempotency_key,
+                    actionKey: exhaustedTrigger.action_key,
+                    requestId: exhaustedTrigger.request_id,
+                    status: TriggerStatus.CONFIRMED,
+                    txHash: exhaustedTrigger.tx_hash || undefined,
+                    message: 'Action already executed on-chain (verified during re-drive)',
+                };
             }
 
-            Logger.info('On-chain verification result', {
-                tradeId,
-                triggerType,
-                tradeStatus: trade.status,
-                alreadyExecuted,
-            });
-
-            return { alreadyExecuted };
-        } catch (error: any) {
-            Logger.error('Failed to verify on-chain status', {
-                tradeId,
-                triggerType,
+            Logger.error('Re-drive verification failed', {
+                actionKey: exhaustedTrigger.action_key,
                 error: error.message,
             });
-            return { alreadyExecuted: false };
+            throw error;
         }
     }
 
