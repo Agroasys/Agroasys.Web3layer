@@ -39,6 +39,13 @@ export class DisputeProposal {
     @StringColumn_({nullable: false})
     proposer!: string
 
+    @DateTimeColumn_({nullable: true})
+    expiresAt!: Date | undefined | null
+
+    @Index_()
+    @BooleanColumn_({nullable: false})
+    cancelled!: boolean
+
     @OneToMany_(() => DisputeEvent, e => e.dispute)
     events!: DisputeEvent[]
 }

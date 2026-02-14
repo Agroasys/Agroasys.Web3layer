@@ -36,6 +36,13 @@ export class AdminAddProposal {
     @StringColumn_({nullable: false})
     proposer!: string
 
+    @DateTimeColumn_({nullable: true})
+    expiresAt!: Date | undefined | null
+
+    @Index_()
+    @BooleanColumn_({nullable: false})
+    cancelled!: boolean
+
     @OneToMany_(() => AdminEvent, e => e.adminAddProposal)
     events!: AdminEvent[]
 }

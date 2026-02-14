@@ -1,7 +1,19 @@
 import { TypeormDatabase } from '@subsquid/typeorm-store'
 import { processor, ESCROW_ADDRESS } from './processor'
-import { Trade, TradeEvent, TradeStatus, DisputeProposal, DisputeEvent, DisputeStatus, OracleUpdateProposal, OracleEvent, AdminAddProposal, AdminEvent } from './model'
 import { contractInterface } from './abi'
+import {
+    Trade,
+    TradeEvent,
+    DisputeProposal,
+    DisputeEvent,
+    OracleUpdateProposal,
+    OracleEvent,
+    AdminAddProposal,
+    AdminEvent,
+    SystemEvent,
+    TradeStatus,
+    DisputeStatus
+} from './model'
 
 processor.run(new TypeormDatabase(), async (ctx) => {
     const trades: Map<string, Trade> = new Map();
@@ -12,6 +24,7 @@ processor.run(new TypeormDatabase(), async (ctx) => {
     const oracleEvents: OracleEvent[] = [];
     const adminAddProposals: Map<string, AdminAddProposal> = new Map();
     const adminEvents: AdminEvent[] = [];
+    const systemEvents: SystemEvent[] = [];
 
     for (let block of ctx.blocks) {
         for (let event of block.events) {
@@ -38,6 +51,7 @@ processor.run(new TypeormDatabase(), async (ctx) => {
                 const extrinsicIndex = event.extrinsicIndex || 0;
 
                 switch (decoded.name) {
+                    // Trade events
                     case 'TradeLocked':
                         await handleTradeLocked(decoded, trades, tradeEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
                         break;
@@ -56,6 +70,14 @@ processor.run(new TypeormDatabase(), async (ctx) => {
                     case 'DisputeOpenedByBuyer':
                         await handleDisputeOpenedByBuyer(decoded, trades, tradeEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
                         break;
+                    case 'TradeCancelledAfterLockTimeout':
+                        await handleTradeCancelledAfterLockTimeout(decoded, trades, tradeEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
+                        break;
+                    case 'InTransitTimeoutRefunded':
+                        await handleInTransitTimeoutRefunded(decoded, trades, tradeEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
+                        break;
+
+                    // Dispute events
                     case 'DisputeSolutionProposed':
                         await handleDisputeSolutionProposed(decoded, trades, disputeProposals, disputeEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
                         break;
@@ -65,6 +87,14 @@ processor.run(new TypeormDatabase(), async (ctx) => {
                     case 'DisputeFinalized':
                         await handleDisputeFinalized(decoded, disputeProposals, disputeEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
                         break;
+                    case 'DisputeProposalExpiredCancelled':
+                        await handleDisputeProposalExpiredCancelled(decoded, disputeProposals, disputeEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
+                        break;
+                    case 'DisputePayout':
+                        await handleDisputePayout(decoded, trades, tradeEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
+                        break;
+
+                    // Oracle events
                     case 'OracleUpdateProposed':
                         await handleOracleUpdateProposed(decoded, oracleUpdateProposals, oracleEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
                         break;
@@ -74,6 +104,14 @@ processor.run(new TypeormDatabase(), async (ctx) => {
                     case 'OracleUpdated':
                         await handleOracleUpdated(decoded, oracleEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
                         break;
+                    case 'OracleUpdateProposalExpiredCancelled':
+                        await handleOracleUpdateProposalExpiredCancelled(decoded, oracleUpdateProposals, oracleEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
+                        break;
+                    case 'OracleDisabledEmergency':
+                        await handleOracleDisabledEmergency(decoded, oracleEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
+                        break;
+
+                    // Admin events
                     case 'AdminAddProposed':
                         await handleAdminAddProposed(decoded, adminAddProposals, adminEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
                         break;
@@ -83,6 +121,27 @@ processor.run(new TypeormDatabase(), async (ctx) => {
                     case 'AdminAdded':
                         await handleAdminAdded(decoded, adminEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
                         break;
+                    case 'AdminAddProposalExpiredCancelled':
+                        await handleAdminAddProposalExpiredCancelled(decoded, adminAddProposals, adminEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
+                        break;
+
+                    // System events
+                    case 'Paused':
+                        await handlePaused(decoded, systemEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
+                        break;
+                    case 'UnpauseProposed':
+                        await handleUnpauseProposed(decoded, systemEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
+                        break;
+                    case 'UnpauseApproved':
+                        await handleUnpauseApproved(decoded, systemEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
+                        break;
+                    case 'UnpauseProposalCancelled':
+                        await handleUnpauseProposalCancelled(decoded, systemEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
+                        break;
+                    case 'Unpaused':
+                        await handleUnpaused(decoded, systemEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
+                        break;
+
                     default:
                         ctx.log.debug(`Unhandled event: ${decoded.name}`);
                 }
@@ -101,12 +160,13 @@ processor.run(new TypeormDatabase(), async (ctx) => {
     await ctx.store.insert(oracleEvents);
     await ctx.store.upsert([...adminAddProposals.values()]);
     await ctx.store.insert(adminEvents);
+    await ctx.store.insert(systemEvents);
 
-    ctx.log.info(`Processed ${trades.size} trades, ${tradeEvents.length} trade events, ${disputeProposals.size} dispute proposals, ${disputeEvents.length} dispute events, ${oracleUpdateProposals.size} oracle proposals, ${oracleEvents.length} oracle events, ${adminAddProposals.size} admin proposals, ${adminEvents.length} admin events`);
+    ctx.log.info(`Processed ${trades.size} trades, ${tradeEvents.length} trade events, ${disputeProposals.size} dispute proposals, ${disputeEvents.length} dispute events, ${oracleUpdateProposals.size} oracle proposals, ${oracleEvents.length} oracle events, ${adminAddProposals.size} admin proposals, ${adminEvents.length} admin events, ${systemEvents.length} system events`);
 });
 
 // helper
-async function getOrLoadTrade(tradeId: string,trades: Map<string, Trade>,ctx: any): Promise<Trade | null> {
+async function getOrLoadTrade(tradeId: string, trades: Map<string, Trade>, ctx: any): Promise<Trade | null> {
     let trade = trades.get(tradeId);
     if (trade) {
         return trade;
@@ -367,6 +427,82 @@ async function handleDisputeOpenedByBuyer(
     ctx.log.info(`Trade ${tradeId} frozen - dispute opened by buyer`);
 }
 
+async function handleTradeCancelledAfterLockTimeout(
+    log: any,
+    trades: Map<string, Trade>,
+    events: TradeEvent[],
+    eventId: string,
+    block: any,
+    timestamp: Date,
+    txHash: string,
+    extrinsicIndex: number,
+    ctx: any
+) {
+    const [tradeId, buyer, refundedAmount] = log.args;
+
+    const trade = await getOrLoadTrade(tradeId.toString(), trades, ctx);
+    
+    if (!trade) {
+        ctx.log.error(`Trade ${tradeId} not found for TradeCancelledAfterLockTimeout event`);
+        return;
+    }
+
+    trade.status = TradeStatus.CLOSED;
+    trades.set(tradeId.toString(), trade);
+
+    events.push(new TradeEvent({
+        id: eventId,
+        trade,
+        eventName: 'TradeCancelledAfterLockTimeout',
+        blockNumber: block.header.height,
+        timestamp,
+        txHash,
+        extrinsicIndex,
+        refundedAmount: refundedAmount,
+        refundedTo: buyer.toLowerCase()
+    }));
+
+    ctx.log.info(`Trade ${tradeId} cancelled after lock timeout - refunded ${refundedAmount} to ${buyer}`);
+}
+
+async function handleInTransitTimeoutRefunded(
+    log: any,
+    trades: Map<string, Trade>,
+    events: TradeEvent[],
+    eventId: string,
+    block: any,
+    timestamp: Date,
+    txHash: string,
+    extrinsicIndex: number,
+    ctx: any
+) {
+    const [tradeId, buyer, refundedAmount] = log.args;
+
+    const trade = await getOrLoadTrade(tradeId.toString(), trades, ctx);
+    
+    if (!trade) {
+        ctx.log.error(`Trade ${tradeId} not found for InTransitTimeoutRefunded event`);
+        return;
+    }
+
+    trade.status = TradeStatus.CLOSED;
+    trades.set(tradeId.toString(), trade);
+
+    events.push(new TradeEvent({
+        id: eventId,
+        trade,
+        eventName: 'InTransitTimeoutRefunded',
+        blockNumber: block.header.height,
+        timestamp,
+        txHash,
+        extrinsicIndex,
+        refundedBuyerPrincipal: refundedAmount,
+        refundedTo: buyer.toLowerCase()
+    }));
+
+    ctx.log.info(`Trade ${tradeId} in-transit timeout - refunded ${refundedAmount} to ${buyer}`);
+}
+
 // ########################### dispute events ##########################
 
 async function handleDisputeSolutionProposed(
@@ -392,6 +528,10 @@ async function handleDisputeSolutionProposed(
 
     const disputeStatusEnum = disputeStatus === 0 ? DisputeStatus.REFUND : DisputeStatus.RESOLVE;
 
+    // Calculate expiration (7 days TTL)
+    const DISPUTE_PROPOSAL_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
+    const expiresAt = new Date(timestamp.getTime() + DISPUTE_PROPOSAL_TTL);
+
     const proposal = new DisputeProposal({
         id: proposalId.toString(),
         proposalId: proposalId.toString(),
@@ -400,7 +540,9 @@ async function handleDisputeSolutionProposed(
         approvalCount: 1,
         executed: false,
         createdAt: timestamp,
-        proposer: proposer.toLowerCase()
+        proposer: proposer.toLowerCase(),
+        expiresAt: expiresAt,
+        cancelled: false
     });
 
     disputeProposals.set(proposalId.toString(), proposal);
@@ -504,7 +646,86 @@ async function handleDisputeFinalized(
     ctx.log.info(`Dispute ${proposalId} finalized for trade ${tradeId} with status ${disputeStatusEnum}`);
 }
 
-// ########################### update oracle events ##########################
+async function handleDisputeProposalExpiredCancelled(
+    log: any,
+    disputeProposals: Map<string, DisputeProposal>,
+    events: DisputeEvent[],
+    eventId: string,
+    block: any,
+    timestamp: Date,
+    txHash: string,
+    extrinsicIndex: number,
+    ctx: any
+) {
+    const [proposalId, tradeId, cancelledBy] = log.args;
+
+    let proposal = disputeProposals.get(proposalId.toString());
+    if (!proposal) {
+        proposal = await ctx.store.get(DisputeProposal, proposalId.toString());
+        if (!proposal) {
+            ctx.log.error(`Dispute proposal ${proposalId} not found for ExpiredCancelled event`);
+            return;
+        }
+        disputeProposals.set(proposalId.toString(), proposal);
+    }
+
+    proposal.cancelled = true;
+    disputeProposals.set(proposalId.toString(), proposal);
+
+    events.push(new DisputeEvent({
+        id: eventId,
+        dispute: proposal,
+        eventName: 'DisputeProposalExpiredCancelled',
+        blockNumber: block.header.height,
+        timestamp,
+        txHash,
+        extrinsicIndex,
+        cancelledBy: cancelledBy.toLowerCase()
+    }));
+
+    ctx.log.info(`Dispute proposal ${proposalId} for trade ${tradeId} expired and cancelled by ${cancelledBy}`);
+}
+
+async function handleDisputePayout(
+    log: any,
+    trades: Map<string, Trade>,
+    events: TradeEvent[],
+    eventId: string,
+    block: any,
+    timestamp: Date,
+    txHash: string,
+    extrinsicIndex: number,
+    ctx: any
+) {
+    const [tradeId, proposalId, recipient, amount, payoutType] = log.args;
+
+    const trade = await getOrLoadTrade(tradeId.toString(), trades, ctx);
+    
+    if (!trade) {
+        ctx.log.error(`Trade ${tradeId} not found for DisputePayout event`);
+        return;
+    }
+
+    const payoutTypeEnum = payoutType === 0 ? DisputeStatus.REFUND : DisputeStatus.RESOLVE;
+
+    events.push(new TradeEvent({
+        id: eventId,
+        trade,
+        eventName: 'DisputePayout',
+        blockNumber: block.header.height,
+        timestamp,
+        txHash,
+        extrinsicIndex,
+        payoutRecipient: recipient.toLowerCase(),
+        payoutAmount: amount,
+        payoutType: payoutTypeEnum,
+        relatedProposalId: proposalId.toString()
+    }));
+
+    ctx.log.info(`Dispute payout for trade ${tradeId}: ${amount} to ${recipient} (type: ${payoutTypeEnum})`);
+}
+
+// ########################### oracle events ##########################
 
 async function handleOracleUpdateProposed(
     log: any,
@@ -517,7 +738,11 @@ async function handleOracleUpdateProposed(
     extrinsicIndex: number,
     ctx: any
 ) {
-    const [proposalId, proposer, newOracle, eta] = log.args;
+    const [proposalId, proposer, newOracle, eta, emergencyFastTrack] = log.args;
+
+    // Calculate expiration (7 days TTL)
+    const GOVERNANCE_PROPOSAL_TTL = 7 * 24 * 60 * 60 * 1000;
+    const expiresAt = new Date(timestamp.getTime() + GOVERNANCE_PROPOSAL_TTL);
 
     const proposal = new OracleUpdateProposal({
         id: proposalId.toString(),
@@ -527,7 +752,10 @@ async function handleOracleUpdateProposed(
         executed: false,
         createdAt: timestamp,
         eta: eta,
-        proposer: proposer.toLowerCase()
+        proposer: proposer.toLowerCase(),
+        emergencyFastTrack: Boolean(emergencyFastTrack),
+        expiresAt: expiresAt,
+        cancelled: false
     });
 
     proposals.set(proposalId.toString(), proposal);
@@ -545,7 +773,7 @@ async function handleOracleUpdateProposed(
         proposer: proposer.toLowerCase()
     }));
 
-    ctx.log.info(`Oracle update proposed: ${proposalId} to ${newOracle} by ${proposer}`);
+    ctx.log.info(`Oracle update proposed: ${proposalId} to ${newOracle} by ${proposer} (fastTrack=${emergencyFastTrack})`);
 }
 
 async function handleOracleUpdateApproved(
@@ -617,7 +845,74 @@ async function handleOracleUpdated(
     ctx.log.info(`Oracle updated from ${oldOracle} to ${newOracle}`);
 }
 
-// ########################### admin updates events ##########################
+async function handleOracleUpdateProposalExpiredCancelled(
+    log: any,
+    proposals: Map<string, OracleUpdateProposal>,
+    events: OracleEvent[],
+    eventId: string,
+    block: any,
+    timestamp: Date,
+    txHash: string,
+    extrinsicIndex: number,
+    ctx: any
+) {
+    const [proposalId, cancelledBy] = log.args;
+
+    let proposal = proposals.get(proposalId.toString());
+    if (!proposal) {
+        proposal = await ctx.store.get(OracleUpdateProposal, proposalId.toString());
+        if (!proposal) {
+            ctx.log.error(`Oracle update proposal ${proposalId} not found`);
+            return;
+        }
+        proposals.set(proposalId.toString(), proposal);
+    }
+
+    proposal.cancelled = true;
+    proposals.set(proposalId.toString(), proposal);
+
+    events.push(new OracleEvent({
+        id: eventId,
+        oracleUpdate: proposal,
+        eventName: 'OracleUpdateProposalExpiredCancelled',
+        blockNumber: block.header.height,
+        timestamp,
+        txHash,
+        extrinsicIndex,
+        cancelledBy: cancelledBy.toLowerCase()
+    }));
+
+    ctx.log.info(`Oracle update proposal ${proposalId} expired and cancelled by ${cancelledBy}`);
+}
+
+async function handleOracleDisabledEmergency(
+    log: any,
+    events: OracleEvent[],
+    eventId: string,
+    block: any,
+    timestamp: Date,
+    txHash: string,
+    extrinsicIndex: number,
+    ctx: any
+) {
+    const [disabledBy, previousOracle] = log.args;
+
+    events.push(new OracleEvent({
+        id: eventId,
+        oracleUpdate: null as any,
+        eventName: 'OracleDisabledEmergency',
+        blockNumber: block.header.height,
+        timestamp,
+        txHash,
+        extrinsicIndex,
+        disabledBy: disabledBy.toLowerCase(),
+        previousOracle: previousOracle.toLowerCase()
+    }));
+
+    ctx.log.info(`Oracle disabled in emergency by ${disabledBy} - previous oracle: ${previousOracle}`);
+}
+
+// ########################### admin events ##########################
 
 async function handleAdminAddProposed(
     log: any,
@@ -632,6 +927,10 @@ async function handleAdminAddProposed(
 ) {
     const [proposalId, proposer, newAdmin, eta] = log.args;
 
+    // Calculate expiration (7 days TTL)
+    const GOVERNANCE_PROPOSAL_TTL = 7 * 24 * 60 * 60 * 1000;
+    const expiresAt = new Date(timestamp.getTime() + GOVERNANCE_PROPOSAL_TTL);
+
     const proposal = new AdminAddProposal({
         id: proposalId.toString(),
         proposalId: proposalId.toString(),
@@ -640,7 +939,9 @@ async function handleAdminAddProposed(
         executed: false,
         createdAt: timestamp,
         eta: eta,
-        proposer: proposer.toLowerCase()
+        proposer: proposer.toLowerCase(),
+        expiresAt: expiresAt,
+        cancelled: false
     });
 
     proposals.set(proposalId.toString(), proposal);
@@ -727,4 +1028,171 @@ async function handleAdminAdded(
     }));
 
     ctx.log.info(`Admin added: ${newAdmin}`);
+}
+
+async function handleAdminAddProposalExpiredCancelled(
+    log: any,
+    proposals: Map<string, AdminAddProposal>,
+    events: AdminEvent[],
+    eventId: string,
+    block: any,
+    timestamp: Date,
+    txHash: string,
+    extrinsicIndex: number,
+    ctx: any
+) {
+    const [proposalId, cancelledBy] = log.args;
+
+    let proposal = proposals.get(proposalId.toString());
+    if (!proposal) {
+        proposal = await ctx.store.get(AdminAddProposal, proposalId.toString());
+        if (!proposal) {
+            ctx.log.error(`Admin add proposal ${proposalId} not found`);
+            return;
+        }
+        proposals.set(proposalId.toString(), proposal);
+    }
+
+    proposal.cancelled = true;
+    proposals.set(proposalId.toString(), proposal);
+
+    events.push(new AdminEvent({
+        id: eventId,
+        adminAddProposal: proposal,
+        eventName: 'AdminAddProposalExpiredCancelled',
+        blockNumber: block.header.height,
+        timestamp,
+        txHash,
+        extrinsicIndex,
+        cancelledBy: cancelledBy.toLowerCase()
+    }));
+
+    ctx.log.info(`Admin add proposal ${proposalId} expired and cancelled by ${cancelledBy}`);
+}
+
+// ########################### system events ##########################
+
+async function handlePaused(
+    log: any,
+    events: SystemEvent[],
+    eventId: string,
+    block: any,
+    timestamp: Date,
+    txHash: string,
+    extrinsicIndex: number,
+    ctx: any
+) {
+    const [triggeredBy] = log.args;
+
+    events.push(new SystemEvent({
+        id: eventId,
+        eventName: 'Paused',
+        blockNumber: block.header.height,
+        timestamp,
+        txHash,
+        extrinsicIndex,
+        triggeredBy: triggeredBy.toLowerCase()
+    }));
+
+    ctx.log.info(`System paused by ${triggeredBy}`);
+}
+
+async function handleUnpauseProposed(
+    log: any,
+    events: SystemEvent[],
+    eventId: string,
+    block: any,
+    timestamp: Date,
+    txHash: string,
+    extrinsicIndex: number,
+    ctx: any
+) {
+    const [triggeredBy] = log.args;
+
+    events.push(new SystemEvent({
+        id: eventId,
+        eventName: 'UnpauseProposed',
+        blockNumber: block.header.height,
+        timestamp,
+        txHash,
+        extrinsicIndex,
+        triggeredBy: triggeredBy.toLowerCase()
+    }));
+
+    ctx.log.info(`Unpause proposed by ${triggeredBy}`);
+}
+
+async function handleUnpauseApproved(
+    log: any,
+    events: SystemEvent[],
+    eventId: string,
+    block: any,
+    timestamp: Date,
+    txHash: string,
+    extrinsicIndex: number,
+    ctx: any
+) {
+    const [triggeredBy, approvalCount, requiredApprovals] = log.args;
+
+    events.push(new SystemEvent({
+        id: eventId,
+        eventName: 'UnpauseApproved',
+        blockNumber: block.header.height,
+        timestamp,
+        txHash,
+        extrinsicIndex,
+        triggeredBy: triggeredBy.toLowerCase()
+    }));
+
+    ctx.log.info(`Unpause approved by ${triggeredBy} (${approvalCount}/${requiredApprovals})`);
+}
+
+async function handleUnpauseProposalCancelled(
+    log: any,
+    events: SystemEvent[],
+    eventId: string,
+    block: any,
+    timestamp: Date,
+    txHash: string,
+    extrinsicIndex: number,
+    ctx: any
+) {
+    const [triggeredBy] = log.args;
+
+    events.push(new SystemEvent({
+        id: eventId,
+        eventName: 'UnpauseProposalCancelled',
+        blockNumber: block.header.height,
+        timestamp,
+        txHash,
+        extrinsicIndex,
+        triggeredBy: triggeredBy.toLowerCase()
+    }));
+
+    ctx.log.info(`Unpause proposal cancelled by ${triggeredBy}`);
+}
+
+async function handleUnpaused(
+    log: any,
+    events: SystemEvent[],
+    eventId: string,
+    block: any,
+    timestamp: Date,
+    txHash: string,
+    extrinsicIndex: number,
+    ctx: any
+) {
+    const [triggeredBy] = log.args;
+
+    events.push(new SystemEvent({
+        id: eventId,
+        eventName: 'Unpaused',
+        blockNumber: block.header.height,
+        timestamp,
+        txHash,
+        extrinsicIndex,
+        triggeredBy: triggeredBy.toLowerCase()
+    }));
+
+    ctx.log.info(`System unpaused by ${triggeredBy}`);
 }

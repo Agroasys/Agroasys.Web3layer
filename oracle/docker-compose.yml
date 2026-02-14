@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:17
+    container_name: oracle-db
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    shm_size: 1gb
+    ports:
+      - "${DB_PORT}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - oracle_data:/var/lib/postgresql/data
+    networks:
+      - oracle-network
+  oracle:
+    build: .
+    container_name: oracle-service
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: ${PORT}
+      API_KEY: ${API_KEY}
+      HMAC_SECRET: ${HMAC_SECRET}
+      RPC_URL: ${RPC_URL}
+      CHAIN_ID: ${CHAIN_ID}
+      ESCROW_ADDRESS: ${ESCROW_ADDRESS}
+      USDC_ADDRESS: ${USDC_ADDRESS}
+      ORACLE_PRIVATE_KEY: ${ORACLE_PRIVATE_KEY}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      RETRY_ATTEMPTS: ${RETRY_ATTEMPTS}
+      RETRY_DELAY: ${RETRY_DELAY}
+      INDEXER_GRAPHQL_URL: ${INDEXER_GRAPHQL_URL}
+    ports:
+      - "${PORT}:3001"
+    networks:
+      - oracle-network
+    restart: unless-stopped
+
+volumes:
+  oracle_data:
+
+networks:
+  oracle-network:

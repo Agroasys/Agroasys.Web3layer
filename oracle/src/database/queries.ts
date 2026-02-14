@@ -1,0 +1,157 @@
+import { pool } from './connection';
+import { Logger } from '../utils/logger';
+import { Trigger, CreateTriggerData, UpdateTriggerData, TriggerStatus } from '../types/trigger';
+
+export async function createTrigger(data: CreateTriggerData): Promise<Trigger> {
+    try {
+        const result = await pool.query(
+            `INSERT INTO oracle_triggers 
+            (action_key, request_id, idempotency_key, trade_id, trigger_type, request_hash, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING *`,
+            [
+                data.actionKey,
+                data.requestId,
+                data.idempotencyKey,
+                data.tradeId,
+                data.triggerType,
+                data.requestHash,
+                data.status || TriggerStatus.PENDING
+            ]
+        );
+
+        Logger.info('Trigger created', {
+            actionKey: data.actionKey,
+            requestId: data.requestId.substring(0, 16),
+            tradeId: data.tradeId,
+            type: data.triggerType
+        });
+
+        return result.rows[0];
+    } catch (error: any) {
+        if (error?.code === '23505') {
+            const existing = await getLatestTriggerByActionKey(data.actionKey);
+            if (existing) {
+                Logger.warn('Concurrent trigger create detected, reusing latest trigger', {
+                    actionKey: data.actionKey,
+                    requestId: data.requestId.substring(0, 16),
+                    existingRequestId: existing.request_id.substring(0, 16),
+                });
+                return existing;
+            }
+        }
+
+        Logger.error('Failed to create trigger', error);
+        throw error;
+    }
+}
+
+export async function getTriggerByIdempotencyKey(idempotencyKey: string): Promise<Trigger | null> {
+    const result = await pool.query(
+        'SELECT * FROM oracle_triggers WHERE idempotency_key = $1',
+        [idempotencyKey]
+    );
+    return result.rows[0] || null;
+}
+
+export async function getTriggersByActionKey(actionKey: string): Promise<Trigger[]> {
+    const result = await pool.query(
+        'SELECT * FROM oracle_triggers WHERE action_key = $1 ORDER BY created_at DESC',
+        [actionKey]
+    );
+    return result.rows;
+}
+
+export async function getLatestTriggerByActionKey(actionKey: string): Promise<Trigger | null> {
+    const result = await pool.query(
+        'SELECT * FROM oracle_triggers WHERE action_key = $1 ORDER BY created_at DESC LIMIT 1',
+        [actionKey]
+    );
+    return result.rows[0] || null;
+}
+
+export async function getTriggersByTradeId(tradeId: string): Promise<Trigger[]> {
+    const result = await pool.query(
+        'SELECT * FROM oracle_triggers WHERE trade_id = $1 ORDER BY created_at DESC',
+        [tradeId]
+    );
+    return result.rows;
+}
+
+export async function getTriggersByStatus(status: TriggerStatus, limit: number = 100): Promise<Trigger[]> {
+    const result = await pool.query(
+        'SELECT * FROM oracle_triggers WHERE status = $1 ORDER BY created_at ASC LIMIT $2',
+        [status, limit]
+    );
+    return result.rows;
+}
+
+export async function getExhaustedTriggersForRedrive(limit: number = 50): Promise<Trigger[]> {
+    const result = await pool.query(
+        `SELECT * FROM oracle_triggers 
+         WHERE status = $1 
+         ORDER BY updated_at ASC 
+         LIMIT $2`,
+        [TriggerStatus.EXHAUSTED_NEEDS_REDRIVE, limit]
+    );
+    return result.rows;
+}
+
+const ALLOWED_UPDATE_COLUMNS = new Set([
+    'status',
+    'attempt_count',
+    'tx_hash',
+    'block_number',
+    'indexer_confirmed',
+    'indexer_confirmed_at',
+    'indexer_event_id',
+    'last_error',
+    'error_type',
+    'submitted_at',
+    'confirmed_at',
+    'on_chain_verified',
+    'on_chain_verified_at',
+]);
+
+export async function updateTrigger(idempotencyKey: string, updates: UpdateTriggerData): Promise<void> {
+    const fields: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    for (const [key, value] of Object.entries(updates)) {
+        if (value !== undefined) {
+            if (!ALLOWED_UPDATE_COLUMNS.has(key)) {
+                Logger.warn('Attempted to update non-whitelisted column', { 
+                    column: key,
+                    idempotencyKey: idempotencyKey.substring(0, 16) 
+                });
+                continue;
+            }
+            
+            fields.push(`${key} = $${paramIndex}`);
+            values.push(value);
+            paramIndex++;
+        }
+    }
+
+    if (fields.length === 0) {
+        Logger.warn('No valid fields to update', { idempotencyKey: idempotencyKey.substring(0, 16) });
+        return;
+    }
+
+    fields.push('updated_at = NOW()');
+    values.push(idempotencyKey);
+
+    const query = `
+        UPDATE oracle_triggers 
+        SET ${fields.join(', ')} 
+        WHERE idempotency_key = $${paramIndex}
+    `;
+
+    await pool.query(query, values);
+
+    Logger.info('Trigger updated', { 
+        idempotencyKey: idempotencyKey.substring(0, 16), 
+        fields: Object.keys(updates).filter(k => ALLOWED_UPDATE_COLUMNS.has(k))
+    });
+}

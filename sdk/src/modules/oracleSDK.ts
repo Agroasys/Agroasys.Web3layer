@@ -2,6 +2,7 @@ import { Client } from '../client';
 import { ethers } from 'ethers';
 import { ContractError, AuthorizationError } from '../types/errors';
 import { OracleResult } from '../types/oracle';
+import { Trade, TradeStatus } from '../types/trade';
 
 export class OracleSDK extends Client {
     
@@ -90,6 +91,36 @@ export class OracleSDK extends Client {
         } catch (error: any) {
             throw new ContractError(
                 `Failed to finalize trade: ${error.message}`,
+                { tradeId: tradeId.toString(), error: error.message }
+            );
+        }
+    }
+
+
+    async getTrade(tradeId: string | bigint): Promise<Trade> {
+        try {
+
+            const trade = await this.contract.trades(tradeId);
+            
+            return {
+                tradeId: trade.tradeId.toString(),
+                buyer: trade.buyerAddress,
+                supplier: trade.supplierAddress,
+                status: Number(trade.status) as TradeStatus,
+                totalAmountLocked: trade.totalAmountLocked,
+                logisticsAmount: trade.logisticsAmount,
+                platformFeesAmount: trade.platformFeesAmount,
+                supplierFirstTranche: trade.supplierFirstTranche,
+                supplierSecondTranche: trade.supplierSecondTranche,
+                ricardianHash: trade.ricardianHash,
+                createdAt: new Date(Number(trade.createdAt) * 1000),
+                arrivalTimestamp: trade.arrivalTimestamp && Number(trade.arrivalTimestamp) > 0
+                    ? new Date(Number(trade.arrivalTimestamp) * 1000)
+                    : undefined,
+            };
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to get trade: ${error.message}`,
                 { tradeId: tradeId.toString(), error: error.message }
             );
         }

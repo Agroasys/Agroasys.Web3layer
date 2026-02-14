@@ -12,7 +12,7 @@ export class AdminEvent {
 
     @Index_()
     @ManyToOne_(() => AdminAddProposal, {nullable: true})
-    adminAddProposal!: AdminAddProposal
+    adminAddProposal!: AdminAddProposal | undefined | null
 
     @Index_()
     @StringColumn_({nullable: false})
@@ -53,4 +53,7 @@ export class AdminEvent {
 
     @StringColumn_({nullable: true})
     addedAdmin!: string | undefined | null
+
+    @StringColumn_({nullable: true})
+    cancelledBy!: string | undefined | null
 }
