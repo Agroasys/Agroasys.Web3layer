@@ -86,6 +86,7 @@ contract AgroasysEscrow is ReentrancyGuard {
         uint256 createdAt;
         uint256 eta; // execute-after timestamp (timelock)
         address proposer;
+        bool emergencyFastTrack; // true if oracle was disabled when proposed
     }
 
     struct AdminAddProposal {
@@ -94,6 +95,13 @@ contract AgroasysEscrow is ReentrancyGuard {
         bool executed;
         uint256 createdAt;
         uint256 eta; // execute-after timestamp (timelock)
+        address proposer;
+    }
+
+    struct UnpauseProposal {
+        uint256 approvalCount;
+        bool executed;
+        uint256 createdAt;
         address proposer;
     }
 
@@ -134,6 +142,11 @@ contract AgroasysEscrow is ReentrancyGuard {
     address[] public admins;
     mapping(address => bool) public isAdmin;
     uint256 public requiredApprovals;
+
+    // ---- Unpause multi-sig storage ----
+    UnpauseProposal public unpauseProposal;
+    mapping(address => bool) public unpauseHasApproved;
+    bool public hasActiveUnpauseProposal;
 
     // ---- Governance (timelocked) storage ----
     uint256 public governanceTimelock; // delay between approvals and execution for sensitive ops
@@ -225,12 +238,18 @@ contract AgroasysEscrow is ReentrancyGuard {
         DisputeStatus disputeStatus
     );
 
+    // ---- Unpause multi-sig events ----
+    event UnpauseProposed(address indexed proposer);
+    event UnpauseApproved(address indexed approver, uint256 approvalCount, uint256 requiredApprovals);
+    event UnpauseProposalCancelled(address indexed cancelledBy);
+
     // ---- Governance (timelocked) events ----
     event OracleUpdateProposed(
         uint256 indexed proposalId,
         address indexed proposer,
         address indexed newOracle,
-        uint256 eta
+        uint256 eta,
+        bool emergencyFastTrack
     );
 
     event OracleUpdateApproved(
@@ -354,12 +373,90 @@ contract AgroasysEscrow is ReentrancyGuard {
     }
 
     /**
-     * @notice Unpauses normal protocol operations once oracle flows are re-enabled.
+     * @notice Propose unpausing the protocol (requires multi-sig approval).
      */
-    function unpause() external onlyAdmin {
+    function proposeUnpause() external onlyAdmin returns (bool) {
         require(paused, "not paused");
         require(oracleActive, "oracle disabled");
+
+        // Cancel any existing unpause proposal
+        if (hasActiveUnpauseProposal) {
+            _cancelUnpauseProposal();
+        }
+
+        unpauseProposal = UnpauseProposal({
+            approvalCount: 1,
+            executed: false,
+            createdAt: block.timestamp,
+            proposer: msg.sender
+        });
+
+        unpauseHasApproved[msg.sender] = true;
+        hasActiveUnpauseProposal = true;
+
+        emit UnpauseProposed(msg.sender);
+        emit UnpauseApproved(msg.sender, 1, requiredApprovals);
+
+        return true;
+    }
+
+    /**
+     * @notice Approve the unpause proposal.
+     */
+    function approveUnpause() external onlyAdmin {
+        require(paused, "not paused");
+        require(hasActiveUnpauseProposal, "no active proposal");
+        require(!unpauseProposal.executed, "already executed");
+        require(!unpauseHasApproved[msg.sender], "already approved");
+
+        unpauseHasApproved[msg.sender] = true;
+        unpauseProposal.approvalCount++;
+
+        emit UnpauseApproved(msg.sender, unpauseProposal.approvalCount, requiredApprovals);
+
+        if (unpauseProposal.approvalCount >= governanceApprovals()) {
+            _executeUnpause();
+        }
+    }
+
+    /**
+     * @notice Cancel the current unpause proposal.
+     */
+    function cancelUnpauseProposal() external onlyAdmin {
+        require(hasActiveUnpauseProposal, "no active proposal");
+        require(!unpauseProposal.executed, "already executed");
+
+        _cancelUnpauseProposal();
+    }
+
+    function _cancelUnpauseProposal() internal {
+        // Clear approvals
+        address[] memory adminList = admins;
+        for (uint256 i = 0; i < adminList.length; i++) {
+            unpauseHasApproved[adminList[i]] = false;
+        }
+
+        hasActiveUnpauseProposal = false;
+        delete unpauseProposal;
+
+        emit UnpauseProposalCancelled(msg.sender);
+    }
+
+    function _executeUnpause() internal {
+        require(!unpauseProposal.executed, "already executed");
+        require(unpauseProposal.approvalCount >= governanceApprovals(), "not enough approvals");
+
+
+        unpauseProposal.executed = true;
         paused = false;
+        hasActiveUnpauseProposal = false;
+
+        // Clear approvals
+        address[] memory adminList = admins;
+        for (uint256 i = 0; i < adminList.length; i++) {
+            unpauseHasApproved[adminList[i]] = false;
+        }
+
         emit Unpaused(msg.sender);
     }
 
@@ -785,6 +882,11 @@ contract AgroasysEscrow is ReentrancyGuard {
         return requiredApprovals < 2 ? 2 : requiredApprovals;
     }
 
+    /**
+     * @notice Propose oracle update with fast-track option when oracle is disabled.
+     * @param _newOracle The new oracle address.
+     * @return proposalId The ID of the created proposal.
+     */
     function proposeOracleUpdate(address _newOracle) external onlyAdmin returns (uint256) {
         require(_newOracle != address(0), "invalid oracle");
         require(_newOracle != oracleAddress, "same oracle");
@@ -793,19 +895,24 @@ contract AgroasysEscrow is ReentrancyGuard {
         uint256 proposalId = oracleUpdateCounter;
         oracleUpdateCounter++;
 
+        // Fast-track if oracle is disabled (no timelock)
+        bool emergencyFastTrack = !oracleActive;
+        uint256 eta = emergencyFastTrack ? block.timestamp : block.timestamp + governanceTimelock;
+
         oracleUpdateProposals[proposalId] = OracleUpdateProposal({
             newOracle: _newOracle,
             approvalCount: 1,
             executed: false,
             createdAt: block.timestamp,
-            eta: block.timestamp + governanceTimelock,
-            proposer: msg.sender
+            eta: eta,
+            proposer: msg.sender,
+            emergencyFastTrack: emergencyFastTrack
         });
 
         oracleUpdateHasApproved[proposalId][msg.sender] = true;
         oracleUpdateProposalExpiresAt[proposalId] = block.timestamp + GOVERNANCE_PROPOSAL_TTL;
 
-        emit OracleUpdateProposed(proposalId, msg.sender, _newOracle, oracleUpdateProposals[proposalId].eta);
+        emit OracleUpdateProposed(proposalId, msg.sender, _newOracle, eta, emergencyFastTrack);
         emit OracleUpdateApproved(proposalId, msg.sender, 1, governanceApprovals());
 
         return proposalId;
