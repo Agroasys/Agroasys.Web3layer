@@ -6,9 +6,6 @@ import {generateActionKey,generateRequestId,generateIdempotencyKey,calculateBack
 import {classifyError,determineNextStatus,OracleError,ValidationError,} from '../utils/errors';
 import { Logger } from '../utils/logger';
 
-const MAX_ATTEMPTS = 5;
-const BASE_DELAY_MS = 1000;
-
 export interface TriggerRequest {
     tradeId: string;
     requestId: string;
@@ -28,7 +25,11 @@ export interface TriggerResponse {
 }
 
 export class TriggerManager {
-    constructor(private sdkClient: SDKClient) {}
+    constructor(
+        private sdkClient: SDKClient,
+        private maxAttempts: number = 5,
+        private baseDelayMs: number = 1000
+    ) {}
 
     async executeTrigger(request: TriggerRequest): Promise<TriggerResponse> {
         StateValidator.validateTradeId(request.tradeId);
@@ -241,13 +242,13 @@ export class TriggerManager {
     private async executeWithRetry(trigger: Trigger, actionKey: string): Promise<TriggerResponse> {
         let attempt = 1;
 
-        while (attempt <= MAX_ATTEMPTS) {
+        while (attempt <= this.maxAttempts) {
             try {
                 Logger.info('Executing trigger attempt', {
                     idempotencyKey: trigger.idempotency_key.substring(0, 32),
                     actionKey,
                     attempt,
-                    maxAttempts: MAX_ATTEMPTS,
+                    maxAttempts: this.maxAttempts,
                 });
 
                 const trade = await this.sdkClient.getTrade(trigger.trade_id);
@@ -302,7 +303,7 @@ export class TriggerManager {
                 const nextStatus = determineNextStatus(
                     oracleError,
                     attempt,
-                    MAX_ATTEMPTS
+                    this.maxAttempts
                 );
 
                 await updateTrigger(trigger.idempotency_key, {
@@ -328,12 +329,12 @@ export class TriggerManager {
                         actionKey,
                         requestId: trigger.request_id,
                         status: nextStatus,
-                        message: `Exhausted ${MAX_ATTEMPTS} attempts: ${oracleError.message}. Use re-drive endpoint to retry.`,
+                        message: `Exhausted ${this.maxAttempts} attempts: ${oracleError.message}. Use re-drive endpoint to retry.`,
                     };
                 }
 
-                if (attempt < MAX_ATTEMPTS && !oracleError.isTerminal) {
-                    const backoffMs = calculateBackoff(attempt, BASE_DELAY_MS);
+                if (attempt < this.maxAttempts && !oracleError.isTerminal) {
+                    const backoffMs = calculateBackoff(attempt, this.baseDelayMs);
                     Logger.info('Retrying after backoff', {
                         idempotencyKey: trigger.idempotency_key.substring(0, 32),
                         actionKey,

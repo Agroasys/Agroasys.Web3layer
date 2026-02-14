@@ -129,6 +129,15 @@ processor.run(new TypeormDatabase(), async (ctx) => {
                     case 'Paused':
                         await handlePaused(decoded, systemEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
                         break;
+                    case 'UnpauseProposed':
+                        await handleUnpauseProposed(decoded, systemEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
+                        break;
+                    case 'UnpauseApproved':
+                        await handleUnpauseApproved(decoded, systemEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
+                        break;
+                    case 'UnpauseProposalCancelled':
+                        await handleUnpauseProposalCancelled(decoded, systemEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
+                        break;
                     case 'Unpaused':
                         await handleUnpaused(decoded, systemEvents, eventId, block, timestamp, txHash, extrinsicIndex, ctx);
                         break;
@@ -729,7 +738,7 @@ async function handleOracleUpdateProposed(
     extrinsicIndex: number,
     ctx: any
 ) {
-    const [proposalId, proposer, newOracle, eta] = log.args;
+    const [proposalId, proposer, newOracle, eta, emergencyFastTrack] = log.args;
 
     // Calculate expiration (7 days TTL)
     const GOVERNANCE_PROPOSAL_TTL = 7 * 24 * 60 * 60 * 1000;
@@ -763,7 +772,7 @@ async function handleOracleUpdateProposed(
         proposer: proposer.toLowerCase()
     }));
 
-    ctx.log.info(`Oracle update proposed: ${proposalId} to ${newOracle} by ${proposer}`);
+    ctx.log.info(`Oracle update proposed: ${proposalId} to ${newOracle} by ${proposer} (fastTrack=${emergencyFastTrack})`);
 }
 
 async function handleOracleUpdateApproved(
@@ -1085,6 +1094,81 @@ async function handlePaused(
     }));
 
     ctx.log.info(`System paused by ${triggeredBy}`);
+}
+
+async function handleUnpauseProposed(
+    log: any,
+    events: SystemEvent[],
+    eventId: string,
+    block: any,
+    timestamp: Date,
+    txHash: string,
+    extrinsicIndex: number,
+    ctx: any
+) {
+    const [triggeredBy] = log.args;
+
+    events.push(new SystemEvent({
+        id: eventId,
+        eventName: 'UnpauseProposed',
+        blockNumber: block.header.height,
+        timestamp,
+        txHash,
+        extrinsicIndex,
+        triggeredBy: triggeredBy.toLowerCase()
+    }));
+
+    ctx.log.info(`Unpause proposed by ${triggeredBy}`);
+}
+
+async function handleUnpauseApproved(
+    log: any,
+    events: SystemEvent[],
+    eventId: string,
+    block: any,
+    timestamp: Date,
+    txHash: string,
+    extrinsicIndex: number,
+    ctx: any
+) {
+    const [triggeredBy, approvalCount, requiredApprovals] = log.args;
+
+    events.push(new SystemEvent({
+        id: eventId,
+        eventName: 'UnpauseApproved',
+        blockNumber: block.header.height,
+        timestamp,
+        txHash,
+        extrinsicIndex,
+        triggeredBy: triggeredBy.toLowerCase()
+    }));
+
+    ctx.log.info(`Unpause approved by ${triggeredBy} (${approvalCount}/${requiredApprovals})`);
+}
+
+async function handleUnpauseProposalCancelled(
+    log: any,
+    events: SystemEvent[],
+    eventId: string,
+    block: any,
+    timestamp: Date,
+    txHash: string,
+    extrinsicIndex: number,
+    ctx: any
+) {
+    const [triggeredBy] = log.args;
+
+    events.push(new SystemEvent({
+        id: eventId,
+        eventName: 'UnpauseProposalCancelled',
+        blockNumber: block.header.height,
+        timestamp,
+        txHash,
+        extrinsicIndex,
+        triggeredBy: triggeredBy.toLowerCase()
+    }));
+
+    ctx.log.info(`Unpause proposal cancelled by ${triggeredBy}`);
 }
 
 async function handleUnpaused(

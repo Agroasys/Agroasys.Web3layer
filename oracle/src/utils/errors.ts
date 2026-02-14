@@ -35,6 +35,7 @@ export class ContractError extends OracleError {
 
 export function classifyError(error: any): OracleError {
     const message = error.message || error.toString();
+    const lowerMessage = message.toLowerCase();
 
     Logger.info('Classifying error', { 
         message: message.substring(0, 200) 
@@ -79,11 +80,16 @@ export function classifyError(error: any): OracleError {
         message.includes('revert') ||
         message.includes('require')
     ) {
-        const isTerminal = 
-            message.includes('Invalid state') ||
-            message.includes('Not authorized') ||
-            message.includes('Trade does not exist') ||
-            message.includes('Already executed');
+        const isTerminal =
+            lowerMessage.includes('invalid state') ||
+            lowerMessage.includes('not authorized') ||
+            lowerMessage.includes('trade does not exist') ||
+            lowerMessage.includes('already executed') ||
+            lowerMessage.includes('paused') ||
+            lowerMessage.includes('oracle disabled') ||
+            lowerMessage.includes('only oracle') ||
+            lowerMessage.includes('proposal expired') ||
+            lowerMessage.includes('timelock not elapsed');
 
         Logger.warn('Contract error', { isTerminal, message });
         return new ContractError(message, isTerminal);

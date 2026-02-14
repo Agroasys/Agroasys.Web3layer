@@ -110,6 +110,11 @@ describe("AgroasysEscrow", function () {
     };
   }
 
+  async function unpauseWithQuorum() {
+    await escrow.connect(admin1).proposeUnpause();
+    await escrow.connect(admin2).approveUnpause();
+  }
+
   beforeEach(async function () {
     [buyer, supplier, treasury, oracle, admin1, admin2, admin3] = await ethers.getSigners();
 
@@ -181,9 +186,10 @@ describe("AgroasysEscrow", function () {
         escrow.connect(oracle).releaseFundsStage1(tradeId)
       ).to.be.revertedWith("paused");
 
-      await expect(escrow.connect(admin1).unpause())
+      await escrow.connect(admin1).proposeUnpause();
+      await expect(escrow.connect(admin2).approveUnpause())
         .to.emit(escrow, "Unpaused")
-        .withArgs(admin1.address);
+        .withArgs(admin2.address);
 
       await expect(escrow.connect(oracle).releaseFundsStage1(tradeId))
         .to.emit(escrow, "FundsReleasedStage1");
@@ -200,7 +206,7 @@ describe("AgroasysEscrow", function () {
       expect(await escrow.paused()).to.be.true;
 
       await expect(
-        escrow.connect(admin1).unpause()
+        escrow.connect(admin1).proposeUnpause()
       ).to.be.revertedWith("oracle disabled");
 
       await expect(
@@ -216,7 +222,7 @@ describe("AgroasysEscrow", function () {
       expect(await escrow.oracleAddress()).to.equal(newOracle);
       expect(await escrow.oracleActive()).to.be.true;
 
-      await escrow.connect(admin1).unpause();
+      await unpauseWithQuorum();
       expect(await escrow.paused()).to.be.false;
     });
 
@@ -234,7 +240,7 @@ describe("AgroasysEscrow", function () {
       await escrow.connect(admin2).approveOracleUpdate(0);
       await time.increase(24 * 3600 + 1);
       await escrow.connect(admin1).executeOracleUpdate(0);
-      await escrow.connect(admin1).unpause();
+      await unpauseWithQuorum();
 
       await expect(
         escrow.connect(oracle).releaseFundsStage1(tradeId)
@@ -298,7 +304,7 @@ describe("AgroasysEscrow", function () {
       await expect(
         escrow.connect(oracle).releaseFundsStage1(tradeId)
       ).to.be.revertedWith("paused");
-      await escrow.connect(admin1).unpause();
+      await unpauseWithQuorum();
 
       await escrow.connect(oracle).releaseFundsStage1(tradeId);
 
@@ -306,7 +312,7 @@ describe("AgroasysEscrow", function () {
       await expect(
         escrow.connect(oracle).confirmArrival(tradeId)
       ).to.be.revertedWith("paused");
-      await escrow.connect(admin1).unpause();
+      await unpauseWithQuorum();
 
       await escrow.connect(oracle).confirmArrival(tradeId);
 
@@ -314,7 +320,7 @@ describe("AgroasysEscrow", function () {
       await expect(
         escrow.connect(buyer).openDispute(tradeId)
       ).to.be.revertedWith("paused");
-      await escrow.connect(admin1).unpause();
+      await unpauseWithQuorum();
 
       await time.increase(24 * 3600 + 1);
 
@@ -335,7 +341,7 @@ describe("AgroasysEscrow", function () {
       await expect(
         escrow.connect(admin1).proposeDisputeSolution(tradeId, 0)
       ).to.be.revertedWith("paused");
-      await escrow.connect(admin1).unpause();
+      await unpauseWithQuorum();
 
       await escrow.connect(admin1).proposeDisputeSolution(tradeId, 0);
 

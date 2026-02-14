@@ -29,6 +29,18 @@ export async function createTrigger(data: CreateTriggerData): Promise<Trigger> {
 
         return result.rows[0];
     } catch (error: any) {
+        if (error?.code === '23505') {
+            const existing = await getLatestTriggerByActionKey(data.actionKey);
+            if (existing) {
+                Logger.warn('Concurrent trigger create detected, reusing latest trigger', {
+                    actionKey: data.actionKey,
+                    requestId: data.requestId.substring(0, 16),
+                    existingRequestId: existing.request_id.substring(0, 16),
+                });
+                return existing;
+            }
+        }
+
         Logger.error('Failed to create trigger', error);
         throw error;
     }

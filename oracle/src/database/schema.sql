@@ -32,6 +32,10 @@ CREATE TABLE IF NOT EXISTS oracle_triggers (
 );
 
 CREATE INDEX IF NOT EXISTS idx_action_key ON oracle_triggers(action_key);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_active_action_key_unique
+ON oracle_triggers(action_key)
+WHERE status IN ('PENDING', 'EXECUTING', 'SUBMITTED');
+
 CREATE INDEX IF NOT EXISTS idx_trade_id ON oracle_triggers(trade_id);
 CREATE INDEX IF NOT EXISTS idx_status ON oracle_triggers(status);
 CREATE INDEX IF NOT EXISTS idx_created_at ON oracle_triggers(created_at DESC);

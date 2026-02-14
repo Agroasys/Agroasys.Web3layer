@@ -27,6 +27,7 @@ services:
     environment:
       PORT: ${PORT}
       API_KEY: ${API_KEY}
+      HMAC_SECRET: ${HMAC_SECRET}
       RPC_URL: ${RPC_URL}
       CHAIN_ID: ${CHAIN_ID}
       ESCROW_ADDRESS: ${ESCROW_ADDRESS}
@@ -39,6 +40,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       RETRY_ATTEMPTS: ${RETRY_ATTEMPTS}
       RETRY_DELAY: ${RETRY_DELAY}
+      INDEXER_GRAPHQL_URL: ${INDEXER_GRAPHQL_URL}
     ports:
       - "${PORT}:3001"
     networks:

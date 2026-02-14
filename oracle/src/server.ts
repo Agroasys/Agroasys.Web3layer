@@ -61,7 +61,7 @@ async function bootstrap() {
             indexerClient
         );
 
-        const triggerManager = new TriggerManager(sdkClient);
+        const triggerManager = new TriggerManager(sdkClient, config.retryAttempts, config.retryDelay);
 
         const controller = new OracleController(triggerManager);
 
