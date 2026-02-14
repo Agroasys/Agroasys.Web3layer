@@ -13,7 +13,7 @@ export class BuyerSDK extends Client {
         return super.getBuyerNonce(buyerAddress);
     }
     
-    async approveUSDC(amount: bigint,buyerSigner: ethers.Signer): Promise<TradeResult> {
+    async approveUSDC(amount: bigint, buyerSigner: ethers.Signer): Promise<TradeResult> {
         try {
             const usdcContract = IERC20__factory.connect(
                 this.config.usdcAddress,
@@ -81,7 +81,7 @@ export class BuyerSDK extends Client {
         }
     }
     
-    async createTrade(params: TradeParameters,buyerSigner: ethers.Signer): Promise<TradeResult> {
+    async createTrade(params: TradeParameters, buyerSigner: ethers.Signer): Promise<TradeResult> {
         validateTradeParameters(params);
         
         const buyerAddress = await buyerSigner.getAddress();
@@ -150,8 +150,7 @@ export class BuyerSDK extends Client {
         }
     }
     
-
-    async openDispute(tradeId: string | bigint,buyerSigner: ethers.Signer): Promise<TradeResult> {
+    async openDispute(tradeId: string | bigint, buyerSigner: ethers.Signer): Promise<TradeResult> {
         try {
             const contractWithSigner = this.contract.connect(buyerSigner);
             const tx = await contractWithSigner.openDispute(tradeId);
@@ -169,6 +168,53 @@ export class BuyerSDK extends Client {
         } catch (error: any) {
             throw new ContractError(
                 `Failed to open dispute: ${error.message}`,
+                { tradeId: tradeId.toString(), error: error.message }
+            );
+        }
+    }
+
+
+    async cancelLockedTradeAfterTimeout(tradeId: string | bigint, buyerSigner: ethers.Signer): Promise<TradeResult> {
+        try {
+            const contractWithSigner = this.contract.connect(buyerSigner);
+            const tx = await contractWithSigner.cancelLockedTradeAfterTimeout(tradeId);
+            const receipt = await tx.wait();
+            
+            if (!receipt) {
+                throw new ContractError('Transaction receipt not available');
+            }
+            
+            return {
+                txHash: receipt.hash,
+                blockNumber: receipt.blockNumber
+            };
+            
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to cancel locked trade: ${error.message}`,
+                { tradeId: tradeId.toString(), error: error.message }
+            );
+        }
+    }
+
+    async refundInTransitAfterTimeout(tradeId: string | bigint, buyerSigner: ethers.Signer): Promise<TradeResult> {
+        try {
+            const contractWithSigner = this.contract.connect(buyerSigner);
+            const tx = await contractWithSigner.refundInTransitAfterTimeout(tradeId);
+            const receipt = await tx.wait();
+            
+            if (!receipt) {
+                throw new ContractError('Transaction receipt not available');
+            }
+            
+            return {
+                txHash: receipt.hash,
+                blockNumber: receipt.blockNumber
+            };
+            
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to refund in-transit trade: ${error.message}`,
                 { tradeId: tradeId.toString(), error: error.message }
             );
         }

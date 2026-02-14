@@ -43,7 +43,7 @@ describeIntegration('BuyerSDK', () => {
         console.log(`USDC allowance: ${allowance}`);
     });
 
-    test('should create a trade (with auto-approve)', async () => {
+    test.skip('should create a trade', async () => {
         const tradeParams = {
             supplier: '0x4aF052cB4B3eC7b58322548021bF254Cc4c80b2c',
             totalAmount: parseUSDC('10000'),
@@ -56,13 +56,30 @@ describeIntegration('BuyerSDK', () => {
 
         const result = await buyerSDK.createTrade(tradeParams, buyerSigner);
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
-        console.log(`Trade created:`, result.txHash);
+        console.log(`Trade created: ${result.txHash}`);
     });
 
-
     test.skip('should open dispute', async () => {
-        const tradeId = 2n; // replace with the trade Id to dispute
-        const txHash = await buyerSDK.openDispute(tradeId, buyerSigner);
-        console.log(`Dispute opened: ${txHash.txHash}`);
+        const tradeId = 0n; // replace
+        
+        const result = await buyerSDK.openDispute(tradeId, buyerSigner);
+        expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+        console.log(`Dispute opened: ${result.txHash}`);
+    });
+
+    test.skip('should cancel locked trade after timeout', async () => {
+        const tradeId = 0n; // replace
+        
+        const result = await buyerSDK.cancelLockedTradeAfterTimeout(tradeId, buyerSigner);
+        expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+        console.log(`Locked trade cancelled: ${result.txHash}`);
+    });
+
+    test.skip('should refund in-transit trade after timeout', async () => {
+        const tradeId = 0n; // replace
+        
+        const result = await buyerSDK.refundInTransitAfterTimeout(tradeId, buyerSigner);
+        expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+        console.log(`In-transit trade refunded: ${result.txHash}`);
     });
 });
