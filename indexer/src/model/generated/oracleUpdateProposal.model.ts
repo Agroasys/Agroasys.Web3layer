@@ -36,6 +36,13 @@ export class OracleUpdateProposal {
     @StringColumn_({nullable: false})
     proposer!: string
 
+    @DateTimeColumn_({nullable: true})
+    expiresAt!: Date | undefined | null
+
+    @Index_()
+    @BooleanColumn_({nullable: false})
+    cancelled!: boolean
+
     @OneToMany_(() => OracleEvent, e => e.oracleUpdate)
     events!: OracleEvent[]
 }

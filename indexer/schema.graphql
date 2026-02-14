@@ -52,6 +52,19 @@ type TradeEvent @entity {
   finalRecipient: String
 
   # DisputeOpenedByBuyer (no specific fields)
+
+  # TradeCancelledAfterLockTimeout specific
+  refundedAmount: BigInt
+  refundedTo: String
+
+  # InTransitTimeoutRefunded specific
+  refundedBuyerPrincipal: BigInt
+
+  # DisputePayout specific
+  payoutRecipient: String
+  payoutAmount: BigInt
+  payoutType: DisputeStatus
+  relatedProposalId: String
 }
 
 enum TradeStatus {
@@ -75,6 +88,8 @@ type DisputeProposal @entity {
   executed: Boolean! @index
   createdAt: DateTime! @index
   proposer: String! @index
+  expiresAt: DateTime
+  cancelled: Boolean! @index
 
   events: [DisputeEvent!]! @derivedFrom(field: "dispute")
 }
@@ -100,6 +115,9 @@ type DisputeEvent @entity {
 
   # DisputeFinalized specific
   finalDisputeStatus: DisputeStatus
+
+  # DisputeProposalExpiredCancelled specific
+  cancelledBy: String
 }
 
 enum DisputeStatus {
@@ -120,6 +138,8 @@ type OracleUpdateProposal @entity {
   createdAt: DateTime! @index
   eta: BigInt!
   proposer: String! @index
+  expiresAt: DateTime
+  cancelled: Boolean! @index
 
   events: [OracleEvent!]! @derivedFrom(field: "oracleUpdate")
 }
@@ -127,7 +147,7 @@ type OracleUpdateProposal @entity {
 type OracleEvent @entity {
   # fields for all events
   id: ID!
-  oracleUpdate: OracleUpdateProposal!
+  oracleUpdate: OracleUpdateProposal
   eventName: String! @index
   blockNumber: Int! @index
   timestamp: DateTime! @index
@@ -147,9 +167,14 @@ type OracleEvent @entity {
   # OracleUpdated specific
   oldOracle: String
   newOracle: String
+
+  # OracleUpdateProposalExpiredCancelled specific
+  cancelledBy: String
+
+  # OracleDisabledEmergency specific
+  disabledBy: String
+  previousOracle: String
 }
-
-
 
 ## ADMIN UPDATES
 
@@ -162,6 +187,8 @@ type AdminAddProposal @entity {
   createdAt: DateTime! @index
   eta: BigInt!
   proposer: String! @index
+  expiresAt: DateTime
+  cancelled: Boolean! @index
 
   events: [AdminEvent!]! @derivedFrom(field: "adminAddProposal")
 }
@@ -169,7 +196,7 @@ type AdminAddProposal @entity {
 type AdminEvent @entity {
   # fields for all events
   id: ID!
-  adminAddProposal: AdminAddProposal!
+  adminAddProposal: AdminAddProposal
   eventName: String! @index
   blockNumber: Int! @index
   timestamp: DateTime! @index
@@ -188,4 +215,21 @@ type AdminEvent @entity {
 
   # AdminAdded specific
   addedAdmin: String
+
+  # AdminAddProposalExpiredCancelled specific
+  cancelledBy: String
+}
+
+## SYSTEM EVENTS
+
+type SystemEvent @entity {
+  id: ID!
+  eventName: String! @index
+  blockNumber: Int! @index
+  timestamp: DateTime! @index
+  txHash: String! @index
+  extrinsicIndex: Int!
+
+  # Paused/Unpaused specific
+  triggeredBy: String
 }

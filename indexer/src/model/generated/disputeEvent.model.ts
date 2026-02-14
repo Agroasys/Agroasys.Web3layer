@@ -51,4 +51,7 @@ export class DisputeEvent {
 
     @Column_("varchar", {length: 7, nullable: true})
     finalDisputeStatus!: DisputeStatus | undefined | null
+
+    @StringColumn_({nullable: true})
+    cancelledBy!: string | undefined | null
 }

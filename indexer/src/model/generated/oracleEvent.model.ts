@@ -12,7 +12,7 @@ export class OracleEvent {
 
     @Index_()
     @ManyToOne_(() => OracleUpdateProposal, {nullable: true})
-    oracleUpdate!: OracleUpdateProposal
+    oracleUpdate!: OracleUpdateProposal | undefined | null
 
     @Index_()
     @StringColumn_({nullable: false})
@@ -56,4 +56,13 @@ export class OracleEvent {
 
     @StringColumn_({nullable: true})
     newOracle!: string | undefined | null
+
+    @StringColumn_({nullable: true})
+    cancelledBy!: string | undefined | null
+
+    @StringColumn_({nullable: true})
+    disabledBy!: string | undefined | null
+
+    @StringColumn_({nullable: true})
+    previousOracle!: string | undefined | null
 }
