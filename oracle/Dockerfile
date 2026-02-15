@@ -3,11 +3,16 @@ FROM node
 WORKDIR /app
 
 COPY package*.json ./
-COPY tsconfig.json ./
+COPY oracle/package*.json ./oracle/
+COPY oracle/tsconfig.json ./oracle/
 
+COPY sdk/ ./sdk/
+
+WORKDIR /app/oracle
+RUN npm install ../sdk
 RUN npm install
 
-COPY src/ ./src/
+COPY oracle/src/ ./src/
 
 RUN npm run build
 

@@ -16,7 +16,8 @@ export const processor = new SubstrateBatchProcessor()
     })
     .addEvent({
         name: ['Revive.ContractEmitted'],
-        extrinsic: true
+        extrinsic: true,
+        call: true
     })
     .setFields({
         event: {

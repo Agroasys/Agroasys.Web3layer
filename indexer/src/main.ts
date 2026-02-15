@@ -15,6 +15,8 @@ import {
     DisputeStatus
 } from './model'
 
+import { keccak256 } from 'ethers';
+
 processor.run(new TypeormDatabase(), async (ctx) => {
     const trades: Map<string, Trade> = new Map();
     const tradeEvents: TradeEvent[] = [];
@@ -44,10 +46,11 @@ processor.run(new TypeormDatabase(), async (ctx) => {
                     ctx.log.warn(`Failed to decode event at block ${block.header.height}`);
                     continue;
                 }
+
                 const eventId = event.id;
                 const timestamp = new Date(block.header.timestamp || 0);
                 const extrinsic = block.extrinsics.find(e => e.index === event.extrinsicIndex);
-                const txHash = extrinsic?.hash || 'unknown';
+                const txHash = extractEvmTxHash(extrinsic) || 'unknown';
                 const extrinsicIndex = event.extrinsicIndex || 0;
 
                 switch (decoded.name) {
@@ -179,6 +182,21 @@ async function getOrLoadTrade(tradeId: string, trades: Map<string, Trade>, ctx: 
     }
 
     return null;
+}
+
+function extractEvmTxHash(extrinsic: any): string | null {
+    try {
+
+        if (extrinsic?.call?.name === 'Revive.eth_transact') {
+            const payload = extrinsic.call.args.payload;
+            if (payload) {
+                return keccak256(payload);
+            }
+        }
+        return null;
+    } catch (error) {
+        return null;
+    }
 }
 
 // ########################### trade events ##########################

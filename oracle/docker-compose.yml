@@ -19,7 +19,9 @@ services:
     networks:
       - oracle-network
   oracle:
-    build: .
+    build:
+      context: ..
+      dockerfile: oracle/Dockerfile
     container_name: oracle-service
     depends_on:
       db:
