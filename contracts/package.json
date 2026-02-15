@@ -6,6 +6,7 @@
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
+    "test:foundry": "cd foundry && forge test -vvv",
     "coverage": "hardhat coverage",
     "lint": "tsc --noEmit"
   },

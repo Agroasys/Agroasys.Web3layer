@@ -68,6 +68,16 @@ const buyerSDK = new BuyerSDK(config);
 const result = await buyerSDK.createTrade(tradeParams, buyerSigner);
 ```
 
+### Web3Auth Wallet Provider
+
+```ts
+import { web3Wallet } from "@agroasys/sdk";
+
+await web3Wallet.connect();
+const address = await web3Wallet.getAddress();
+```
+
+`CLIENT_ID` is required. `WEB3AUTH_NETWORK` defaults to `SAPPHIRE_DEVNET`.
 
 ## Functions
 
@@ -81,6 +91,8 @@ const result = await buyerSDK.createTrade(tradeParams, buyerSigner);
 | `getUSDCAllowance(address)`    | Check current USDC allowance for escrow          |
 | `createTrade(params, signer)`  | Lock funds and create a new trade                |
 | `openDispute(tradeId, signer)` | Open a dispute on an existing trade              |
+| `cancelLockedTradeAfterTimeout(tradeId, signer)` | Cancel stale `LOCKED` trade after timeout         |
+| `refundInTransitAfterTimeout(tradeId, signer)` | Refund remaining principal when transit times out |
 
 
 
@@ -96,16 +108,24 @@ const result = await buyerSDK.createTrade(tradeParams, buyerSigner);
 
 ### AdminSDK
 
-| Method                                            | Description                                          |
-| ------------------------------------------------- | ---------------------------------------------------- |
-| `proposeDisputeSolution(tradeId, status, signer)` | Propose a dispute resolution (`REFUND` or `RESOLVE`) |
-| `approveDisputeSolution(proposalId, signer)`      | Approve a pending dispute proposal                   |
-| `proposeOracleUpdate(newOracle, signer)`          | Propose a new oracle address                         |
-| `approveOracleUpdate(proposalId, signer)`         | Approve oracle update proposal                       |
-| `executeOracleUpdate(proposalId, signer)`         | Execute approved oracle update                       |
-| `proposeAddAdmin(newAdmin, signer)`               | Propose adding a new admin                           |
-| `approveAddAdmin(proposalId, signer)`             | Approve admin addition proposal                      |
-| `executeAddAdmin(proposalId, signer)`             | Execute approved admin addition                      |
+| Method | Description |
+| --- | --- |
+| `pause(signer)` | Pause normal protocol operations |
+| `proposeUnpause(signer)` | Propose unpause (multi-admin) |
+| `approveUnpause(signer)` | Approve unpause proposal |
+| `cancelUnpauseProposal(signer)` | Cancel active unpause proposal |
+| `disableOracleEmergency(signer)` | Emergency disable oracle + pause |
+| `proposeDisputeSolution(tradeId, status, signer)` | Propose dispute resolution (`REFUND` or `RESOLVE`) |
+| `approveDisputeSolution(proposalId, signer)` | Approve dispute proposal |
+| `cancelExpiredDisputeProposal(proposalId, signer)` | Cancel expired dispute proposal |
+| `proposeOracleUpdate(newOracle, signer)` | Propose oracle update |
+| `approveOracleUpdate(proposalId, signer)` | Approve oracle update |
+| `executeOracleUpdate(proposalId, signer)` | Execute approved oracle update |
+| `cancelExpiredOracleUpdateProposal(proposalId, signer)` | Cancel expired oracle-update proposal |
+| `proposeAddAdmin(newAdmin, signer)` | Propose adding a new admin |
+| `approveAddAdmin(proposalId, signer)` | Approve admin-add proposal |
+| `executeAddAdmin(proposalId, signer)` | Execute approved admin addition |
+| `cancelExpiredAddAdminProposal(proposalId, signer)` | Cancel expired admin-add proposal |
 
 
 
@@ -139,4 +159,8 @@ BUYER_PRIVATE_KEY=
 ORACLE_PRIVATE_KEY=
 ADMIN1_PRIVATE_KEY=
 ADMIN2_PRIVATE_KEY=
+
+# Web3Auth wallet provider
+CLIENT_ID=
+WEB3AUTH_NETWORK=SAPPHIRE_DEVNET
 ```

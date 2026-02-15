@@ -461,10 +461,15 @@ npm run test
 npm run coverage
 ```
 
-### Fondry Fuzzing Tests
+### Foundry Fuzzing Tests
+Requires `forge` in PATH.
+
 ```bash
+# from contracts/
+npm run test:foundry
+
+# optional: targeted suites
 cd foundry
-forge build
 forge test --match-contract FuzzTest -vvv
 forge test --match-contract InvariantTest -vvv
 ```
@@ -481,35 +486,16 @@ npx hardhat ignition deploy ignition/modules/AgroasysEscrow.ts --network polkado
 - escrow: 0x8E1F0924a5aA0D22fB71e5f34f25111FF487379a
 
 ## Scripts
-Trade flow
+
+Legacy runtime scripts under `contracts/scripts/` have been removed.
+Use the SDK modules for operational execution paths instead:
+- `sdk/src/modules/buyerSDK.ts`
+- `sdk/src/modules/adminSDK.ts`
+- `sdk/src/modules/oracleSDK.ts`
+
+Run SDK smoke tests from `sdk/`:
 ```bash
-npx hardhat run scripts/trade/createTrade.ts --network polkadotTestnet
-npx hardhat run scripts/trade/releaseStage1.ts --network polkadotTestnet
-npx hardhat run scripts/trade/confirmArrival.ts --network polkadotTestnet
-npx hardhat run scripts/trade/releaseFinalTranche.ts --network polkadotTestnet
-```
-
-Dispute flow
-
-```bash
-npx hardhat run scripts/dispute/openDisputeByBuyer.ts --network polkadotTestnet
-npx hardhat run scripts/dispute/proposeSolution.ts --network polkadotTestnet
-npx hardhat run scripts/dispute/approveSolution.ts --network polkadotTestnet
-```
-
-Update oracle
-
-```bash
-npx hardhat run scripts/updateOracle/propose.ts --network polkadotTestnet
-npx hardhat run scripts/updateOracle/approve.ts --network polkadotTestnet
-npx hardhat run scripts/updateOracle/execute.ts --network polkadotTestnet
-```
-
-
-Update admins
-
-```bash
-npx hardhat run scripts/updateAdmins/propose.ts --network polkadotTestnet
-npx hardhat run scripts/updateAdmins/approve.ts --network polkadotTestnet
-npx hardhat run scripts/updateAdmins/execute.ts --network polkadotTestnet
+npm run test:buyer
+npm run test:admin
+npm run test:oracle
 ```

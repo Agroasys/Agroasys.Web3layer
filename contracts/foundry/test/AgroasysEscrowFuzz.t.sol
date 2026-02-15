@@ -575,6 +575,72 @@ contract FuzzTest is Test {
 
 
         assertTrue(escrow.isAdmin(new_admin),"update failed");
-
     }
+    
+
+    function testFuzz_CancelLockedTradeAfterTimeout(uint96 logistics, uint96 fees, uint96 tranche1, uint96 tranche2, bytes32 ricardianHash) public {
+        vm.assume(ricardianHash != bytes32(0));
+        logistics = uint96(bound(logistics, 1000e6, 10_000e6));
+        fees = uint96(bound(fees, 500e6, 5_000e6));
+        tranche1 = uint96(bound(tranche1, 10_000e6, 100_000e6));
+        tranche2 = uint96(bound(tranche2, 10_000e6, 100_000e6));
+        
+        uint256 total = logistics + fees + tranche1 + tranche2;
+
+        uint256 tradeId = _create_trade(logistics, fees, tranche1, tranche2, ricardianHash);
+        
+        (,,AgroasysEscrow.TradeStatus _status,,,uint256 _total,,,,,,) = escrow.trades(tradeId);
+        
+        assertEq(uint8(_status), uint8(AgroasysEscrow.TradeStatus.LOCKED), "status should be LOCKED");
+        assertEq(_total, total, "total mismatch");
+        
+        uint256 buyerBalanceBefore = usdc.balanceOf(buyer);
+        uint256 escrowBalanceBefore = usdc.balanceOf(address(escrow));
+        
+        vm.warp(block.timestamp + 7 days + 1);
+        
+        vm.prank(buyer);
+        escrow.cancelLockedTradeAfterTimeout(tradeId);
+        
+        (,,AgroasysEscrow.TradeStatus _statusAfter,,,,,,,,,) = escrow.trades(tradeId);
+        
+        assertEq(uint8(_statusAfter), uint8(AgroasysEscrow.TradeStatus.CLOSED), "status should be CLOSED");
+        assertEq(usdc.balanceOf(buyer), buyerBalanceBefore + total, "buyer should receive full refund");
+        assertEq(usdc.balanceOf(address(escrow)), escrowBalanceBefore - total, "escrow balance should decrease");
+    }
+
+
+    function testFuzz_RefundInTransitAfterTimeout(uint96 logistics, uint96 fees, uint96 tranche1, uint96 tranche2, bytes32 ricardianHash) public {
+        vm.assume(ricardianHash != bytes32(0));
+        logistics = uint96(bound(logistics, 1000e6, 10_000e6));
+        fees = uint96(bound(fees, 500e6, 5_000e6));
+        tranche1 = uint96(bound(tranche1, 10_000e6, 100_000e6));
+        tranche2 = uint96(bound(tranche2, 10_000e6, 100_000e6));
+        
+        uint256 tradeId = _create_trade(logistics, fees, tranche1, tranche2, ricardianHash);
+        
+        vm.prank(oracle);
+        escrow.releaseFundsStage1(tradeId);
+        
+        (,,AgroasysEscrow.TradeStatus _status,,,,,,,,,) = escrow.trades(tradeId);
+        assertEq(uint8(_status), uint8(AgroasysEscrow.TradeStatus.IN_TRANSIT), "status should be IN_TRANSIT");
+        
+        uint256 buyerBalanceBefore = usdc.balanceOf(buyer);
+        uint256 escrowBalanceBefore = usdc.balanceOf(address(escrow));
+        
+        assertEq(escrowBalanceBefore, tranche2, "only tranche2 should remain in escrow");
+        
+        vm.warp(block.timestamp + 14 days + 1);
+        
+        vm.prank(buyer);
+        escrow.refundInTransitAfterTimeout(tradeId);
+        
+        (,,AgroasysEscrow.TradeStatus _statusAfter,,,,,,,,,) = escrow.trades(tradeId);
+        
+        assertEq(uint8(_statusAfter), uint8(AgroasysEscrow.TradeStatus.CLOSED), "status should be CLOSED");
+        assertEq(usdc.balanceOf(buyer), buyerBalanceBefore + tranche2, "buyer should receive tranche2 refund");
+        assertEq(usdc.balanceOf(address(escrow)), 0, "escrow should be empty");
+    }
+
+
 }

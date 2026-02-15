@@ -57,7 +57,7 @@ describe("AgroasysEscrow", function () {
     );
 
     const messageHash = ethers.keccak256(encoded);
-    return await signer.signMessage(ethers.toBeArray(messageHash));
+    return await signer.signMessage(ethers.getBytes(messageHash));
   }
 
   async function createDefaultTrade(ricardianHash: string = ethers.id("trade-hash")) {
@@ -417,6 +417,31 @@ describe("AgroasysEscrow", function () {
       expect(await usdc.balanceOf(buyer.address)).to.equal(buyerBalBefore + supplierSecondTranche);
       const trade = await escrow.trades(tradeId);
       expect(trade.status).to.equal(4); // CLOSED
+    });
+
+
+    it("Should prevent buyer to cancel a LOCKED trade before LOCK_TIMEOUT", async function () {
+      const { tradeId, totalAmount } = await createDefaultTrade(ethers.id("lock-timeout"));
+
+      const lockTimeout = await escrow.LOCK_TIMEOUT();
+      await time.increase(lockTimeout - 1n);
+
+      await expect(
+        escrow.connect(buyer).cancelLockedTradeAfterTimeout(tradeId)
+      ).to.be.revertedWith("lock timeout not elapsed")
+    });
+
+    it("Should prevent buyer to refund only remaining principal before IN_TRANSIT timeout", async function () {
+      const { tradeId, supplierSecondTranche } = await createDefaultTrade(ethers.id("in-transit-timeout"));
+
+      await escrow.connect(oracle).releaseFundsStage1(tradeId);
+
+      const inTransitTimeout = await escrow.IN_TRANSIT_TIMEOUT();
+      await time.increase(inTransitTimeout - 1n);
+
+      await expect(
+        escrow.connect(buyer).refundInTransitAfterTimeout(tradeId)
+      ).to.be.revertedWith("in-transit timeout not elapsed");
     });
 
     it("Should prevent a second LOCK timeout cancellation", async function () {

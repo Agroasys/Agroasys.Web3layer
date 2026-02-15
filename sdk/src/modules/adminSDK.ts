@@ -7,7 +7,6 @@ import { validateAddress } from '../utils/validation';
 
 export class AdminSDK extends Client {
     
-
     private async verifyAdmin(adminSigner: ethers.Signer): Promise<void> {
         const adminAddress = await adminSigner.getAddress();
         const isAdmin = await this.isAdmin(adminAddress);
@@ -20,8 +19,136 @@ export class AdminSDK extends Client {
         }
     }
     
+    // #################### SYSTEM CONTROL ####################
 
-    async proposeDisputeSolution(tradeId: string | bigint,disputeStatus: DisputeStatus,adminSigner: ethers.Signer): Promise<DisputeResult> {
+    async pause(adminSigner: ethers.Signer): Promise<GovernanceResult> {
+        await this.verifyAdmin(adminSigner);
+        
+        try {
+            const contractWithSigner = this.contract.connect(adminSigner);
+            const tx = await contractWithSigner.pause();
+            const receipt = await tx.wait();
+            
+            if (!receipt) {
+                throw new ContractError('Transaction receipt not available');
+            }
+            
+            return {
+                txHash: receipt.hash,
+                blockNumber: receipt.blockNumber
+            };
+            
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to pause protocol: ${error.message}`,
+                { error: error.message }
+            );
+        }
+    }
+
+    async proposeUnpause(adminSigner: ethers.Signer): Promise<GovernanceResult> {
+        await this.verifyAdmin(adminSigner);
+        
+        try {
+            const contractWithSigner = this.contract.connect(adminSigner);
+            const tx = await contractWithSigner.proposeUnpause();
+            const receipt = await tx.wait();
+            
+            if (!receipt) {
+                throw new ContractError('Transaction receipt not available');
+            }
+            
+            return {
+                txHash: receipt.hash,
+                blockNumber: receipt.blockNumber
+            };
+            
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to propose unpause: ${error.message}`,
+                { error: error.message }
+            );
+        }
+    }
+
+    async approveUnpause(adminSigner: ethers.Signer): Promise<GovernanceResult> {
+        await this.verifyAdmin(adminSigner);
+        
+        try {
+            const contractWithSigner = this.contract.connect(adminSigner);
+            const tx = await contractWithSigner.approveUnpause();
+            const receipt = await tx.wait();
+            
+            if (!receipt) {
+                throw new ContractError('Transaction receipt not available');
+            }
+            
+            return {
+                txHash: receipt.hash,
+                blockNumber: receipt.blockNumber
+            };
+            
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to approve unpause: ${error.message}`,
+                { error: error.message }
+            );
+        }
+    }
+
+    async cancelUnpauseProposal(adminSigner: ethers.Signer): Promise<GovernanceResult> {
+        await this.verifyAdmin(adminSigner);
+        
+        try {
+            const contractWithSigner = this.contract.connect(adminSigner);
+            const tx = await contractWithSigner.cancelUnpauseProposal();
+            const receipt = await tx.wait();
+            
+            if (!receipt) {
+                throw new ContractError('Transaction receipt not available');
+            }
+            
+            return {
+                txHash: receipt.hash,
+                blockNumber: receipt.blockNumber
+            };
+            
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to cancel unpause proposal: ${error.message}`,
+                { error: error.message }
+            );
+        }
+    }
+
+    async disableOracleEmergency(adminSigner: ethers.Signer): Promise<GovernanceResult> {
+        await this.verifyAdmin(adminSigner);
+        
+        try {
+            const contractWithSigner = this.contract.connect(adminSigner);
+            const tx = await contractWithSigner.disableOracleEmergency();
+            const receipt = await tx.wait();
+            
+            if (!receipt) {
+                throw new ContractError('Transaction receipt not available');
+            }
+            
+            return {
+                txHash: receipt.hash,
+                blockNumber: receipt.blockNumber
+            };
+            
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to disable oracle: ${error.message}`,
+                { error: error.message }
+            );
+        }
+    }
+
+    // #################### DISPUTE RESOLUTION ####################
+
+    async proposeDisputeSolution(tradeId: string | bigint, disputeStatus: DisputeStatus, adminSigner: ethers.Signer): Promise<DisputeResult> {
         await this.verifyAdmin(adminSigner);
         
         if (disputeStatus !== DisputeStatus.REFUND && disputeStatus !== DisputeStatus.RESOLVE) {
@@ -50,8 +177,7 @@ export class AdminSDK extends Client {
         }
     }
     
-
-    async approveDisputeSolution(proposalId: string | bigint,adminSigner: ethers.Signer): Promise<DisputeResult> {
+    async approveDisputeSolution(proposalId: string | bigint, adminSigner: ethers.Signer): Promise<DisputeResult> {
         await this.verifyAdmin(adminSigner);
         
         try {
@@ -75,11 +201,36 @@ export class AdminSDK extends Client {
             );
         }
     }
-    
-    // ###### GOVERNANCE
-    
 
-    async proposeOracleUpdate(newOracle: string,adminSigner: ethers.Signer): Promise<GovernanceResult> {
+
+    async cancelExpiredDisputeProposal(proposalId: string | bigint, adminSigner: ethers.Signer): Promise<DisputeResult> {
+        await this.verifyAdmin(adminSigner);
+        
+        try {
+            const contractWithSigner = this.contract.connect(adminSigner);
+            const tx = await contractWithSigner.cancelExpiredDisputeProposal(proposalId);
+            const receipt = await tx.wait();
+            
+            if (!receipt) {
+                throw new ContractError('Transaction receipt not available');
+            }
+            
+            return {
+                txHash: receipt.hash,
+                blockNumber: receipt.blockNumber
+            };
+            
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to cancel expired dispute proposal: ${error.message}`,
+                { proposalId: proposalId.toString(), error: error.message }
+            );
+        }
+    }
+    
+    // #################### ORACLE GOVERNANCE ####################
+
+    async proposeOracleUpdate(newOracle: string, adminSigner: ethers.Signer): Promise<GovernanceResult> {
         await this.verifyAdmin(adminSigner);
         validateAddress(newOracle, 'newOracle');
         
@@ -105,8 +256,7 @@ export class AdminSDK extends Client {
         }
     }
     
-
-    async approveOracleUpdate(proposalId: string | bigint,adminSigner: ethers.Signer): Promise<GovernanceResult> {
+    async approveOracleUpdate(proposalId: string | bigint, adminSigner: ethers.Signer): Promise<GovernanceResult> {
         await this.verifyAdmin(adminSigner);
         
         try {
@@ -131,8 +281,7 @@ export class AdminSDK extends Client {
         }
     }
     
-
-    async executeOracleUpdate(proposalId: string | bigint,adminSigner: ethers.Signer): Promise<GovernanceResult> {
+    async executeOracleUpdate(proposalId: string | bigint, adminSigner: ethers.Signer): Promise<GovernanceResult> {
         await this.verifyAdmin(adminSigner);
         
         try {
@@ -156,9 +305,36 @@ export class AdminSDK extends Client {
             );
         }
     }
+
+
+    async cancelExpiredOracleUpdateProposal(proposalId: string | bigint, adminSigner: ethers.Signer): Promise<GovernanceResult> {
+        await this.verifyAdmin(adminSigner);
+        
+        try {
+            const contractWithSigner = this.contract.connect(adminSigner);
+            const tx = await contractWithSigner.cancelExpiredOracleUpdateProposal(proposalId);
+            const receipt = await tx.wait();
+            
+            if (!receipt) {
+                throw new ContractError('Transaction receipt not available');
+            }
+            
+            return {
+                txHash: receipt.hash,
+                blockNumber: receipt.blockNumber
+            };
+            
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to cancel expired oracle update proposal: ${error.message}`,
+                { proposalId: proposalId.toString(), error: error.message }
+            );
+        }
+    }
     
-    
-    async proposeAddAdmin(newAdmin: string,adminSigner: ethers.Signer): Promise<GovernanceResult> {
+    // #################### ADMIN GOVERNANCE ####################
+
+    async proposeAddAdmin(newAdmin: string, adminSigner: ethers.Signer): Promise<GovernanceResult> {
         await this.verifyAdmin(adminSigner);
         validateAddress(newAdmin, 'newAdmin');
         
@@ -184,8 +360,7 @@ export class AdminSDK extends Client {
         }
     }
     
-
-    async approveAddAdmin(proposalId: string | bigint,adminSigner: ethers.Signer): Promise<GovernanceResult> {
+    async approveAddAdmin(proposalId: string | bigint, adminSigner: ethers.Signer): Promise<GovernanceResult> {
         await this.verifyAdmin(adminSigner);
         
         try {
@@ -210,7 +385,7 @@ export class AdminSDK extends Client {
         }
     }
     
-    async executeAddAdmin(proposalId: string | bigint,adminSigner: ethers.Signer): Promise<GovernanceResult> {
+    async executeAddAdmin(proposalId: string | bigint, adminSigner: ethers.Signer): Promise<GovernanceResult> {
         await this.verifyAdmin(adminSigner);
         
         try {
@@ -230,6 +405,31 @@ export class AdminSDK extends Client {
         } catch (error: any) {
             throw new ContractError(
                 `Failed to execute admin addition: ${error.message}`,
+                { proposalId: proposalId.toString(), error: error.message }
+            );
+        }
+    }
+
+    async cancelExpiredAddAdminProposal(proposalId: string | bigint, adminSigner: ethers.Signer): Promise<GovernanceResult> {
+        await this.verifyAdmin(adminSigner);
+        
+        try {
+            const contractWithSigner = this.contract.connect(adminSigner);
+            const tx = await contractWithSigner.cancelExpiredAddAdminProposal(proposalId);
+            const receipt = await tx.wait();
+            
+            if (!receipt) {
+                throw new ContractError('Transaction receipt not available');
+            }
+            
+            return {
+                txHash: receipt.hash,
+                blockNumber: receipt.blockNumber
+            };
+            
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to cancel expired admin addition proposal: ${error.message}`,
                 { proposalId: proposalId.toString(), error: error.message }
             );
         }
