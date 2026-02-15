@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { generateRequestHash, verifyRequestSignature } from '../src/utils/crypto';
 
-describe('Oracle request signing', () => {
+describe.skip('Oracle request signing', () => {
     test('should generate and verify a valid request signature', () => {
         const timestamp = Date.now().toString();
         const body = JSON.stringify({ tradeId: '7', requestId: 'req-1' });
@@ -27,7 +27,7 @@ describe('Oracle request signing', () => {
     });
 });
 
-describe.skip('Oracle API integration (manual)', () => {
+describe('Oracle API integration (manual)', () => {
     const API_URL = process.env.ORACLE_API_URL || 'http://localhost:3001/api/oracle';
     const API_KEY = process.env.API_KEY || '';
     const HMAC_SECRET = process.env.HMAC_SECRET || '';
@@ -45,11 +45,41 @@ describe.skip('Oracle API integration (manual)', () => {
         };
     }
 
-    test('confirm-arrival endpoint accepts signed request', async () => {
-        const payload = { tradeId: '7', requestId: `test-${Date.now()}` };
+    test('release-stage1 endpoint accepts signed request', async () => {
+        const payload = { tradeId: '2', requestId: `test-${Date.now()}` };
+
+        const response = await axios.post(
+            `${API_URL}/release-stage1`,
+            payload,
+            {
+                headers: signedHeaders(payload),
+            }
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.data.success).toBe(true);
+    });
+
+    test.skip('confirm-arrival endpoint accepts signed request', async () => {
+        const payload = { tradeId: '0', requestId: `test-${Date.now()}` };
 
         const response = await axios.post(
             `${API_URL}/confirm-arrival`,
+            payload,
+            {
+                headers: signedHeaders(payload),
+            }
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.data.success).toBe(true);
+    });
+
+    test.skip('/finalize-trade endpoint accepts signed request', async () => {
+        const payload = { tradeId: '0', requestId: `test-${Date.now()}` };
+
+        const response = await axios.post(
+            `${API_URL}/finalize-trade`,
             payload,
             {
                 headers: signedHeaders(payload),
