@@ -16,3 +16,6 @@ export * from './config';
 // utils
 export * from './utils/validation';
 export * from './utils/signature';
+
+// web3auth
+export {web3Wallet} from './wallet/wallet-provider'
