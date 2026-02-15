@@ -57,7 +57,7 @@ describe("AgroasysEscrow", function () {
     );
 
     const messageHash = ethers.keccak256(encoded);
-    return await signer.signMessage(ethers.toBeArray(messageHash));
+    return await signer.signMessage(ethers.getBytes(messageHash));
   }
 
   async function createDefaultTrade(ricardianHash: string = ethers.id("trade-hash")) {
