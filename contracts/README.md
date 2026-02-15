@@ -6,6 +6,7 @@ A Solidity-based state machine deployed on PolkaVM. It handles the locking, disp
 
 
 ## Architecture
+
 ```bash
 .
 ├── hardhat.config.ts // hardhat config file
@@ -15,38 +16,20 @@ A Solidity-based state machine deployed on PolkaVM. It handles the locking, disp
 │   ├── AgroasysEscrow.sol // Escrow smart contract
 │   └── MockUSDC.sol
 ├── tests
-│   └── AgroasysEscrow.ts // Uint tests
+│   └── AgroasysEscrow.ts // Unit and integration tests
 ├── tsconfig.json
 ├── ignition
 │   └── modules // deployment scripts
 │      ├── AgroasysEscrow.ts 
 │      └── MockUSDC.ts
 ├── foundry
-│   ├── foundry.toml // fondry config file
+│   ├── foundry.toml // foundry config file
 │   ├── src
 │   │   ├── AgroasysEscrow.sol
 │   │   └── MockUSDC.sol // tmp contract just for testing 
 │   └── test
-│       ├── AgroasysEscrowFuzz.t.sol // Stateless Fuzzing test
-│       └── AgroasysEscrowInvariant.t.sol // Statefull Invariant Tests
-├── scripts // scripts to simulate interactions on-chain
-│   ├── dispute
-│   │   ├── approveSolution.ts
-│   │   └── proposeSolution.ts
-│   ├── trade
-│   │   ├── confirmArrival.ts
-│   │   ├── createTrade.ts
-│   │   ├── openDisputeByBuyer.ts
-│   │   ├── releaseFinalTranche.ts
-│   │   └── releaseStage1.ts
-│   ├── updateAdmins
-│   │   ├── approve.ts
-│   │   ├── execute.ts
-│   │   └── propose.ts
-│   └── updateOracle
-│       ├── approve.ts
-│       ├── execute.ts
-│       └── propose.ts
+│       ├── AgroasysEscrowFuzz.t.sol // Stateless fuzzing tests
+│       └── AgroasysEscrowInvariant.t.sol // Stateful invariant tests
 
 ```
 
@@ -66,8 +49,8 @@ Escrow contract implementing secure trade execution with multi-stage fund releas
 - `CLOSED`: Trade completed or dispute resolved
 
 **`DisputeStatus`**
-- `REFUND`: Refund buyer (second tranche + platform fees)
-- `RESOLVE`: Pay supplier normally (second tranche + platform fees to treasury)
+- `REFUND`: Refund buyer remaining escrowed principal (`supplierSecondTranche` only)
+- `RESOLVE`: Pay supplier remaining escrowed principal (`supplierSecondTranche` only)
 
 
 #### **Structs**
@@ -103,6 +86,7 @@ Timelock-based oracle rotation proposal:
 - `createdAt` (uint256): Proposal creation timestamp
 - `eta` (uint256): Earliest execution timestamp (timelock)
 - `proposer` (address): Admin who proposed the update
+- `emergencyFastTrack` (bool): True when proposed while oracle is disabled
 
 **`AdminAddProposal`**
 Timelock-based admin addition proposal:
@@ -137,10 +121,16 @@ Timelock-based admin addition proposal:
 - `usdcToken` (IERC20): USDC token contract interface
 - `oracleAddress` (address): Authorized oracle for fund releases and arrival confirmation
 - `treasuryAddress` (address): Receives logistics and platform fees
+- `paused` (bool): Global pause flag for normal protocol operations
+- `oracleActive` (bool): Oracle execution enable/disable switch
 - `admins` (address[]): Array of admin addresses
 - `requiredApprovals` (uint256): Minimum approvals required to execute dispute
 - `governanceTimelock` (uint256): Delay (24h) between approval and execution for governance operations
 - `DISPUTE_WINDOW` (constant uint256): 24-hour window for buyer to open dispute after arrival
+- `LOCK_TIMEOUT` (constant uint256): Buyer timeout to cancel LOCKED trade
+- `IN_TRANSIT_TIMEOUT` (constant uint256): Buyer timeout to refund principal while IN_TRANSIT
+- `DISPUTE_PROPOSAL_TTL` (constant uint256): Dispute proposal expiry
+- `GOVERNANCE_PROPOSAL_TTL` (constant uint256): Governance proposal expiry
 
 
 #### **Functions**
@@ -152,7 +142,7 @@ Timelock-based admin addition proposal:
    - Locks funds in escrow (USDC transferFrom buyer)
    - Returns: `tradeId`
    - Emits: `TradeLocked`
-   - Access: Anyone (msg.sender becomes buyer)
+   - Access: Anyone (msg.sender becomes buyer), blocked if paused
    - Requires: Valid signature with matching nonce and deadline, non-zero addresses, amounts matching breakdown, USDC approval
 
 2. **`releaseFundsStage1(tradeId)`**
@@ -160,59 +150,104 @@ Timelock-based admin addition proposal:
    - Pays: supplier (first tranche) + treasury (logistics + platform fees)
    - Changes status: LOCKED to IN_TRANSIT
    - Emits: `FundsReleasedStage1`, `PlatformFeesPaidStage1`
-   - Access: `onlyOracle`
+   - Access: `onlyOracle`, `onlyOracleActive`, `whenNotPaused`
 
 3. **`confirmArrival(tradeId)`**
    - Confirms goods arrival, starts 24-hour dispute window
    - Changes status: IN_TRANSIT to ARRIVAL_CONFIRMED
    - Sets `arrivalTimestamp` to current block timestamp
    - Emits: `ArrivalConfirmed`
-   - Access: `onlyOracle`
+   - Access: `onlyOracle`, `onlyOracleActive`, `whenNotPaused`
+
+4. **`openDispute(tradeId)`**
+   - Buyer opens dispute within 24-hour window
+   - Freezes all remaining funds in escrow
+   - Changes status: ARRIVAL_CONFIRMED to FROZEN
+   - Emits: `DisputeOpenedByBuyer`
+   - Access: Trade buyer only (`whenNotPaused`)
+   - Requires: Called before `arrivalTimestamp + 24 hours`
 
 5. **`finalizeAfterDisputeWindow(tradeId)`**
    - Finalizes trade after 24h dispute window expires (permissionless)
    - Pays: supplier (second tranche only)
    - Changes status: ARRIVAL_CONFIRMED to CLOSED
    - Emits: `FinalTrancheReleased`
-   - Access: Anyone (permissionless to avoid funds getting stuck)
+   - Access: Anyone (`whenNotPaused`, permissionless to avoid funds getting stuck)
    - Requires: Called after `arrivalTimestamp + 24 hours`
 
-5. **`openDispute(tradeId)`**
-   - Buyer opens dispute within 24-hour window
-   - Freezes all remaining funds in escrow
-   - Changes status: ARRIVAL_CONFIRMED to FROZEN
-   - Emits: `DisputeOpenedByBuyer`
+6. **`cancelLockedTradeAfterTimeout(tradeId)`**
+   - Buyer escape hatch when a trade remains `LOCKED` past `LOCK_TIMEOUT`
+   - Refunds full `totalAmountLocked` to buyer
+   - Changes status: LOCKED to CLOSED
+   - Emits: `TradeCancelledAfterLockTimeout`
    - Access: Trade buyer only
-   - Requires: Called before `arrivalTimestamp + 24 hours`
 
-6. **`proposeDisputeSolution(tradeId, disputeStatus)`**
+7. **`refundInTransitAfterTimeout(tradeId)`**
+   - Buyer escape hatch when trade remains `IN_TRANSIT` past `IN_TRANSIT_TIMEOUT`
+   - Refunds only remaining escrowed principal (`supplierSecondTranche`)
+   - Changes status: IN_TRANSIT to CLOSED
+   - Emits: `InTransitTimeoutRefunded`
+   - Access: Trade buyer only
+
+8. **`proposeDisputeSolution(tradeId, disputeStatus)`**
    - Creates dispute resolution proposal
    - First admin approval automatically counted
    - Returns: `proposalId`
-   - Emits: `DisputeSolution`
-   - Access: `onlyAdmin`
+   - Emits: `DisputeSolutionProposed`
+   - Access: `onlyAdmin`, `whenNotPaused`
    - Requires: Trade status must be FROZEN
 
-7. **`approveDisputeSolution(proposalId)`**
+9. **`approveDisputeSolution(proposalId)`**
    - Adds admin approval to dispute proposal
-   - Auto-executes `_dispute()` when threshold reached
+   - Auto-executes `_executeDispute()` when threshold reached
    - Emits: `DisputeApproved`, potentially `DisputeFinalized`
-   - Access: `onlyAdmin`
+   - Access: `onlyAdmin`, `whenNotPaused`
    - Requires: Not already approved by this admin, proposal not executed
 
-8. **`getNextTradeId()`**
+10. **`cancelExpiredDisputeProposal(proposalId)`**
+   - Cancels expired dispute proposal
+   - Emits: `DisputeProposalExpiredCancelled`
+   - Access: `onlyAdmin`, `whenNotPaused`
+
+11. **`pause()`**
+   - Emergency pause for protocol operations
+   - Emits: `Paused`
+   - Access: `onlyAdmin`
+
+12. **`proposeUnpause()`**
+   - Starts unpause recovery proposal
+   - Emits: `UnpauseProposed`, `UnpauseApproved`
+   - Access: `onlyAdmin`
+   - Requires: `paused == true` and `oracleActive == true`
+
+13. **`approveUnpause()`**
+   - Adds approval to active unpause proposal
+   - Emits: `UnpauseApproved`, and `Unpaused` once quorum is reached
+   - Access: `onlyAdmin`
+
+14. **`cancelUnpauseProposal()`**
+   - Cancels active unpause proposal
+   - Emits: `UnpauseProposalCancelled`
+   - Access: `onlyAdmin`
+
+15. **`disableOracleEmergency()`**
+   - Emergency containment: disables oracle-triggered transitions and pauses protocol
+   - Emits: `OracleDisabledEmergency` (and `Paused` if not already paused)
+   - Access: `onlyAdmin`
+
+16. **`getNextTradeId()`**
    - Returns the next available trade ID
    - Returns: `tradeCounter`
    - Access: View function (anyone)
 
-9. **`getBuyerNonce(buyer)`**
+17. **`getBuyerNonce(buyer)`**
    - Returns the current nonce for a buyer address
    - Returns: `nonces[buyer]`
    - Access: View function (anyone)
 
 **Governance Functions:**
 
-10. **`proposeOracleUpdate(newOracle)`**
+18. **`proposeOracleUpdate(newOracle)`**
     - Creates timelock-based oracle rotation proposal
     - First admin approval automatically counted
     - Returns: `proposalId`
@@ -220,19 +255,24 @@ Timelock-based admin addition proposal:
     - Access: `onlyAdmin`
     - Requires: Minimum 2 admin approvals (even if requiredApprovals == 1)
 
-11. **`approveOracleUpdate(proposalId)`**
+19. **`approveOracleUpdate(proposalId)`**
     - Adds admin approval to oracle update proposal
     - Emits: `OracleUpdateApproved`
     - Access: `onlyAdmin`
     - Requires: Not already approved by this admin, proposal not executed
 
-12. **`executeOracleUpdate(proposalId)`**
-    - Executes approved oracle update after timelock expires
+20. **`executeOracleUpdate(proposalId)`**
+    - Executes approved oracle update after timelock or emergency fast-track
     - Emits: `OracleUpdated`
     - Access: `onlyAdmin`
-    - Requires: Sufficient approvals, timelock elapsed (24h)
+    - Requires: Sufficient approvals; timelock elapsed for normal proposals, immediate execution for emergency fast-track proposals
 
-13. **`proposeAddAdmin(newAdmin)`**
+21. **`cancelExpiredOracleUpdateProposal(proposalId)`**
+    - Cancels expired oracle update proposal
+    - Emits: `OracleUpdateProposalExpiredCancelled`
+    - Access: `onlyAdmin`
+
+22. **`proposeAddAdmin(newAdmin)`**
     - Creates timelock-based admin addition proposal
     - First admin approval automatically counted
     - Returns: `proposalId`
@@ -240,19 +280,24 @@ Timelock-based admin addition proposal:
     - Access: `onlyAdmin`
     - Requires: Minimum 2 admin approvals (even if requiredApprovals == 1)
 
-14. **`approveAddAdmin(proposalId)`**
+23. **`approveAddAdmin(proposalId)`**
     - Adds admin approval to admin addition proposal
     - Emits: `AdminAddApproved`
     - Access: `onlyAdmin`
     - Requires: Not already approved by this admin, proposal not executed
 
-15. **`executeAddAdmin(proposalId)`**
+24. **`executeAddAdmin(proposalId)`**
     - Executes approved admin addition after timelock expires
     - Emits: `AdminAdded`
     - Access: `onlyAdmin`
     - Requires: Sufficient approvals, timelock elapsed (24h)
 
-16. **`governanceApprovals()`**
+25. **`cancelExpiredAddAdminProposal(proposalId)`**
+    - Cancels expired admin-add proposal
+    - Emits: `AdminAddProposalExpiredCancelled`
+    - Access: `onlyAdmin`
+
+26. **`governanceApprovals()`**
     - Returns minimum approvals required for governance operations
     - Returns: `max(2, requiredApprovals)` for extra security
     - Access: View function (anyone)
@@ -279,6 +324,8 @@ Timelock-based admin addition proposal:
 #### **Modifiers**
 - `onlyOracle`: Restricts function to authorized oracle address
 - `onlyAdmin`: Restricts function to approved admin addresses
+- `whenNotPaused`: Blocks normal state transitions while paused
+- `onlyOracleActive`: Blocks oracle-triggered functions when oracle is disabled
 - `nonReentrant`: OpenZeppelin protection against reentrancy attacks
 
 
@@ -296,14 +343,24 @@ Timelock-based admin addition proposal:
 - `DisputeSolutionProposed(proposalId, tradeId, disputeStatus, proposer)`: Admin proposed dispute solution
 - `DisputeApproved(proposalId, approver, approvalCount, requiredApprovals)`: Admin approved dispute proposal
 - `DisputeFinalized(proposalId, tradeId, disputeStatus)`: Dispute executed, funds distributed
+- `DisputePayout(tradeId, proposalId, recipient, amount, payoutType)`: Explicit dispute payout recipient/amount by resolution type
 
 **Governance Events:**
-- `OracleUpdateProposed(proposalId, proposer, newOracle, eta)`: Oracle update proposed with timelock
+- `OracleUpdateProposed(proposalId, proposer, newOracle, eta, emergencyFastTrack)`: Oracle update proposed with timelock or emergency fast-track
 - `OracleUpdateApproved(proposalId, approver, approvalCount, requiredApprovals)`: Admin approved oracle update
 - `OracleUpdated(oldOracle, newOracle)`: Oracle address updated
 - `AdminAddProposed(proposalId, proposer, newAdmin, eta)`: Admin addition proposed with timelock
 - `AdminAddApproved(proposalId, approver, approvalCount, requiredApprovals)`: Admin approved admin addition
 - `AdminAdded(newAdmin)`: New admin added to contract
+
+**Emergency/Timeout/Recovery Events:**
+- `Paused(by)`, `Unpaused(by)`, `OracleDisabledEmergency(by, previousOracle)`
+- `UnpauseProposed(proposer)`, `UnpauseApproved(approver, approvalCount, requiredApprovals)`, `UnpauseProposalCancelled(cancelledBy)`
+- `TradeCancelledAfterLockTimeout(tradeId, buyer, refundedAmount)`
+- `InTransitTimeoutRefunded(tradeId, buyer, refundedAmount)`
+- `DisputeProposalExpiredCancelled(proposalId, tradeId, cancelledBy)`
+- `OracleUpdateProposalExpiredCancelled(proposalId, cancelledBy)`
+- `AdminAddProposalExpiredCancelled(proposalId, cancelledBy)`
 
 
 ### Contract: `MockUSDC.sol`
@@ -314,120 +371,39 @@ ERC20 test token for local development and testing.
 ## Tests:
 
 ### Test Coverage Summary
-| Framework | Type | Files | Tests |
-|-----------|------|-------|-------|
-| Hardhat | Unit Tests | `tests/AgroasysEscrow.ts` | 27 tests |
-| Foundry | Stateless Fuzz | `foundry/test/AgroasysEscrowFuzz.t.sol` | 9 tests |
-| Foundry | Stateful Invariants | `foundry/test/AgroasysEscrowInvariant.t.sol` | 7 invariants |
+Use commands below to get the current test counts and pass/fail status (counts evolve as tests are added):
+
+```bash
+# from contracts/
+npm run test
+npm run coverage
+npm run test:foundry
+```
 
 ---
 
-### Unit Tests `AgroasysEscrow.ts`
-```
-  AgroasysEscrow
-    Deployment
-      ✔ Should set correct initial values
-      ✔ Should reject invalid constructor params
-    createTrade
-      ✔ Should create a trade with valid signature
-      ✔ Should create multiple trades with incrementing nonces
-      ✔ Should reject invalid signature (wrong signer)
-      ✔ Should reject replay signature
-      ✔ Should reject with invalid parameters (zero addresses, bad hash, mismatched amounts)
-      ✔ Should reject with bad nonce
-      ✔ Should reject expired signature
-    Complete Flow (Without dispute)
-      ✔ Should complete full trade lifecycle without dispute
-    releaseFundsStage1
-      ✔ Should reject if not oracle
-      ✔ Should reject if wrong status
-    confirmArrival
-      ✔ Should confirm arrival
-      ✔ Should reject if not oracle
-      ✔ Should reject if wrong status
-    Dispute Flow
-      ✔ Should allow buyer to open dispute within 24h
-      ✔ Should reject dispute after 24h window
-      ✔ Should reject dispute from non-buyer
-      ✔ Should refund buyer after dispute REFUND resolution
-      ✔ Should pay supplier after dispute RESOLVE resolution
-      ✔ Should reject dispute proposal from non-admin
-      ✔ Should reject dispute approval from non-admin
-    Governance: Oracle Update
-      ✔ Should update oracle with timelock
-      ✔ Should reject execution before timelock
-      ✔ Should reject oracle update from non-admin
-    Governance: Add Admin
-      ✔ Should add new admin with timelock
-      ✔ Should reject add admin from non-admin
+### Hardhat Tests `AgroasysEscrow.ts`
+Current suites include:
+- `Deployment`
+- `Emergency Controls`
+- `Paused Matrix Hardening`
+- `Timeout Escape Hatches`
+- `Treasury Leakage Guards`
+- `createTrade`
+- `Complete Flow (Without dispute)`
+- `releaseFundsStage1`
+- `confirmArrival`
+- `Dispute Flow`
+- `Governance: Oracle Update`
+- `Governance: Add Admin`
+- `Expiry Edge Boundaries`
 
-
-  27 passing (861ms)
-
----------------------|----------|----------|----------|----------|----------------|
-File                 |  % Stmts | % Branch |  % Funcs |  % Lines |Uncovered Lines |
----------------------|----------|----------|----------|----------|----------------|
- src/                |    96.99 |    64.37 |    91.67 |    97.66 |                |
-  AgroasysEscrow.sol |    97.71 |    64.37 |    95.24 |    98.22 |    530,579,714 |
-  MockUSDC.sol       |       50 |      100 |    66.67 |       50 |             10 |
----------------------|----------|----------|----------|----------|----------------|
-All files            |    96.99 |    64.37 |    91.67 |    97.66 |                |
----------------------|----------|----------|----------|----------|----------------|
-```
-
-### Stateless Fuzzing tests `AgroasysEscrowFuzz.t.sol`
-
-```
-Ran 9 tests for test/AgroasysEscrowFuzz.t.sol:FuzzTest
-[PASS] testFuzz_CannotOpenDisputeAfter24Hours(uint96,uint96,uint96,uint96,bytes32) (runs: 10001, μ: 507711, ~: 508132)
-[PASS] testFuzz_CannotOpenDisputeBeforeArrival(uint96,uint96,uint96,uint96,bytes32) (runs: 10001, μ: 474708, ~: 475124)
-[PASS] testFuzz_CannotReleaseStage2Before24Hours(uint96,uint96,uint96,uint96,bytes32) (runs: 10001, μ: 506888, ~: 507314)
-[PASS] testFuzz_UpdateAdmins(address) (runs: 10000, μ: 319595, ~: 319595)
-[PASS] testFuzz_UpdateOracle(address) (runs: 10000, μ: 275537, ~: 275537)
-[PASS] testFuzz_completeUserFlowWithDisputeRefund(uint96,uint96,uint96,uint96,bytes32) (runs: 10001, μ: 908282, ~: 908720)
-[PASS] testFuzz_completeUserFlowWithDisputeResolve(uint96,uint96,uint96,uint96,bytes32) (runs: 10001, μ: 929052, ~: 929484)
-[PASS] testFuzz_completeUserFlowWithoutDispute(uint96,uint96,uint96,uint96,bytes32) (runs: 10001, μ: 636990, ~: 637415)
-[PASS] test_Setup() (gas: 32378)
-Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 11.04s (45.60s CPU time)
-
-Ran 1 test suite in 11.04s (11.04s CPU time): 9 tests passed, 0 failed, 0 skipped (9 total tests)
-```
-
-### Statefull Fuzzing Invariant tests `AgroasysEscrowInvariant.t.sol`
-
-**Handler:**
-The handler functions call the contract using valid values derived from fuzzing tests inputs.
-
-Example: If the fuzzing input looks like `tradeId = 999999`, the Handler converts it to a valid ID using `tradeId % tradeCounter` before calling the escrow contract.
-
-
-**Invariants Tested:**
-
-1. **`invariant_EscrowBalanceMatchesLockedFunds`**
-   - Escrow USDC balance = sum of all locked funds
-
-2. **`invariant_EscrowFundsConservation`**
-   - Escrow balance = total deposited - total withdrawn
-
-3. **`invariant_TotalWithdrawnNeverExceedsDeposited`**
-   - Total withdrawn ≤ total deposited
-
-4. **`invariant_TradeCreationNumber`**
-   - Handler trade counter = contract trade counter
-
-5. **`invariant_DisputesSolvedMatches`**
-   - Number of DISPUTED trades = dispute execution count
-
-6. **`invariant_TriggerStage1GreaterThanTriggerStage2`**
-   - Stage 1 releases ≥ Stage 2 releases
-
-7. **`invariant_DisputeRaisedGreaterThanDisputeSolved`**
-   - Dispute proposals ≥ disputes executed
-
-
+### Foundry Suites
+- `foundry/test/AgroasysEscrowFuzz.t.sol`
+- `foundry/test/AgroasysEscrowInvariant.t.sol`
 
 ## Scripts: 
-Deployement Scripts for the 2 contracts in:
+Deployment scripts for the 2 contracts in:
 ```
 ignition
 └── modules
@@ -482,8 +458,8 @@ npx hardhat ignition deploy ignition/modules/AgroasysEscrow.ts --network polkado
 
 ## Addresses
 
-- mock-usdc: 0xEea5766E43D0c7032463134Afc121e63C9f9C260
-- escrow: 0x8E1F0924a5aA0D22fB71e5f34f25111FF487379a
+Deployment addresses are network/environment-specific.
+Use Hardhat Ignition deployment output as the source of truth for the current environment.
 
 ## Scripts
 
