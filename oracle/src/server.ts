@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import { WebhookNotifier } from '@agroasys/notifications';
 import { config } from './config';
 import { createRouter } from './api/routes';
 import { OracleController } from './api/controller';
@@ -52,6 +53,14 @@ async function bootstrap() {
 
         indexerClient = new IndexerClient(config.indexerGraphqlUrl);
 
+        const notifier = new WebhookNotifier({
+            enabled: config.notificationsEnabled,
+            webhookUrl: config.notificationsWebhookUrl,
+            cooldownMs: config.notificationsCooldownMs,
+            requestTimeoutMs: config.notificationsRequestTimeoutMs,
+            logger: Logger,
+        });
+
         const sdkClient = new SDKClient(
             config.rpcUrl,
             config.oraclePrivateKey,
@@ -61,7 +70,12 @@ async function bootstrap() {
             indexerClient
         );
 
-        const triggerManager = new TriggerManager(sdkClient, config.retryAttempts, config.retryDelay);
+        const triggerManager = new TriggerManager(
+            sdkClient,
+            config.retryAttempts,
+            config.retryDelay,
+            notifier
+        );
 
         const controller = new OracleController(triggerManager);
 
@@ -93,7 +107,7 @@ async function bootstrap() {
             });
         });
 
-        confirmationWorker = new ConfirmationWorker(indexerClient);
+        confirmationWorker = new ConfirmationWorker(indexerClient, notifier);
         confirmationWorker.start();
 
         app.listen(config.port, () => {

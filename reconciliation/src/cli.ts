@@ -1,0 +1,69 @@
+import { config } from './config';
+import { Logger } from './utils/logger';
+import { closeConnection, testConnection } from './database/connection';
+import { runMigrations } from './database/migrations';
+import { ReconciliationService } from './core/reconciler';
+
+type Mode = 'once' | 'daemon';
+
+function parseArgs(argv: string[]): { mode: Mode; runKey?: string } {
+  const mode = argv[2] as Mode | undefined;
+
+  if (!mode || (mode !== 'once' && mode !== 'daemon')) {
+    throw new Error('Usage: ts-node src/cli.ts <once|daemon> [--run-key=<value>]');
+  }
+
+  const runKeyArg = argv.find((arg) => arg.startsWith('--run-key='));
+  return {
+    mode,
+    runKey: runKeyArg ? runKeyArg.replace('--run-key=', '') : undefined,
+  };
+}
+
+async function bootstrap(): Promise<void> {
+  const { mode, runKey } = parseArgs(process.argv);
+
+  Logger.info('Starting reconciliation worker', {
+    mode,
+    runKey,
+    indexerGraphqlUrl: config.indexerGraphqlUrl,
+  });
+
+  await testConnection();
+  await runMigrations();
+
+  const service = new ReconciliationService();
+
+  if (mode === 'once') {
+    await service.reconcileOnce('ONCE', runKey);
+    await closeConnection();
+    return;
+  }
+
+  const shutdown = async (signal: string): Promise<void> => {
+    Logger.warn('Received shutdown signal', { signal });
+    await closeConnection();
+    process.exit(0);
+  };
+
+  process.on('SIGINT', () => {
+    void shutdown('SIGINT');
+  });
+  process.on('SIGTERM', () => {
+    void shutdown('SIGTERM');
+  });
+
+  await service.runDaemon();
+}
+
+bootstrap().catch(async (error: any) => {
+  Logger.error('Reconciliation bootstrap failed', {
+    error: error?.message || error,
+  });
+
+  try {
+    await closeConnection();
+  } finally {
+    process.exit(1);
+  }
+});

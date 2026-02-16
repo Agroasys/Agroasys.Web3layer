@@ -24,4 +24,10 @@ export interface OracleConfig {
     // retry
     retryAttempts: number;
     retryDelay: number;
+
+    // notifications
+    notificationsEnabled: boolean;
+    notificationsWebhookUrl?: string;
+    notificationsCooldownMs: number;
+    notificationsRequestTimeoutMs: number;
 }

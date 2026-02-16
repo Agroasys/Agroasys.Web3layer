@@ -3,11 +3,15 @@ export { BuyerSDK } from './modules/buyerSDK';
 export { AdminSDK } from './modules/adminSDK';
 export { OracleSDK } from './modules/oracleSDK';
 
+// ricardian helper
+export { RicardianClient } from './modules/ricardianClient';
+
 // types
 export * from './types/trade';
 export * from './types/dispute';
 export * from './types/governance';
 export * from './types/oracle';
+export * from './types/ricardian';
 export * from './types/errors';
 
 // config

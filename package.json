@@ -6,7 +6,11 @@
     "contracts",
     "indexer",
     "oracle",
-    "sdk"
+    "sdk",
+    "reconciliation",
+    "notifications",
+    "ricardian",
+    "treasury"
   ],
   "scripts": {
     "lint": "npm run lint --workspaces --if-present"
