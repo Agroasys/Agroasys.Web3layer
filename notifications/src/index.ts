@@ -81,16 +81,15 @@ export class WebhookNotifier {
     return '#1976d2';
   }
 
-  private shouldSend(dedupKey: string): boolean {
+  private isInCooldown(dedupKey: string): boolean {
     const now = Date.now();
     const previousTimestamp = this.dedupCache.get(dedupKey);
 
-    if (previousTimestamp && now - previousTimestamp < this.config.cooldownMs) {
-      return false;
-    }
+    return Boolean(previousTimestamp && now - previousTimestamp < this.config.cooldownMs);
+  }
 
-    this.dedupCache.set(dedupKey, now);
-    return true;
+  private markSent(dedupKey: string): void {
+    this.dedupCache.set(dedupKey, Date.now());
   }
 
   private toSlackPayload(event: NotificationEvent): SlackPayload {
@@ -138,7 +137,7 @@ export class WebhookNotifier {
       return false;
     }
 
-    if (!this.shouldSend(event.dedupKey)) {
+    if (this.isInCooldown(event.dedupKey)) {
       this.logInfo('Notification suppressed by cooldown dedup', {
         dedupKey: event.dedupKey,
         cooldownMs: this.config.cooldownMs,
@@ -173,6 +172,8 @@ export class WebhookNotifier {
         });
         return false;
       }
+
+      this.markSent(event.dedupKey);
 
       this.logInfo('Notification sent', {
         source: event.source,
