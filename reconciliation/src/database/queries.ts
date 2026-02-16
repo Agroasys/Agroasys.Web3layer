@@ -30,11 +30,12 @@ export async function upsertDrift(runId: number, runKey: string, finding: DriftF
         trade_id,
         severity,
         mismatch_code,
+        compared_field,
         onchain_value,
         indexed_value,
         details
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
-     ON CONFLICT (run_key, trade_id, mismatch_code)
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+     ON CONFLICT (run_key, trade_id, mismatch_code, compared_field)
      DO UPDATE SET
         run_id = EXCLUDED.run_id,
         severity = EXCLUDED.severity,
@@ -49,6 +50,7 @@ export async function upsertDrift(runId: number, runKey: string, finding: DriftF
       finding.tradeId,
       finding.severity,
       finding.mismatchCode,
+      finding.comparedField,
       finding.onchainValue,
       finding.indexedValue,
       JSON.stringify(finding.details),

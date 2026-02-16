@@ -51,6 +51,7 @@ function compareAmounts(indexed: CompareInput['indexedTrade'], onchain: Trade): 
         tradeId: indexed.tradeId,
         severity: 'CRITICAL',
         mismatchCode: 'AMOUNT_MISMATCH',
+        comparedField: field.field,
         onchainValue: bigintToString(onchainValue),
         indexedValue: bigintToString(field.indexedValue),
         details: {
@@ -74,6 +75,7 @@ export function classifyDrifts(input: CompareInput): DriftFinding[] {
         tradeId: indexedTrade.tradeId,
         severity: 'CRITICAL',
         mismatchCode: 'ONCHAIN_READ_ERROR',
+        comparedField: 'tradeLookup',
         onchainValue: null,
         indexedValue: indexedTrade.status,
         details: {
@@ -89,6 +91,7 @@ export function classifyDrifts(input: CompareInput): DriftFinding[] {
         tradeId: indexedTrade.tradeId,
         severity: 'CRITICAL',
         mismatchCode: 'ONCHAIN_TRADE_MISSING',
+        comparedField: 'tradePresence',
         onchainValue: null,
         indexedValue: indexedTrade.tradeId,
         details: {
@@ -104,6 +107,7 @@ export function classifyDrifts(input: CompareInput): DriftFinding[] {
       tradeId: indexedTrade.tradeId,
       severity: 'HIGH',
       mismatchCode: 'STATUS_MISMATCH',
+      comparedField: 'status',
       onchainValue: onchainStatus,
       indexedValue: indexedTrade.status,
       details: {
@@ -117,6 +121,7 @@ export function classifyDrifts(input: CompareInput): DriftFinding[] {
       tradeId: indexedTrade.tradeId,
       severity: 'CRITICAL',
       mismatchCode: 'PARTICIPANT_MISMATCH',
+      comparedField: 'buyer',
       onchainValue: onchainTrade.buyer,
       indexedValue: indexedTrade.buyer,
       details: {
@@ -130,6 +135,7 @@ export function classifyDrifts(input: CompareInput): DriftFinding[] {
       tradeId: indexedTrade.tradeId,
       severity: 'CRITICAL',
       mismatchCode: 'PARTICIPANT_MISMATCH',
+      comparedField: 'supplier',
       onchainValue: onchainTrade.supplier,
       indexedValue: indexedTrade.supplier,
       details: {
@@ -145,6 +151,7 @@ export function classifyDrifts(input: CompareInput): DriftFinding[] {
       tradeId: indexedTrade.tradeId,
       severity: 'CRITICAL',
       mismatchCode: 'HASH_MISMATCH',
+      comparedField: 'ricardianHash',
       onchainValue: onchainTrade.ricardianHash,
       indexedValue: indexedTrade.ricardianHash,
       details: {
@@ -161,6 +168,7 @@ export function classifyDrifts(input: CompareInput): DriftFinding[] {
       tradeId: indexedTrade.tradeId,
       severity: 'MEDIUM',
       mismatchCode: 'ARRIVAL_TIMESTAMP_MISMATCH',
+      comparedField: 'arrivalTimestamp',
       onchainValue: onchainArrivalIso,
       indexedValue: indexedArrivalIso,
       details: {

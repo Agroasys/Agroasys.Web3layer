@@ -34,6 +34,7 @@ export interface DriftFinding {
   tradeId: string;
   severity: DriftSeverity;
   mismatchCode: DriftCode;
+  comparedField: string;
   onchainValue: string | null;
   indexedValue: string | null;
   details: Record<string, string | number | boolean | null>;
