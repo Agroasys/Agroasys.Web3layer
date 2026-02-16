@@ -2,15 +2,13 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
-COPY reconciliation/package.json reconciliation/package.json
-COPY sdk/package.json sdk/package.json
-COPY notifications/package.json notifications/package.json
-
-RUN npm ci
-
 COPY notifications notifications
 COPY sdk sdk
 COPY reconciliation reconciliation
+
+RUN apk add --no-cache python3 make g++
+
+RUN npm ci
 
 RUN npm run -w @agroasys/notifications build \
   && npm run -w @agroasys/sdk build \
@@ -25,7 +23,11 @@ COPY reconciliation/package.json reconciliation/package.json
 COPY sdk/package.json sdk/package.json
 COPY notifications/package.json notifications/package.json
 
-RUN npm ci --omit=dev \
+RUN apk add --no-cache python3 make g++
+
+RUN npm pkg delete scripts.prepare --workspace @agroasys/notifications || true
+
+RUN npm ci --omit=dev --ignore-scripts \
   --workspace @agroasys/notifications \
   --workspace @agroasys/sdk \
   --workspace reconciliation \

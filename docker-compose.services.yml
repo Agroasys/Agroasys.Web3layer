@@ -30,6 +30,50 @@ services:
       timeout: 5s
       retries: 5
 
+  indexer:
+    image: node:20-alpine
+    profiles: ["all", "indexer"]
+    command:
+      - node
+      - -e
+      - |
+        const http = require('http');
+        const payload = JSON.stringify({ data: { trades: [] } });
+
+        http.createServer((req, res) => {
+          if (req.url !== '/graphql' || req.method !== 'POST') {
+            res.statusCode = 404;
+            res.end('not found');
+            return;
+          }
+
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+
+          req.on('end', () => {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(payload);
+          });
+        }).listen(4350, '0.0.0.0');
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - |
+          fetch('http://127.0.0.1:4350/graphql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: 'query { __typename }' }),
+          })
+            .then((response) => process.exit(response.ok ? 0 : 1))
+            .catch(() => process.exit(1));
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   ricardian:
     profiles: ["all", "ricardian"]
     build:
@@ -66,6 +110,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      indexer:
+        condition: service_healthy
     ports:
       - "3200:3200"
 
@@ -88,8 +134,8 @@ services:
       # Default assumes local host RPC is available on port 8545.
       RPC_URL: http://host.docker.internal:8545
       CHAIN_ID: 31337
-      ESCROW_ADDRESS: 0x0000000000000000000000000000000000000000
-      USDC_ADDRESS: 0x0000000000000000000000000000000000000000
+      ESCROW_ADDRESS: "0x0000000000000000000000000000000000000000"
+      USDC_ADDRESS: "0x0000000000000000000000000000000000000000"
       INDEXER_GRAPHQL_URL: http://indexer:4350/graphql
       NOTIFICATIONS_ENABLED: false
       NOTIFICATIONS_WEBHOOK_URL: ""
@@ -97,6 +143,8 @@ services:
       NOTIFICATIONS_REQUEST_TIMEOUT_MS: 5000
     depends_on:
       postgres:
+        condition: service_healthy
+      indexer:
         condition: service_healthy
 
 volumes:

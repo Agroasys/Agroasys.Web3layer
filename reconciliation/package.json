@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc",
     "lint": "tsc --noEmit",
+    "test": "node -r ts-node/register --test src/tests/**/*.test.ts",
     "reconcile:once": "ts-node src/cli.ts once",
     "reconcile:daemon": "ts-node src/cli.ts daemon",
     "healthcheck": "node dist/healthcheck.js"
