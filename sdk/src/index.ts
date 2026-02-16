@@ -6,6 +6,9 @@ export { OracleSDK } from './modules/oracleSDK';
 // ricardian helper
 export { RicardianClient } from './modules/ricardianClient';
 
+// service-to-service auth helper
+export { createServiceAuthHeaders, buildServiceAuthCanonicalString, signServiceAuthCanonicalString } from './modules/serviceAuth';
+
 // types
 export * from './types/trade';
 export * from './types/dispute';
