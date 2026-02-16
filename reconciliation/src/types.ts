@@ -13,7 +13,9 @@ export type DriftCode =
   | 'PARTICIPANT_MISMATCH'
   | 'AMOUNT_MISMATCH'
   | 'HASH_MISMATCH'
-  | 'ARRIVAL_TIMESTAMP_MISMATCH';
+  | 'ARRIVAL_TIMESTAMP_MISMATCH'
+  | 'INDEXED_INVALID_ADDRESS'
+  | 'ONCHAIN_INVALID_ADDRESS';
 
 export interface IndexedTradeRecord {
   tradeId: string;

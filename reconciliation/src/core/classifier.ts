@@ -1,5 +1,6 @@
 import { TradeStatus, type Trade } from '@agroasys/sdk';
 import type { CompareInput, DriftFinding } from '../types';
+import { isZeroAddress, normalizeAddressOrNull } from '../utils/address';
 
 function statusLabel(status: TradeStatus): string {
   switch (status) {
@@ -18,16 +19,8 @@ function statusLabel(status: TradeStatus): string {
   }
 }
 
-function normalizeAddress(value: string): string {
-  return value.toLowerCase();
-}
-
 function bigintToString(value: bigint): string {
   return value.toString();
-}
-
-function isZeroAddress(address: string): boolean {
-  return normalizeAddress(address) === '0x0000000000000000000000000000000000000000';
 }
 
 function compareAmounts(indexed: CompareInput['indexedTrade'], onchain: Trade): DriftFinding[] {
@@ -63,6 +56,27 @@ function compareAmounts(indexed: CompareInput['indexedTrade'], onchain: Trade): 
   }
 
   return mismatches;
+}
+
+function invalidAddressFinding(
+  tradeId: string,
+  source: 'indexed' | 'onchain',
+  field: 'buyer' | 'supplier',
+  value: string
+): DriftFinding {
+  return {
+    tradeId,
+    severity: 'CRITICAL',
+    mismatchCode: source === 'indexed' ? 'INDEXED_INVALID_ADDRESS' : 'ONCHAIN_INVALID_ADDRESS',
+    comparedField: field,
+    onchainValue: source === 'onchain' ? value : null,
+    indexedValue: source === 'indexed' ? value : null,
+    details: {
+      source,
+      field,
+      reason: 'address is not a valid hex EVM address',
+    },
+  };
 }
 
 export function classifyDrifts(input: CompareInput): DriftFinding[] {
@@ -116,7 +130,27 @@ export function classifyDrifts(input: CompareInput): DriftFinding[] {
     });
   }
 
-  if (normalizeAddress(onchainTrade.buyer) !== normalizeAddress(indexedTrade.buyer)) {
+  const indexedBuyer = normalizeAddressOrNull(indexedTrade.buyer);
+  if (!indexedBuyer) {
+    findings.push(invalidAddressFinding(indexedTrade.tradeId, 'indexed', 'buyer', indexedTrade.buyer));
+  }
+
+  const indexedSupplier = normalizeAddressOrNull(indexedTrade.supplier);
+  if (!indexedSupplier) {
+    findings.push(invalidAddressFinding(indexedTrade.tradeId, 'indexed', 'supplier', indexedTrade.supplier));
+  }
+
+  const onchainBuyer = normalizeAddressOrNull(onchainTrade.buyer);
+  if (!onchainBuyer) {
+    findings.push(invalidAddressFinding(indexedTrade.tradeId, 'onchain', 'buyer', onchainTrade.buyer));
+  }
+
+  const onchainSupplier = normalizeAddressOrNull(onchainTrade.supplier);
+  if (!onchainSupplier) {
+    findings.push(invalidAddressFinding(indexedTrade.tradeId, 'onchain', 'supplier', onchainTrade.supplier));
+  }
+
+  if (indexedBuyer && onchainBuyer && onchainBuyer !== indexedBuyer) {
     findings.push({
       tradeId: indexedTrade.tradeId,
       severity: 'CRITICAL',
@@ -130,7 +164,7 @@ export function classifyDrifts(input: CompareInput): DriftFinding[] {
     });
   }
 
-  if (normalizeAddress(onchainTrade.supplier) !== normalizeAddress(indexedTrade.supplier)) {
+  if (indexedSupplier && onchainSupplier && onchainSupplier !== indexedSupplier) {
     findings.push({
       tradeId: indexedTrade.tradeId,
       severity: 'CRITICAL',

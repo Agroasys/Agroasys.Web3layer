@@ -15,6 +15,16 @@ export interface RicardianConfig {
   apiKeys: ServiceApiKey[];
   authMaxSkewSeconds: number;
   authNonceTtlSeconds: number;
+  rateLimitEnabled: boolean;
+  rateLimitRedisUrl?: string;
+  rateLimitWriteBurstLimit: number;
+  rateLimitWriteBurstWindowSeconds: number;
+  rateLimitWriteSustainedLimit: number;
+  rateLimitWriteSustainedWindowSeconds: number;
+  rateLimitReadBurstLimit: number;
+  rateLimitReadBurstWindowSeconds: number;
+  rateLimitReadSustainedLimit: number;
+  rateLimitReadSustainedWindowSeconds: number;
 }
 
 function env(name: string): string {
@@ -60,6 +70,8 @@ export function loadConfig(): RicardianConfig {
     assert(apiKeys.length > 0, 'API_KEYS_JSON must contain at least one API key when AUTH_ENABLED=true');
   }
 
+  const rateLimitEnabled = envBool('RATE_LIMIT_ENABLED', false);
+
   const config: RicardianConfig = {
     port: envNumber('PORT'),
     dbHost: env('DB_HOST'),
@@ -71,10 +83,28 @@ export function loadConfig(): RicardianConfig {
     apiKeys,
     authMaxSkewSeconds: envNumber('AUTH_MAX_SKEW_SECONDS', 300),
     authNonceTtlSeconds: envNumber('AUTH_NONCE_TTL_SECONDS', 600),
+    rateLimitEnabled,
+    rateLimitRedisUrl: process.env.RATE_LIMIT_REDIS_URL,
+    rateLimitWriteBurstLimit: envNumber('RATE_LIMIT_WRITE_BURST_LIMIT', 10),
+    rateLimitWriteBurstWindowSeconds: envNumber('RATE_LIMIT_WRITE_BURST_WINDOW_SECONDS', 10),
+    rateLimitWriteSustainedLimit: envNumber('RATE_LIMIT_WRITE_SUSTAINED_LIMIT', 120),
+    rateLimitWriteSustainedWindowSeconds: envNumber('RATE_LIMIT_WRITE_SUSTAINED_WINDOW_SECONDS', 60),
+    rateLimitReadBurstLimit: envNumber('RATE_LIMIT_READ_BURST_LIMIT', 30),
+    rateLimitReadBurstWindowSeconds: envNumber('RATE_LIMIT_READ_BURST_WINDOW_SECONDS', 10),
+    rateLimitReadSustainedLimit: envNumber('RATE_LIMIT_READ_SUSTAINED_LIMIT', 600),
+    rateLimitReadSustainedWindowSeconds: envNumber('RATE_LIMIT_READ_SUSTAINED_WINDOW_SECONDS', 60),
   };
 
   assert(config.authMaxSkewSeconds > 0, 'AUTH_MAX_SKEW_SECONDS must be > 0');
   assert(config.authNonceTtlSeconds > 0, 'AUTH_NONCE_TTL_SECONDS must be > 0');
+  assert(config.rateLimitWriteBurstLimit > 0, 'RATE_LIMIT_WRITE_BURST_LIMIT must be > 0');
+  assert(config.rateLimitWriteBurstWindowSeconds > 0, 'RATE_LIMIT_WRITE_BURST_WINDOW_SECONDS must be > 0');
+  assert(config.rateLimitWriteSustainedLimit > 0, 'RATE_LIMIT_WRITE_SUSTAINED_LIMIT must be > 0');
+  assert(config.rateLimitWriteSustainedWindowSeconds > 0, 'RATE_LIMIT_WRITE_SUSTAINED_WINDOW_SECONDS must be > 0');
+  assert(config.rateLimitReadBurstLimit > 0, 'RATE_LIMIT_READ_BURST_LIMIT must be > 0');
+  assert(config.rateLimitReadBurstWindowSeconds > 0, 'RATE_LIMIT_READ_BURST_WINDOW_SECONDS must be > 0');
+  assert(config.rateLimitReadSustainedLimit > 0, 'RATE_LIMIT_READ_SUSTAINED_LIMIT must be > 0');
+  assert(config.rateLimitReadSustainedWindowSeconds > 0, 'RATE_LIMIT_READ_SUSTAINED_WINDOW_SECONDS must be > 0');
 
   return config;
 }

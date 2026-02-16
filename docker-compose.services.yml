@@ -1,0 +1,118 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["all", "infra"]
+    env_file:
+      - ./env/postgres.env
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init/10-service-databases.sql:/docker-entrypoint-initdb.d/10-service-databases.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["all", "infra"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  indexer:
+    image: node:20-alpine
+    profiles: ["all", "indexer"]
+    command:
+      - node
+      - -e
+      - |
+        const http = require('http');
+        const payload = JSON.stringify({ data: { trades: [] } });
+
+        http.createServer((req, res) => {
+          if (req.url !== '/graphql' || req.method !== 'POST') {
+            res.statusCode = 404;
+            res.end('not found');
+            return;
+          }
+
+          req.on('data', () => {
+            // request body intentionally ignored in lightweight local responder
+          });
+
+          req.on('end', () => {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(payload);
+          });
+        }).listen(4350, '0.0.0.0');
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - |
+          fetch('http://127.0.0.1:4350/graphql', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: 'query { __typename }' }),
+          })
+            .then((response) => process.exit(response.ok ? 0 : 1))
+            .catch(() => process.exit(1));
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ricardian:
+    profiles: ["all", "ricardian"]
+    build:
+      context: .
+      dockerfile: ricardian/Dockerfile
+    env_file:
+      - ./env/ricardian.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3100:3100"
+
+  treasury:
+    profiles: ["all", "treasury"]
+    build:
+      context: .
+      dockerfile: treasury/Dockerfile
+    env_file:
+      - ./env/treasury.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      indexer:
+        condition: service_healthy
+    ports:
+      - "3200:3200"
+
+  reconciliation:
+    profiles: ["all", "reconciliation"]
+    build:
+      context: .
+      dockerfile: reconciliation/Dockerfile
+    env_file:
+      - ./env/reconciliation.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      indexer:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  redis-data:

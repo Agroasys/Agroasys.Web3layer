@@ -24,3 +24,6 @@ When `AUTH_ENABLED=true`, all endpoints except health require:
 
 Canonical string format:
 `METHOD\nPATH\nQUERY\nBODY_SHA256\nTIMESTAMP\nNONCE`
+
+## Docker
+See `docs/docker-services.md` for compose profiles and runtime operations.

@@ -1,12 +1,20 @@
 import { RequestHandler, Router } from 'express';
 import { RicardianController } from './controller';
 
-export function createRouter(controller: RicardianController, authMiddleware?: RequestHandler): Router {
+export function createRouter(
+  controller: RicardianController,
+  authMiddleware?: RequestHandler,
+  rateLimitMiddleware?: RequestHandler,
+): Router {
   const router = Router();
 
   router.get('/health', (_, res) => {
     res.status(200).json({ success: true, service: 'ricardian', timestamp: new Date().toISOString() });
   });
+
+  if (rateLimitMiddleware) {
+    router.use(rateLimitMiddleware);
+  }
 
   if (authMiddleware) {
     router.use(authMiddleware);
