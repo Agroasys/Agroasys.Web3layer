@@ -9,7 +9,8 @@
     "sdk",
     "reconciliation",
     "notifications",
-    "ricardian"
+    "ricardian",
+    "treasury"
   ],
   "scripts": {
     "lint": "npm run lint --workspaces --if-present"
