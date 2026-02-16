@@ -50,8 +50,13 @@ processor.run(new TypeormDatabase(), async (ctx) => {
                 const eventId = event.id;
                 const timestamp = new Date(block.header.timestamp || 0);
                 const extrinsic = block.extrinsics.find(e => e.index === event.extrinsicIndex);
-                const txHash = extractEvmTxHash(extrinsic) || 'unknown';
+                const extractedTxHash = extractEvmTxHash(extrinsic);
+                const txHash = extractedTxHash || extrinsic?.hash || 'unknown';
                 const extrinsicIndex = event.extrinsicIndex || 0;
+
+                if (!extractedTxHash) {
+                    ctx.log.warn(`Using tx hash fallback at block ${block.header.height} eventId=${eventId} extrinsicIndex=${event.extrinsicIndex ?? 'n/a'} extrinsicHash=${extrinsic?.hash || 'unknown'}`);
+                }
 
                 switch (decoded.name) {
                     // Trade events

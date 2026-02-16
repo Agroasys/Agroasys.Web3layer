@@ -67,4 +67,4 @@ volumes:
 networks:
   indexer-network:
   shared-network:
-    external: true
+    name: agroasys-shared-network

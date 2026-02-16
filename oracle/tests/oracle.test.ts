@@ -1,7 +1,10 @@
 import axios from 'axios';
 import { generateRequestHash, verifyRequestSignature } from '../src/utils/crypto';
 
-describe.skip('Oracle request signing', () => {
+const runManualE2E = process.env.RUN_MANUAL_E2E === 'true';
+const describeManual = runManualE2E ? describe : describe.skip;
+
+describe('Oracle request signing', () => {
     test('should generate and verify a valid request signature', () => {
         const timestamp = Date.now().toString();
         const body = JSON.stringify({ tradeId: '7', requestId: 'req-1' });
@@ -27,7 +30,7 @@ describe.skip('Oracle request signing', () => {
     });
 });
 
-describe('Oracle API integration (manual)', () => {
+describeManual('Oracle API integration (manual)', () => {
     const API_URL = process.env.ORACLE_API_URL || 'http://localhost:3001/api/oracle';
     const API_KEY = process.env.API_KEY || '';
     const HMAC_SECRET = process.env.HMAC_SECRET || '';
@@ -45,7 +48,7 @@ describe('Oracle API integration (manual)', () => {
         };
     }
 
-    test.skip('release-stage1 endpoint accepts signed request', async () => {
+    test('release-stage1 endpoint accepts signed request', async () => {
         const payload = { tradeId: '1', requestId: `test-${Date.now()}` };
 
         const response = await axios.post(
@@ -75,7 +78,7 @@ describe('Oracle API integration (manual)', () => {
         expect(response.data.success).toBe(true);
     });
 
-    test.skip('/finalize-trade endpoint accepts signed request', async () => {
+    test('/finalize-trade endpoint accepts signed request', async () => {
         const payload = { tradeId: '0', requestId: `test-${Date.now()}` };
 
         const response = await axios.post(

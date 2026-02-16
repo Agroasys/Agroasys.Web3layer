@@ -8,7 +8,10 @@
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
     "test": "jest --runInBand",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "build:sdk": "npm --prefix ../sdk run build",
+    "prebuild": "npm run build:sdk",
+    "prelint": "npm run build:sdk"
   },
   "dependencies": {
     "express": "^5.2.1",
