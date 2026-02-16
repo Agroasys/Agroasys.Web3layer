@@ -1,0 +1,45 @@
+[
+  {
+    "name": "stable-object-sort",
+    "input": {
+      "documentRef": "s3://bucket/trade-1.pdf",
+      "terms": {
+        "incoterms": "FOB",
+        "payment": {
+          "currency": "USDC",
+          "amount": 107000
+        },
+        "parties": {
+          "supplier": "0x2222222222222222222222222222222222222222",
+          "buyer": "0x1111111111111111111111111111111111111111"
+        }
+      },
+      "metadata": {
+        "tradeId": "42",
+        "version": 1
+      }
+    },
+    "expectedCanonicalJson": "{\"documentRef\":\"s3://bucket/trade-1.pdf\",\"metadata\":{\"tradeId\":\"42\",\"version\":1},\"terms\":{\"incoterms\":\"FOB\",\"parties\":{\"buyer\":\"0x1111111111111111111111111111111111111111\",\"supplier\":\"0x2222222222222222222222222222222222222222\"},\"payment\":{\"amount\":107000,\"currency\":\"USDC\"}}}"
+  },
+  {
+    "name": "array-order-preserved",
+    "input": {
+      "documentRef": "doc://shipment/abc",
+      "terms": {
+        "steps": [
+          "LOCKED",
+          "IN_TRANSIT",
+          "ARRIVAL_CONFIRMED"
+        ],
+        "fees": {
+          "platform": 2000,
+          "logistics": 5000
+        }
+      },
+      "metadata": {
+        "pilot": true
+      }
+    },
+    "expectedCanonicalJson": "{\"documentRef\":\"doc://shipment/abc\",\"metadata\":{\"pilot\":true},\"terms\":{\"fees\":{\"logistics\":5000,\"platform\":2000},\"steps\":[\"LOCKED\",\"IN_TRANSIT\",\"ARRIVAL_CONFIRMED\"]}}"
+  }
+]

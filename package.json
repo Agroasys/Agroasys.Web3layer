@@ -8,7 +8,9 @@
     "oracle",
     "sdk",
     "reconciliation",
-    "notifications"
+    "notifications",
+    "ricardian",
+    "treasury"
   ],
   "scripts": {
     "lint": "npm run lint --workspaces --if-present"
