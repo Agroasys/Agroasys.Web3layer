@@ -10,3 +10,6 @@ Deterministic canonicalization and SHA-256 hashing service for Ricardian payload
 - Canonicalization rules are versioned (`RICARDIAN_CANONICAL_V1`).
 - Hashes and metadata are persisted for auditability.
 - Service does not perform legal interpretation.
+
+## Docker
+See `docs/docker-services.md` for compose profiles and runtime operations.

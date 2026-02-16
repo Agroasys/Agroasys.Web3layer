@@ -1,0 +1,48 @@
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+COPY package*.json ./
+COPY reconciliation/package.json reconciliation/package.json
+COPY sdk/package.json sdk/package.json
+COPY notifications/package.json notifications/package.json
+
+RUN npm ci
+
+COPY notifications notifications
+COPY sdk sdk
+COPY reconciliation reconciliation
+
+RUN npm run -w @agroasys/notifications build \
+  && npm run -w @agroasys/sdk build \
+  && npm run -w reconciliation build
+
+FROM node:20-alpine AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+
+COPY package*.json ./
+COPY reconciliation/package.json reconciliation/package.json
+COPY sdk/package.json sdk/package.json
+COPY notifications/package.json notifications/package.json
+
+RUN npm ci --omit=dev \
+  --workspace @agroasys/notifications \
+  --workspace @agroasys/sdk \
+  --workspace reconciliation \
+  --include-workspace-root=false \
+  && npm cache clean --force
+
+COPY --from=builder /app/notifications/dist /app/notifications/dist
+COPY --from=builder /app/sdk/dist /app/sdk/dist
+COPY --from=builder /app/reconciliation/dist /app/reconciliation/dist
+COPY --from=builder /app/reconciliation/src/database/schema.sql /app/reconciliation/src/database/schema.sql
+
+RUN addgroup -S agro && adduser -S agro -G agro \
+  && chown -R agro:agro /app
+
+USER agro
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+  CMD node reconciliation/dist/healthcheck.js
+
+CMD ["node", "reconciliation/dist/cli.js", "daemon"]

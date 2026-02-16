@@ -19,3 +19,12 @@ npm run reconcile:once
 ```
 
 Daemon mode is disabled by default. Set `RECONCILIATION_ENABLED=true` to run continuously.
+
+## Healthcheck
+After building, run:
+```bash
+npm run healthcheck
+```
+
+## Docker
+See `docs/docker-services.md` for compose profiles, build/up/down/logs, and health verification.
