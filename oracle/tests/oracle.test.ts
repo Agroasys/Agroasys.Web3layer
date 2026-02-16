@@ -46,7 +46,7 @@ describe('Oracle API integration (manual)', () => {
     }
 
     test.skip('release-stage1 endpoint accepts signed request', async () => {
-        const payload = { tradeId: '3', requestId: `test-${Date.now()}` };
+        const payload = { tradeId: '1', requestId: `test-${Date.now()}` };
 
         const response = await axios.post(
             `${API_URL}/release-stage1`,
@@ -61,7 +61,7 @@ describe('Oracle API integration (manual)', () => {
     });
 
     test('confirm-arrival endpoint accepts signed request', async () => {
-        const payload = { tradeId: '3', requestId: `test-${Date.now()}` };
+        const payload = { tradeId: '1', requestId: `test-${Date.now()}` };
 
         const response = await axios.post(
             `${API_URL}/confirm-arrival`,
