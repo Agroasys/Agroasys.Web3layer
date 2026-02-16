@@ -1,6 +1,10 @@
 import { config } from '../config';
 import { IndexerClient } from '../indexer/client';
-import { appendPayoutState, insertLedgerEntry } from '../database/queries';
+import {
+  getIngestionOffset,
+  setIngestionOffset,
+  upsertLedgerEntryWithInitialState,
+} from '../database/queries';
 import { Logger } from '../utils/logger';
 
 function buildEntryKey(eventId: string, component: 'LOGISTICS' | 'PLATFORM_FEE'): string {
@@ -11,7 +15,7 @@ export class TreasuryIngestionService {
   private readonly indexerClient = new IndexerClient(config.indexerGraphqlUrl);
 
   async ingestOnce(): Promise<{ fetched: number; inserted: number }> {
-    let offset = 0;
+    let offset = await getIngestionOffset();
     let fetched = 0;
     let inserted = 0;
 
@@ -28,7 +32,7 @@ export class TreasuryIngestionService {
         fetched += 1;
 
         if (event.eventName === 'FundsReleasedStage1' && event.releasedLogisticsAmount) {
-          const entry = await insertLedgerEntry({
+          const { initialStateCreated } = await upsertLedgerEntryWithInitialState({
             entryKey: buildEntryKey(event.id, 'LOGISTICS'),
             tradeId: event.tradeId,
             txHash: event.txHash,
@@ -40,19 +44,13 @@ export class TreasuryIngestionService {
             metadata: { sourceEventId: event.id },
           });
 
-          if (entry) {
-            await appendPayoutState({
-              ledgerEntryId: entry.id,
-              state: 'PENDING_REVIEW',
-              note: 'Auto-created from indexer ingestion',
-              actor: 'system:indexer-ingest',
-            });
+          if (initialStateCreated) {
             inserted += 1;
           }
         }
 
         if (event.eventName === 'PlatformFeesPaidStage1' && event.paidPlatformFees) {
-          const entry = await insertLedgerEntry({
+          const { initialStateCreated } = await upsertLedgerEntryWithInitialState({
             entryKey: buildEntryKey(event.id, 'PLATFORM_FEE'),
             tradeId: event.tradeId,
             txHash: event.txHash,
@@ -64,13 +62,7 @@ export class TreasuryIngestionService {
             metadata: { sourceEventId: event.id },
           });
 
-          if (entry) {
-            await appendPayoutState({
-              ledgerEntryId: entry.id,
-              state: 'PENDING_REVIEW',
-              note: 'Auto-created from indexer ingestion',
-              actor: 'system:indexer-ingest',
-            });
+          if (initialStateCreated) {
             inserted += 1;
           }
         }
@@ -82,7 +74,9 @@ export class TreasuryIngestionService {
       }
     }
 
-    Logger.info('Treasury ingestion run completed', { fetched, inserted });
+    await setIngestionOffset(offset);
+
+    Logger.info('Treasury ingestion run completed', { fetched, inserted, nextOffset: offset });
 
     return { fetched, inserted };
   }
