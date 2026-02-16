@@ -1,3 +1,4 @@
+import { WebhookNotifier } from '@agroasys/notifications';
 import { IndexerClient } from '../blockchain/indexer-client';
 import { getTriggersByStatus, updateTrigger } from '../database/queries';
 import { TriggerStatus } from '../types/trigger';
@@ -12,7 +13,7 @@ export class ConfirmationWorker {
     private isRunning = false;
     private intervalId?: NodeJS.Timeout;
 
-    constructor(private indexerClient: IndexerClient) {}
+    constructor(private indexerClient: IndexerClient, private notifier?: WebhookNotifier) {}
 
     start(): void {
         if (this.isRunning) {
@@ -74,6 +75,31 @@ export class ConfirmationWorker {
         }
     }
 
+    private async notifyTimeout(trigger: any, ageMinutes: string): Promise<void> {
+        if (!this.notifier) {
+            return;
+        }
+
+        await this.notifier.notify({
+            source: 'oracle',
+            type: 'ORACLE_CONFIRMATION_TIMEOUT',
+            severity: 'critical',
+            dedupKey: 'oracle:confirmation-timeout:' + trigger.action_key,
+            message: 'Confirmation timeout exceeded hard limit and trigger moved to EXHAUSTED_NEEDS_REDRIVE.',
+            correlation: {
+                tradeId: trigger.trade_id,
+                actionKey: trigger.action_key,
+                requestId: trigger.request_id,
+                txHash: trigger.tx_hash,
+            },
+            metadata: {
+                ageMinutes,
+                triggerType: trigger.trigger_type,
+                idempotencyKey: trigger.idempotency_key,
+            },
+        });
+    }
+
     private async checkConfirmation(trigger: any): Promise<void> {
         try {
             if (!trigger.tx_hash) {
@@ -116,6 +142,8 @@ export class ConfirmationWorker {
                     last_error: `Confirmation timeout after ${ageMinutes.toFixed(1)} minutes. Transaction may have failed or indexer is lagging. Re-drive will verify on-chain status.`,
                     error_type: 'INDEXER_LAG' as any,
                 });
+
+                await this.notifyTimeout(trigger, ageMinutes.toFixed(1));
 
                 Logger.audit('CONFIRMATION_TIMEOUT_NEEDS_REDRIVE', trigger.trade_id, {
                     idempotencyKey: trigger.idempotency_key,

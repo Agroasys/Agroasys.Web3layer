@@ -10,15 +10,37 @@ function validateEnv(name: string): string {
     return value;
 }
 
-function validateEnvNumber(name: string): number {
-    const value = validateEnv(name);
-    const num = parseInt(value, 10);
+function validateEnvNumber(name: string, fallback?: number): number {
+    const value = process.env[name];
+    if ((value === undefined || value === '') && fallback !== undefined) {
+        return fallback;
+    }
+
+    const required = value ?? validateEnv(name);
+    const num = parseInt(required, 10);
     assert(!isNaN(num), `${name} must be a number`);
     return num;
 }
 
+function validateEnvBool(name: string, fallback: boolean): boolean {
+    const value = process.env[name];
+
+    if (!value) {
+        return fallback;
+    }
+
+    return value.toLowerCase() === 'true';
+}
+
 export function loadConfig(): OracleConfig {
     try {
+        const notificationsEnabled = validateEnvBool('NOTIFICATIONS_ENABLED', false);
+        const notificationsWebhookUrl = process.env.NOTIFICATIONS_WEBHOOK_URL;
+
+        if (notificationsEnabled) {
+            assert(notificationsWebhookUrl, 'NOTIFICATIONS_WEBHOOK_URL is required when NOTIFICATIONS_ENABLED=true');
+        }
+
         const config: OracleConfig = {
             // server
             port: validateEnvNumber('PORT'),
@@ -45,7 +67,16 @@ export function loadConfig(): OracleConfig {
             // retry
             retryAttempts: validateEnvNumber('RETRY_ATTEMPTS'),
             retryDelay: validateEnvNumber('RETRY_DELAY'),
+
+            // notifications
+            notificationsEnabled,
+            notificationsWebhookUrl,
+            notificationsCooldownMs: validateEnvNumber('NOTIFICATIONS_COOLDOWN_MS', 300000),
+            notificationsRequestTimeoutMs: validateEnvNumber('NOTIFICATIONS_REQUEST_TIMEOUT_MS', 5000),
         };
+
+        assert(config.notificationsCooldownMs >= 0, 'NOTIFICATIONS_COOLDOWN_MS must be >= 0');
+        assert(config.notificationsRequestTimeoutMs >= 1000, 'NOTIFICATIONS_REQUEST_TIMEOUT_MS must be >= 1000');
         
         return config;
     } catch (error) {
