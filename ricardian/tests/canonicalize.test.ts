@@ -59,4 +59,25 @@ describe('Ricardian deterministic hash vectors', () => {
     expect(resultA.canonicalJson).toBe(resultB.canonicalJson);
     expect(resultA.hash).toBe(resultB.hash);
   });
+
+  test('preserves __proto__ key as canonical data field', () => {
+    const payloadWithProto = {
+      documentRef: 'doc://proto',
+      terms: JSON.parse('{"amount":1,"__proto__":{"polluted":true}}') as Record<string, unknown>,
+      metadata: {},
+    };
+
+    const payloadWithoutProto = {
+      documentRef: 'doc://proto',
+      terms: { amount: 1 },
+      metadata: {},
+    };
+
+    const withProto = buildRicardianHash(payloadWithProto);
+    const withoutProto = buildRicardianHash(payloadWithoutProto);
+
+    expect(withProto.canonicalJson).toContain('"__proto__"');
+    expect(withProto.canonicalJson).not.toBe(withoutProto.canonicalJson);
+    expect(withProto.hash).not.toBe(withoutProto.hash);
+  });
 });

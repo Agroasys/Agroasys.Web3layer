@@ -16,14 +16,20 @@ function canonicalizeArray(value: unknown[]): CanonicalValue[] {
 
 function canonicalizeObject(value: Record<string, unknown>): CanonicalObject {
   const sortedKeys = Object.keys(value).sort();
-  const result: CanonicalObject = {};
+  const result = Object.create(null) as CanonicalObject;
 
   for (const key of sortedKeys) {
     const raw = value[key];
     if (raw === undefined) {
       continue;
     }
-    result[key] = canonicalize(raw);
+
+    Object.defineProperty(result, key, {
+      value: canonicalize(raw),
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
   }
 
   return result;

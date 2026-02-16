@@ -18,10 +18,20 @@ function mapRowToResponse(row: any): RicardianHashResponse {
 
 export class RicardianController {
   async createHash(req: Request<{}, {}, RicardianHashRequest>, res: Response): Promise<void> {
-    try {
-      const payload = req.body;
-      const hashed = buildRicardianHash(payload);
+    const payload = req.body;
 
+    let hashed;
+    try {
+      hashed = buildRicardianHash(payload);
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        error: error?.message || 'Invalid Ricardian payload',
+      });
+      return;
+    }
+
+    try {
       const row = await createRicardianHash({
         requestId: hashed.requestId,
         documentRef: hashed.documentRef,
@@ -36,9 +46,9 @@ export class RicardianController {
         data: mapRowToResponse(row),
       });
     } catch (error: any) {
-      res.status(400).json({
+      res.status(500).json({
         success: false,
-        error: error?.message || 'Failed to generate Ricardian hash',
+        error: error?.message || 'Failed to persist Ricardian hash',
       });
     }
   }
