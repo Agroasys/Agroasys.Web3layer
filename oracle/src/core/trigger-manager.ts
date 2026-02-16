@@ -5,6 +5,7 @@ import {createTrigger,getTriggerByIdempotencyKey,getLatestTriggerByActionKey,upd
 import {generateActionKey,generateRequestId,generateIdempotencyKey,calculateBackoff,} from '../utils/crypto';
 import {classifyError,determineNextStatus,OracleError,ValidationError,} from '../utils/errors';
 import { Logger } from '../utils/logger';
+import { WebhookNotifier } from '@agroasys/notifications';
 
 export interface TriggerRequest {
     tradeId: string;
@@ -28,7 +29,8 @@ export class TriggerManager {
     constructor(
         private sdkClient: SDKClient,
         private maxAttempts: number = 5,
-        private baseDelayMs: number = 1000
+        private baseDelayMs: number = 1000,
+        private notifier?: WebhookNotifier
     ) {}
 
     async executeTrigger(request: TriggerRequest): Promise<TriggerResponse> {
@@ -314,6 +316,7 @@ export class TriggerManager {
                 });
 
                 if (nextStatus === TriggerStatus.TERMINAL_FAILURE) {
+                    await this.notifyTerminalStatus(trigger, actionKey, nextStatus, oracleError.message, attempt);
                     return {
                         idempotencyKey: trigger.idempotency_key,
                         actionKey,
@@ -324,12 +327,15 @@ export class TriggerManager {
                 }
 
                 if (nextStatus === TriggerStatus.EXHAUSTED_NEEDS_REDRIVE) {
+                    const exhaustedMessage =
+                        "Exhausted " + this.maxAttempts + " attempts: " + oracleError.message + ". Use re-drive endpoint to retry.";
+                    await this.notifyTerminalStatus(trigger, actionKey, nextStatus, exhaustedMessage, attempt);
                     return {
                         idempotencyKey: trigger.idempotency_key,
                         actionKey,
                         requestId: trigger.request_id,
                         status: nextStatus,
-                        message: `Exhausted ${this.maxAttempts} attempts: ${oracleError.message}. Use re-drive endpoint to retry.`,
+                        message: exhaustedMessage,
                     };
                 }
 
@@ -351,6 +357,43 @@ export class TriggerManager {
         }
 
         throw new Error('Unexpected retry loop exit');
+    }
+
+    private async notifyTerminalStatus(
+        trigger: Trigger,
+        actionKey: string,
+        status: TriggerStatus,
+        message: string,
+        attempt: number
+    ): Promise<void> {
+        if (!this.notifier) {
+            return;
+        }
+
+        const eventType =
+            status === TriggerStatus.TERMINAL_FAILURE
+                ? 'ORACLE_TRIGGER_TERMINAL_FAILURE'
+                : 'ORACLE_TRIGGER_EXHAUSTED_NEEDS_REDRIVE';
+
+        await this.notifier.notify({
+            source: 'oracle',
+            type: eventType,
+            severity: 'critical',
+            dedupKey: 'oracle:' + status + ':' + actionKey,
+            message,
+            correlation: {
+                tradeId: trigger.trade_id,
+                actionKey,
+                requestId: trigger.request_id,
+                txHash: trigger.tx_hash || undefined,
+            },
+            metadata: {
+                triggerType: trigger.trigger_type,
+                status,
+                attempt,
+                maxAttempts: this.maxAttempts,
+            },
+        });
     }
 
     private async executeBlockchainAction(

@@ -1,0 +1,25 @@
+{
+  "name": "reconciliation",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/cli.js",
+  "scripts": {
+    "build": "tsc",
+    "lint": "tsc --noEmit",
+    "reconcile:once": "ts-node src/cli.ts once",
+    "reconcile:daemon": "ts-node src/cli.ts daemon"
+  },
+  "dependencies": {
+    "@agroasys/sdk": "^1.0.0",
+    "dotenv": "^16.4.5",
+    "pg": "^8.18.0",
+    "@agroasys/notifications": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "@types/pg": "^8.10.9",
+    "ts-node": "^10.9.2",
+    "typescript": ">=4.5.0"
+  },
+  "license": "Apache-2.0"
+}
