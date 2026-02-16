@@ -96,6 +96,29 @@ export function signServiceAuthCanonicalString(secret: string, canonicalString: 
   return crypto.createHmac('sha256', secret).update(canonicalString).digest('hex');
 }
 
+function parseActiveFlag(rawActive: unknown, index: number): boolean {
+  if (rawActive === undefined) {
+    return true;
+  }
+
+  if (typeof rawActive === 'boolean') {
+    return rawActive;
+  }
+
+  if (typeof rawActive === 'string') {
+    const normalized = rawActive.trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+
+    if (normalized === 'false') {
+      return false;
+    }
+  }
+
+  throw new Error(`API_KEYS_JSON[${index}].active must be a boolean`);
+}
+
 export function parseServiceApiKeys(raw: string | undefined): ServiceApiKey[] {
   if (!raw || !raw.trim()) {
     return [];
@@ -120,7 +143,7 @@ export function parseServiceApiKeys(raw: string | undefined): ServiceApiKey[] {
     const candidate = entry as Record<string, unknown>;
     const id = typeof candidate.id === 'string' ? candidate.id.trim() : '';
     const secret = typeof candidate.secret === 'string' ? candidate.secret.trim() : '';
-    const active = candidate.active === undefined ? true : Boolean(candidate.active);
+    const active = parseActiveFlag(candidate.active, index);
 
     if (!id) {
       throw new Error(`API_KEYS_JSON[${index}].id is required`);

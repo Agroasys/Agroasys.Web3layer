@@ -3,6 +3,7 @@ import { NextFunction, Request, Response } from 'express';
 import {
   buildServiceAuthCanonicalString,
   createServiceAuthMiddleware,
+  parseServiceApiKeys,
   signServiceAuthCanonicalString,
 } from '../src/auth/serviceAuth';
 
@@ -229,4 +230,19 @@ describe('service auth middleware (treasury)', () => {
     expect(response.status).toHaveBeenCalledWith(403);
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'API key is inactive' }));
   });
+  test('parseServiceApiKeys parses string false into inactive key', () => {
+    const parsed = parseServiceApiKeys(
+      JSON.stringify([{ id: 'svc-string-inactive', secret: 'secret', active: 'false' }])
+    );
+
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].active).toBe(false);
+  });
+
+  test('parseServiceApiKeys rejects invalid active value', () => {
+    expect(() =>
+      parseServiceApiKeys(JSON.stringify([{ id: 'svc-invalid', secret: 'secret', active: 'not-a-boolean' }]))
+    ).toThrow('API_KEYS_JSON[0].active must be a boolean');
+  });
+
 });
