@@ -3,7 +3,7 @@ import { Logger } from './utils/logger';
 import { closeConnection, testConnection } from './database/connection';
 import { runMigrations } from './database/migrations';
 import { ReconciliationService } from './core/reconciler';
-import { assertRpcEndpointReachable } from './blockchain/rpc-preflight';
+import { assertRpcEndpointReachable, redactRpcUrlForLogs } from './blockchain/rpc-preflight';
 
 type Mode = 'once' | 'daemon';
 
@@ -34,7 +34,7 @@ async function bootstrap(): Promise<void> {
   await runMigrations();
 
   Logger.info('Validating RPC endpoint for reconciliation startup', {
-    rpcUrl: config.rpcUrl,
+    rpcUrl: redactRpcUrlForLogs(config.rpcUrl),
   });
   await assertRpcEndpointReachable(config.rpcUrl);
 

@@ -9,8 +9,27 @@ interface JsonRpcSuccess {
   };
 }
 
+export function redactRpcUrlForLogs(rpcUrl: string): string {
+  try {
+    const parsed = new URL(rpcUrl);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return '[invalid-rpc-url]';
+  }
+}
+
+function sanitizeReason(reason: string, rpcUrl: string): string {
+  const redactedRpcUrl = redactRpcUrlForLogs(rpcUrl);
+  return reason
+    .split(rpcUrl)
+    .join(redactedRpcUrl)
+    .replace(/https?:\/\/[^\s)]+/gi, '[redacted-url]');
+}
+
 function formatRpcFailureMessage(rpcUrl: string, reason: string): string {
-  return `RPC endpoint is not reachable at startup (RPC_URL=${rpcUrl}). Start a JSON-RPC node or update RPC_URL. Reason: ${reason}`;
+  const redactedRpcUrl = redactRpcUrlForLogs(rpcUrl);
+  const safeReason = sanitizeReason(reason, rpcUrl);
+  return `RPC endpoint is not reachable at startup (RPC_URL=${redactedRpcUrl}). Start a JSON-RPC node or update RPC_URL. Reason: ${safeReason}`;
 }
 
 export async function assertRpcEndpointReachable(

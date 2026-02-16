@@ -2,12 +2,11 @@ services:
   postgres:
     image: postgres:16-alpine
     profiles: ["all", "infra"]
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: agroasys
+    env_file:
+      - ./env/postgres.env
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init/10-service-databases.sql:/docker-entrypoint-initdb.d/10-service-databases.sql:ro
     ports:
       - "5432:5432"
     healthcheck:
@@ -47,9 +46,8 @@ services:
             return;
           }
 
-          let body = '';
-          req.on('data', (chunk) => {
-            body += chunk;
+          req.on('data', () => {
+            // request body intentionally ignored in lightweight local responder
           });
 
           req.on('end', () => {
@@ -79,13 +77,8 @@ services:
     build:
       context: .
       dockerfile: ricardian/Dockerfile
-    environment:
-      PORT: 3100
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: agroasys_ricardian
-      DB_USER: postgres
-      DB_PASSWORD: postgres
+    env_file:
+      - ./env/ricardian.env
     depends_on:
       postgres:
         condition: service_healthy
@@ -97,16 +90,8 @@ services:
     build:
       context: .
       dockerfile: treasury/Dockerfile
-    environment:
-      PORT: 3200
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: agroasys_treasury
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      INDEXER_GRAPHQL_URL: http://indexer:4350/graphql
-      TREASURY_INGEST_BATCH_SIZE: 100
-      TREASURY_INGEST_MAX_EVENTS: 2000
+    env_file:
+      - ./env/treasury.env
     depends_on:
       postgres:
         condition: service_healthy
@@ -120,27 +105,8 @@ services:
     build:
       context: .
       dockerfile: reconciliation/Dockerfile
-    environment:
-      RECONCILIATION_ENABLED: true
-      RECONCILIATION_DAEMON_INTERVAL_MS: 60000
-      RECONCILIATION_BATCH_SIZE: 100
-      RECONCILIATION_MAX_TRADES_PER_RUN: 1000
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: agroasys_reconciliation
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      # Required startup dependency: must point to a reachable JSON-RPC endpoint.
-      # Default assumes local host RPC is available on port 8545.
-      RPC_URL: http://host.docker.internal:8545
-      CHAIN_ID: 31337
-      ESCROW_ADDRESS: "0x0000000000000000000000000000000000000000"
-      USDC_ADDRESS: "0x0000000000000000000000000000000000000000"
-      INDEXER_GRAPHQL_URL: http://indexer:4350/graphql
-      NOTIFICATIONS_ENABLED: false
-      NOTIFICATIONS_WEBHOOK_URL: ""
-      NOTIFICATIONS_COOLDOWN_MS: 300000
-      NOTIFICATIONS_REQUEST_TIMEOUT_MS: 5000
+    env_file:
+      - ./env/reconciliation.env
     depends_on:
       postgres:
         condition: service_healthy
