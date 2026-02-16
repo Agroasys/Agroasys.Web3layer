@@ -45,7 +45,7 @@ interface RateLimiterOptions {
 
 interface CallerContext {
   key: string;
-  keyType: 'api_key' | 'ip';
+  keyType: 'ip';
   fingerprint: string;
 }
 
@@ -147,15 +147,6 @@ function fingerprint(value: string): string {
 }
 
 function callerContext(req: Request): CallerContext {
-  const apiKey = req.header('X-Api-Key');
-  if (apiKey) {
-    return {
-      key: `api:${apiKey}`,
-      keyType: 'api_key',
-      fingerprint: fingerprint(apiKey),
-    };
-  }
-
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   return {
     key: `ip:${ip}`,
@@ -164,16 +155,27 @@ function callerContext(req: Request): CallerContext {
   };
 }
 
+function normalizeRoutePath(path: string): string {
+  if (path.length <= 1) {
+    return path;
+  }
+
+  const normalized = path.replace(/\/+$/, '');
+  return normalized.length === 0 ? '/' : normalized;
+}
+
 function routeKind(req: Request): 'write' | 'read' | null {
-  if (req.path === '/health') {
+  const path = normalizeRoutePath(req.path);
+
+  if (path === '/health') {
     return null;
   }
 
-  if (req.method.toUpperCase() === 'POST' && req.path === '/hash') {
+  if (req.method.toUpperCase() === 'POST' && path === '/hash') {
     return 'write';
   }
 
-  if (req.method.toUpperCase() === 'GET' && req.path.startsWith('/hash/')) {
+  if (req.method.toUpperCase() === 'GET' && path.startsWith('/hash/')) {
     return 'read';
   }
 

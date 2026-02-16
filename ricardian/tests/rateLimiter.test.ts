@@ -15,7 +15,7 @@ function createMockResponse(): MockResponse {
   return response;
 }
 
-function createRequest(path: string, method: string = 'POST', apiKey?: string): Request {
+function createRequest(path: string, method: string = 'POST', apiKey?: string, ip: string = '127.0.0.1'): Request {
   return {
     method,
     path,
@@ -25,9 +25,9 @@ function createRequest(path: string, method: string = 'POST', apiKey?: string): 
       }
       return undefined;
     },
-    ip: '127.0.0.1',
+    ip,
     socket: {
-      remoteAddress: '127.0.0.1',
+      remoteAddress: ip,
     },
   } as unknown as Request;
 }
@@ -155,4 +155,65 @@ describe('ricardian rate limiter', () => {
 
     await limiter.close();
   });
+  test('write limiter applies to trailing slash hash route', async () => {
+    const limiter = await createRicardianRateLimiter({
+      config: {
+        enabled: true,
+        nodeEnv: 'development',
+        writeRoute: {
+          burst: { limit: 1, windowSeconds: 10 },
+          sustained: { limit: 10, windowSeconds: 60 },
+        },
+        readRoute: {
+          burst: { limit: 4, windowSeconds: 10 },
+          sustained: { limit: 30, windowSeconds: 60 },
+        },
+      },
+      logger,
+      nowSeconds: () => 1700000000,
+    });
+
+    const req = createRequest('/hash/', 'POST', 'svc-a');
+
+    await limiter.middleware(req, createMockResponse(), jest.fn() as NextFunction);
+
+    const blockedResponse = createMockResponse();
+    await limiter.middleware(req, blockedResponse, jest.fn() as NextFunction);
+
+    expect(blockedResponse.status).toHaveBeenCalledWith(429);
+
+    await limiter.close();
+  });
+
+  test('write limiter identity does not trust unauthenticated X-Api-Key rotation', async () => {
+    const limiter = await createRicardianRateLimiter({
+      config: {
+        enabled: true,
+        nodeEnv: 'development',
+        writeRoute: {
+          burst: { limit: 1, windowSeconds: 10 },
+          sustained: { limit: 10, windowSeconds: 60 },
+        },
+        readRoute: {
+          burst: { limit: 4, windowSeconds: 10 },
+          sustained: { limit: 30, windowSeconds: 60 },
+        },
+      },
+      logger,
+      nowSeconds: () => 1700000000,
+    });
+
+    const firstReq = createRequest('/hash', 'POST', 'svc-a', '127.0.0.1');
+    const secondReq = createRequest('/hash', 'POST', 'svc-b', '127.0.0.1');
+
+    await limiter.middleware(firstReq, createMockResponse(), jest.fn() as NextFunction);
+
+    const blockedResponse = createMockResponse();
+    await limiter.middleware(secondReq, blockedResponse, jest.fn() as NextFunction);
+
+    expect(blockedResponse.status).toHaveBeenCalledWith(429);
+
+    await limiter.close();
+  });
+
 });
