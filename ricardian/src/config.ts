@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { strict as assert } from 'assert';
+import { parseServiceApiKeys, ServiceApiKey } from './auth/serviceAuth';
 
 dotenv.config();
 
@@ -10,6 +11,10 @@ export interface RicardianConfig {
   dbName: string;
   dbUser: string;
   dbPassword: string;
+  authEnabled: boolean;
+  apiKeys: ServiceApiKey[];
+  authMaxSkewSeconds: number;
+  authNonceTtlSeconds: number;
   rateLimitEnabled: boolean;
   rateLimitRedisUrl?: string;
   rateLimitWriteBurstLimit: number;
@@ -58,6 +63,13 @@ function envNumber(name: string, fallback?: number): number {
 }
 
 export function loadConfig(): RicardianConfig {
+  const authEnabled = envBool('AUTH_ENABLED', false);
+  const apiKeys = parseServiceApiKeys(process.env.API_KEYS_JSON);
+
+  if (authEnabled) {
+    assert(apiKeys.length > 0, 'API_KEYS_JSON must contain at least one API key when AUTH_ENABLED=true');
+  }
+
   const rateLimitEnabled = envBool('RATE_LIMIT_ENABLED', false);
 
   const config: RicardianConfig = {
@@ -67,6 +79,10 @@ export function loadConfig(): RicardianConfig {
     dbName: env('DB_NAME'),
     dbUser: env('DB_USER'),
     dbPassword: env('DB_PASSWORD'),
+    authEnabled,
+    apiKeys,
+    authMaxSkewSeconds: envNumber('AUTH_MAX_SKEW_SECONDS', 300),
+    authNonceTtlSeconds: envNumber('AUTH_NONCE_TTL_SECONDS', 600),
     rateLimitEnabled,
     rateLimitRedisUrl: process.env.RATE_LIMIT_REDIS_URL,
     rateLimitWriteBurstLimit: envNumber('RATE_LIMIT_WRITE_BURST_LIMIT', 10),
@@ -79,6 +95,8 @@ export function loadConfig(): RicardianConfig {
     rateLimitReadSustainedWindowSeconds: envNumber('RATE_LIMIT_READ_SUSTAINED_WINDOW_SECONDS', 60),
   };
 
+  assert(config.authMaxSkewSeconds > 0, 'AUTH_MAX_SKEW_SECONDS must be > 0');
+  assert(config.authNonceTtlSeconds > 0, 'AUTH_NONCE_TTL_SECONDS must be > 0');
   assert(config.rateLimitWriteBurstLimit > 0, 'RATE_LIMIT_WRITE_BURST_LIMIT must be > 0');
   assert(config.rateLimitWriteBurstWindowSeconds > 0, 'RATE_LIMIT_WRITE_BURST_WINDOW_SECONDS must be > 0');
   assert(config.rateLimitWriteSustainedLimit > 0, 'RATE_LIMIT_WRITE_SUSTAINED_LIMIT must be > 0');

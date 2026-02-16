@@ -8,6 +8,8 @@ import { closeConnection, testConnection } from './database/connection';
 import { runMigrations } from './database/migrations';
 import { Logger } from './utils/logger';
 import { TreasuryIngestionService } from './core/ingestion';
+import { consumeServiceAuthNonce } from './database/queries';
+import { createServiceAuthMiddleware } from './auth/serviceAuth';
 
 async function bootstrap(): Promise<void> {
   await testConnection();
@@ -24,12 +26,27 @@ async function bootstrap(): Promise<void> {
 
   const app = express();
   const controller = new TreasuryController();
+  const apiKeysById = new Map(config.apiKeys.map((key) => [key.id, key]));
+
+  const authMiddleware = createServiceAuthMiddleware({
+    enabled: config.authEnabled,
+    maxSkewSeconds: config.authMaxSkewSeconds,
+    nonceTtlSeconds: config.authNonceTtlSeconds,
+    lookupApiKey: (apiKey) => apiKeysById.get(apiKey),
+    consumeNonce: consumeServiceAuthNonce,
+  });
 
   app.use(helmet());
   app.use(cors());
-  app.use(express.json());
+  app.use(
+    express.json({
+      verify: (req, _res, buffer) => {
+        (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
+      },
+    })
+  );
 
-  app.use('/api/treasury/v1', createRouter(controller));
+  app.use('/api/treasury/v1', createRouter(controller, authMiddleware));
 
   app.listen(config.port, () => {
     Logger.info('Treasury service started', {

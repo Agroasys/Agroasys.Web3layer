@@ -47,3 +47,19 @@ export async function getRicardianHash(hash: string): Promise<RicardianHashRow |
 
   return result.rows[0] || null;
 }
+
+export async function consumeServiceAuthNonce(apiKey: string, nonce: string, ttlSeconds: number): Promise<boolean> {
+  const result = await pool.query(
+    `WITH cleanup AS (
+      DELETE FROM ricardian_auth_nonces
+      WHERE expires_at <= NOW()
+    )
+    INSERT INTO ricardian_auth_nonces (api_key, nonce, expires_at)
+    VALUES ($1, $2, NOW() + ($3 * INTERVAL '1 second'))
+    ON CONFLICT (api_key, nonce) DO NOTHING
+    RETURNING api_key`,
+    [apiKey, nonce, ttlSeconds]
+  );
+
+  return (result.rowCount ?? 0) > 0;
+}

@@ -1,7 +1,11 @@
 import { RequestHandler, Router } from 'express';
 import { RicardianController } from './controller';
 
-export function createRouter(controller: RicardianController, rateLimitMiddleware?: RequestHandler): Router {
+export function createRouter(
+  controller: RicardianController,
+  authMiddleware?: RequestHandler,
+  rateLimitMiddleware?: RequestHandler,
+): Router {
   const router = Router();
 
   router.get('/health', (_, res) => {
@@ -10,6 +14,10 @@ export function createRouter(controller: RicardianController, rateLimitMiddlewar
 
   if (rateLimitMiddleware) {
     router.use(rateLimitMiddleware);
+  }
+
+  if (authMiddleware) {
+    router.use(authMiddleware);
   }
 
   router.post('/hash', controller.createHash.bind(controller));

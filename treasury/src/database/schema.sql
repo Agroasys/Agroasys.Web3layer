@@ -27,6 +27,14 @@ CREATE TABLE IF NOT EXISTS treasury_ingestion_state (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS treasury_auth_nonces (
+    api_key VARCHAR(128) NOT NULL,
+    nonce VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (api_key, nonce)
+);
+
 INSERT INTO treasury_ingestion_state (cursor_name, next_offset)
 VALUES ('trade_events', 0)
 ON CONFLICT (cursor_name) DO NOTHING;
@@ -35,3 +43,4 @@ CREATE INDEX IF NOT EXISTS idx_treasury_ledger_trade_id ON treasury_ledger_entri
 CREATE INDEX IF NOT EXISTS idx_treasury_ledger_created_at ON treasury_ledger_entries(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_treasury_payout_state_created ON payout_lifecycle_events(state, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_treasury_payout_entry_created ON payout_lifecycle_events(ledger_entry_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_treasury_auth_nonces_expires_at ON treasury_auth_nonces(expires_at);

@@ -7,12 +7,22 @@ Deterministic canonicalization and SHA-256 hashing service for Ricardian payload
 - `GET /api/ricardian/v1/hash/:hash`
 - `GET /api/ricardian/v1/health`
 
+## Service Auth (optional)
+When `AUTH_ENABLED=true`, all endpoints except health require:
+- `X-Api-Key`
+- `X-Timestamp` (unix seconds)
+- `X-Nonce`
+- `X-Signature` (HMAC-SHA256)
+
+Canonical string format:
+`METHOD\nPATH\nQUERY\nBODY_SHA256\nTIMESTAMP\nNONCE`
+
 ## Rate Limiting (optional)
 Set `RATE_LIMIT_ENABLED=true` to enforce per-route limits.
 
 - Write route (`POST /hash`): stricter burst + sustained limits
 - Read route (`GET /hash/:hash`): looser burst + sustained limits
-- Keying priority: `X-Api-Key` then IP fallback
+- Limiter identity: caller IP (header spoofing safe for unauthenticated requests)
 - Response includes `RateLimit-*` headers
 
 Redis-backed mode is used when `RATE_LIMIT_REDIS_URL` is configured.

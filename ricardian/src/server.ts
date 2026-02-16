@@ -6,6 +6,8 @@ import { RicardianController } from './api/controller';
 import { createRouter } from './api/routes';
 import { closeConnection, testConnection } from './database/connection';
 import { runMigrations } from './database/migrations';
+import { consumeServiceAuthNonce } from './database/queries';
+import { createServiceAuthMiddleware } from './auth/serviceAuth';
 import { createRicardianRateLimiter } from './rateLimit/limiter';
 
 async function bootstrap(): Promise<void> {
@@ -14,6 +16,16 @@ async function bootstrap(): Promise<void> {
 
   const app = express();
   const controller = new RicardianController();
+  const apiKeysById = new Map(config.apiKeys.map((key) => [key.id, key]));
+
+  const authMiddleware = createServiceAuthMiddleware({
+    enabled: config.authEnabled,
+    maxSkewSeconds: config.authMaxSkewSeconds,
+    nonceTtlSeconds: config.authNonceTtlSeconds,
+    lookupApiKey: (apiKey) => apiKeysById.get(apiKey),
+    consumeNonce: consumeServiceAuthNonce,
+  });
+
   const rateLimiter = await createRicardianRateLimiter({
     config: {
       enabled: config.rateLimitEnabled,
@@ -44,9 +56,15 @@ async function bootstrap(): Promise<void> {
 
   app.use(helmet());
   app.use(cors());
-  app.use(express.json());
+  app.use(
+    express.json({
+      verify: (req, _res, buffer) => {
+        (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
+      },
+    })
+  );
 
-  app.use('/api/ricardian/v1', createRouter(controller, rateLimiter.middleware));
+  app.use('/api/ricardian/v1', createRouter(controller, authMiddleware, rateLimiter.middleware));
 
   app.listen(config.port, () => {
     console.log(
@@ -54,6 +72,7 @@ async function bootstrap(): Promise<void> {
         level: 'info',
         message: 'Ricardian service started',
         port: config.port,
+        authEnabled: config.authEnabled,
         rateLimitEnabled: config.rateLimitEnabled,
         rateLimitMode: rateLimiter.mode,
         timestamp: new Date().toISOString(),
