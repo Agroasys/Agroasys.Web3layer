@@ -98,6 +98,31 @@ agroasys-web3/
 
 - **Ricardian Integrity** - The contract is agnostic to the content of the trade but strict about the Proof of Agreement. The `ricardianHash` is immutable once locked. This allows any court or auditor to mathematically verify that the funds on-chain correspond exactly to the PDF contract signed off-chain.
 
+## **CI Parity Checks**
+
+Run the same checks locally that GitHub Actions runs:
+
+```bash
+npm ci
+npm run -w contracts lint
+npm run -w contracts compile
+npm run -w contracts test
+
+npm run -w oracle lint
+npm run -w oracle test
+npm run -w oracle build
+
+npm run -w indexer lint
+npm run -w indexer build
+
+npm run -w sdk lint
+npm run -w sdk test
+npm run -w sdk build
+```
+
+> Note: `contracts` commands need a Hardhat variable for local runs:
+> `HARDHAT_VAR_PRIVATE_KEY=0x0123456789012345678901234567890123456789012345678901234567890123`
+
 ## **Contributing**
 
 We welcome contributions from the Web3 and Trade Finance communities. Please read `CONTRIBUTING.md` for details on our code of conduct and the process for submitting pull requests.
