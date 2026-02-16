@@ -15,6 +15,8 @@ import {
     DisputeStatus
 } from './model'
 
+import { keccak256 } from 'ethers';
+
 processor.run(new TypeormDatabase(), async (ctx) => {
     const trades: Map<string, Trade> = new Map();
     const tradeEvents: TradeEvent[] = [];
@@ -44,11 +46,17 @@ processor.run(new TypeormDatabase(), async (ctx) => {
                     ctx.log.warn(`Failed to decode event at block ${block.header.height}`);
                     continue;
                 }
+
                 const eventId = event.id;
                 const timestamp = new Date(block.header.timestamp || 0);
                 const extrinsic = block.extrinsics.find(e => e.index === event.extrinsicIndex);
-                const txHash = extrinsic?.hash || 'unknown';
+                const extractedTxHash = extractEvmTxHash(extrinsic);
+                const txHash = extractedTxHash || extrinsic?.hash || 'unknown';
                 const extrinsicIndex = event.extrinsicIndex || 0;
+
+                if (!extractedTxHash) {
+                    ctx.log.warn(`Using tx hash fallback at block ${block.header.height} eventId=${eventId} extrinsicIndex=${event.extrinsicIndex ?? 'n/a'} extrinsicHash=${extrinsic?.hash || 'unknown'}`);
+                }
 
                 switch (decoded.name) {
                     // Trade events
@@ -179,6 +187,21 @@ async function getOrLoadTrade(tradeId: string, trades: Map<string, Trade>, ctx: 
     }
 
     return null;
+}
+
+function extractEvmTxHash(extrinsic: any): string | null {
+    try {
+
+        if (extrinsic?.call?.name === 'Revive.eth_transact') {
+            const payload = extrinsic.call.args.payload;
+            if (payload) {
+                return keccak256(payload);
+            }
+        }
+        return null;
+    } catch (error) {
+        return null;
+    }
 }
 
 // ########################### trade events ##########################

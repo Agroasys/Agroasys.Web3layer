@@ -3,11 +3,15 @@
   "version": "1.0.0",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run copy-files",
+    "copy-files": "mkdir -p dist/database && cp src/database/schema.sql dist/database/",
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
     "test": "jest --runInBand",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "build:sdk": "npm --prefix ../sdk run build",
+    "prebuild": "npm run build:sdk",
+    "prelint": "npm run build:sdk"
   },
   "dependencies": {
     "express": "^5.2.1",
@@ -16,8 +20,9 @@
     "dotenv": "^16.4.5",
     "ethers": "^6.4.0",
     "pg": "^8.18.0",
+    "@agroasys/sdk": "^1.0.0",
     "@agroasys/notifications": "^1.0.0",
-    "@agroasys/sdk": "^1.0.0"
+    "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
