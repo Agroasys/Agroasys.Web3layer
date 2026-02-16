@@ -13,3 +13,6 @@ Append-only treasury accounting view for on-chain treasury-relevant events.
 - `GET /api/treasury/v1/entries`
 - `POST /api/treasury/v1/entries/:entryId/state`
 - `GET /api/treasury/v1/export?format=json|csv`
+
+## Docker
+See `docs/docker-services.md` for compose profiles and runtime operations.

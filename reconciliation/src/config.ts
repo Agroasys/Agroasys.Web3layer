@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { strict as assert } from 'assert';
+import { normalizeAddressOrThrow } from './utils/address';
 
 dotenv.config();
 
@@ -49,6 +50,11 @@ function envBool(name: string, fallback: boolean): boolean {
   return raw.toLowerCase() === 'true';
 }
 
+function envAddress(name: string): string {
+  const value = env(name);
+  return normalizeAddressOrThrow(value, name);
+}
+
 export function loadConfig(): ReconciliationConfig {
   const notificationsEnabled = envBool('NOTIFICATIONS_ENABLED', false);
   const notificationsWebhookUrl = process.env.NOTIFICATIONS_WEBHOOK_URL;
@@ -69,8 +75,8 @@ export function loadConfig(): ReconciliationConfig {
     dbPassword: env('DB_PASSWORD'),
     rpcUrl: env('RPC_URL'),
     chainId: envNumber('CHAIN_ID'),
-    escrowAddress: env('ESCROW_ADDRESS').toLowerCase(),
-    usdcAddress: env('USDC_ADDRESS').toLowerCase(),
+    escrowAddress: envAddress('ESCROW_ADDRESS'),
+    usdcAddress: envAddress('USDC_ADDRESS'),
     indexerGraphqlUrl: env('INDEXER_GRAPHQL_URL'),
     notificationsEnabled,
     notificationsWebhookUrl,
