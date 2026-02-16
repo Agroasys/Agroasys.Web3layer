@@ -1,10 +1,11 @@
+import { WebhookNotifier } from '@agroasys/notifications';
 import { config } from '../config';
 import { OnchainClient } from '../blockchain/client';
 import { IndexerClient } from '../indexer/client';
 import { Logger } from '../utils/logger';
 import { classifyDrifts } from './classifier';
 import { completeRun, createRun, failRun, upsertDrift } from '../database/queries';
-import { DriftSeverity, ReconcileMode, RunStats } from '../types';
+import { DriftFinding, DriftSeverity, ReconcileMode, RunStats } from '../types';
 
 const DEFAULT_SEVERITY_COUNTS: Record<DriftSeverity, number> = {
   CRITICAL: 0,
@@ -28,6 +29,36 @@ function sleep(ms: number): Promise<void> {
 export class ReconciliationService {
   private readonly onchainClient = new OnchainClient();
   private readonly indexerClient = new IndexerClient(config.indexerGraphqlUrl);
+  private readonly notifier = new WebhookNotifier({
+    enabled: config.notificationsEnabled,
+    webhookUrl: config.notificationsWebhookUrl,
+    cooldownMs: config.notificationsCooldownMs,
+    requestTimeoutMs: config.notificationsRequestTimeoutMs,
+    logger: Logger,
+  });
+
+  private async notifyCriticalDrift(runKey: string, finding: DriftFinding): Promise<void> {
+    if (finding.severity !== 'CRITICAL') {
+      return;
+    }
+
+    await this.notifier.notify({
+      source: 'reconciliation',
+      type: 'RECONCILIATION_CRITICAL_DRIFT',
+      severity: 'critical',
+      dedupKey: 'reconciliation:critical:' + finding.tradeId + ':' + finding.mismatchCode,
+      message: 'Critical reconciliation drift detected between on-chain and indexed trade state.',
+      correlation: {
+        tradeId: finding.tradeId,
+        runKey,
+        mismatchCode: finding.mismatchCode,
+      },
+      metadata: {
+        onchainValue: finding.onchainValue,
+        indexedValue: finding.indexedValue,
+      },
+    });
+  }
 
   async reconcileOnce(mode: ReconcileMode, runKeyOverride?: string): Promise<RunStats> {
     const runKey = runKeyOverride || generateRunKey(mode);
@@ -109,6 +140,8 @@ export class ReconciliationService {
 
           for (const finding of findings) {
             await upsertDrift(run.row.id, runKey, finding);
+            await this.notifyCriticalDrift(runKey, finding);
+
             stats.driftCount += 1;
             stats.severityCounts[finding.severity] += 1;
 

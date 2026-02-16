@@ -18,6 +18,10 @@ export interface ReconciliationConfig {
   escrowAddress: string;
   usdcAddress: string;
   indexerGraphqlUrl: string;
+  notificationsEnabled: boolean;
+  notificationsWebhookUrl?: string;
+  notificationsCooldownMs: number;
+  notificationsRequestTimeoutMs: number;
 }
 
 function env(name: string): string {
@@ -46,6 +50,13 @@ function envBool(name: string, fallback: boolean): boolean {
 }
 
 export function loadConfig(): ReconciliationConfig {
+  const notificationsEnabled = envBool('NOTIFICATIONS_ENABLED', false);
+  const notificationsWebhookUrl = process.env.NOTIFICATIONS_WEBHOOK_URL;
+
+  if (notificationsEnabled) {
+    assert(notificationsWebhookUrl, 'NOTIFICATIONS_WEBHOOK_URL is required when NOTIFICATIONS_ENABLED=true');
+  }
+
   const config: ReconciliationConfig = {
     enabled: envBool('RECONCILIATION_ENABLED', false),
     daemonIntervalMs: envNumber('RECONCILIATION_DAEMON_INTERVAL_MS', 60000),
@@ -61,11 +72,17 @@ export function loadConfig(): ReconciliationConfig {
     escrowAddress: env('ESCROW_ADDRESS').toLowerCase(),
     usdcAddress: env('USDC_ADDRESS').toLowerCase(),
     indexerGraphqlUrl: env('INDEXER_GRAPHQL_URL'),
+    notificationsEnabled,
+    notificationsWebhookUrl,
+    notificationsCooldownMs: envNumber('NOTIFICATIONS_COOLDOWN_MS', 300000),
+    notificationsRequestTimeoutMs: envNumber('NOTIFICATIONS_REQUEST_TIMEOUT_MS', 5000),
   };
 
   assert(config.daemonIntervalMs >= 1000, 'RECONCILIATION_DAEMON_INTERVAL_MS must be >= 1000');
   assert(config.batchSize > 0, 'RECONCILIATION_BATCH_SIZE must be > 0');
   assert(config.maxTradesPerRun > 0, 'RECONCILIATION_MAX_TRADES_PER_RUN must be > 0');
+  assert(config.notificationsCooldownMs >= 0, 'NOTIFICATIONS_COOLDOWN_MS must be >= 0');
+  assert(config.notificationsRequestTimeoutMs >= 1000, 'NOTIFICATIONS_REQUEST_TIMEOUT_MS must be >= 1000');
 
   return config;
 }

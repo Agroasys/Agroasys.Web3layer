@@ -7,7 +7,8 @@
     "indexer",
     "oracle",
     "sdk",
-    "reconciliation"
+    "reconciliation",
+    "notifications"
   ],
   "scripts": {
     "lint": "npm run lint --workspaces --if-present"

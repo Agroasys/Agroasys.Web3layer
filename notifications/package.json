@@ -1,0 +1,18 @@
+{
+  "name": "@agroasys/notifications",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "typescript": ">=4.5.0"
+  }
+}
