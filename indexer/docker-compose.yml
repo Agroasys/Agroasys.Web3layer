@@ -58,7 +58,7 @@ services:
     restart: unless-stopped
     networks:
       - indexer-network
-
+      - shared-network
 
 volumes:
   postgres_data:
@@ -66,3 +66,5 @@ volumes:
 
 networks:
   indexer-network:
+  shared-network:
+    external: true

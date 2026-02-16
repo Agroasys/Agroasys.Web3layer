@@ -47,6 +47,7 @@ services:
       - "${PORT}:3001"
     networks:
       - oracle-network
+      - shared-network
     restart: unless-stopped
 
 volumes:
@@ -54,3 +55,5 @@ volumes:
 
 networks:
   oracle-network:
+  shared-network:
+    external: true

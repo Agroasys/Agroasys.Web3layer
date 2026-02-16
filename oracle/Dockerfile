@@ -7,9 +7,11 @@ COPY oracle/package*.json ./oracle/
 COPY oracle/tsconfig.json ./oracle/
 
 COPY sdk/ ./sdk/
+COPY notifications/ ./notifications/
 
 WORKDIR /app/oracle
 RUN npm install ../sdk
+RUN npm install ../notifications
 RUN npm install
 
 COPY oracle/src/ ./src/
