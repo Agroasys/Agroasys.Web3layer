@@ -57,3 +57,4 @@ curl -fsS http://127.0.0.1:3200/api/treasury/v1/health
 - Containers run as non-root users.
 - Config validation remains fail-fast on startup in each service.
 - Reconciliation uses a process-level healthcheck command (`node reconciliation/dist/healthcheck.js`).
+- Reconciliation startup requires a reachable `RPC_URL` (for example `http://host.docker.internal:8545` when your local RPC runs on host). If RPC is unavailable, reconciliation fails fast with an explicit startup error.
