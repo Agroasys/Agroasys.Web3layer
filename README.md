@@ -196,8 +196,8 @@ npm run -w treasury lint && npm run -w treasury test && npm run -w treasury buil
 Use these profile commands for deterministic runtime checks:
 
 ```bash
-scripts/docker-services.sh up local
-scripts/docker-services.sh health local
+scripts/docker-services.sh up local-dev
+scripts/docker-services.sh health local-dev
 
 scripts/docker-services.sh up staging-e2e
 scripts/docker-services.sh health staging-e2e
