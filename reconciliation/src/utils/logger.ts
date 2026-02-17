@@ -1,5 +1,25 @@
 interface LogMeta {
+  tradeId?: string | null;
+  actionKey?: string | null;
+  requestId?: string | null;
+  txHash?: string | null;
+  traceId?: string | null;
   [key: string]: unknown;
+}
+
+const SERVICE_NAME = 'reconciliation';
+
+function baseContext(meta?: LogMeta): Record<string, unknown> {
+  return {
+    service: SERVICE_NAME,
+    env: process.env.NODE_ENV || 'development',
+    tradeId: meta?.tradeId ?? null,
+    actionKey: meta?.actionKey ?? null,
+    requestId: meta?.requestId ?? null,
+    txHash: meta?.txHash ?? null,
+    traceId: meta?.traceId ?? null,
+    ...meta,
+  };
 }
 
 export class Logger {
@@ -8,7 +28,7 @@ export class Logger {
       level,
       timestamp: new Date().toISOString(),
       message,
-      ...meta,
+      ...baseContext(meta),
     };
 
     if (level === 'error') {

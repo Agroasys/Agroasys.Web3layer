@@ -9,6 +9,7 @@ import { runMigrations } from './database/migrations';
 import { consumeServiceAuthNonce } from './database/queries';
 import { createServiceAuthMiddleware } from './auth/serviceAuth';
 import { createRicardianRateLimiter } from './rateLimit/limiter';
+import { Logger } from './utils/logger';
 
 async function bootstrap(): Promise<void> {
   await testConnection();
@@ -27,6 +28,7 @@ async function bootstrap(): Promise<void> {
   });
 
   const rateLimiter = await createRicardianRateLimiter({
+    logger: Logger,
     config: {
       enabled: config.rateLimitEnabled,
       redisUrl: config.rateLimitRedisUrl,
@@ -67,21 +69,16 @@ async function bootstrap(): Promise<void> {
   app.use('/api/ricardian/v1', createRouter(controller, authMiddleware, rateLimiter.middleware));
 
   app.listen(config.port, () => {
-    console.log(
-      JSON.stringify({
-        level: 'info',
-        message: 'Ricardian service started',
-        port: config.port,
-        authEnabled: config.authEnabled,
-        rateLimitEnabled: config.rateLimitEnabled,
-        rateLimitMode: rateLimiter.mode,
-        timestamp: new Date().toISOString(),
-      })
-    );
+    Logger.info('Ricardian service started', {
+      port: config.port,
+      authEnabled: config.authEnabled,
+      rateLimitEnabled: config.rateLimitEnabled,
+      rateLimitMode: rateLimiter.mode,
+    });
   });
 
   const shutdown = async (signal: string): Promise<void> => {
-    console.log(JSON.stringify({ level: 'info', message: 'Shutting down Ricardian service', signal }));
+    Logger.info('Shutting down Ricardian service', { signal });
     await rateLimiter.close();
     await closeConnection();
     process.exit(0);
@@ -97,7 +94,7 @@ async function bootstrap(): Promise<void> {
 }
 
 bootstrap().catch(async (error: any) => {
-  console.error(JSON.stringify({ level: 'error', message: 'Ricardian bootstrap failed', error: error?.message || error }));
+  Logger.error('Ricardian bootstrap failed', { error: error?.message || error });
   await closeConnection();
   process.exit(1);
 });

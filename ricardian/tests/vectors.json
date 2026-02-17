@@ -19,7 +19,8 @@
         "version": 1
       }
     },
-    "expectedCanonicalJson": "{\"documentRef\":\"s3://bucket/trade-1.pdf\",\"metadata\":{\"tradeId\":\"42\",\"version\":1},\"terms\":{\"incoterms\":\"FOB\",\"parties\":{\"buyer\":\"0x1111111111111111111111111111111111111111\",\"supplier\":\"0x2222222222222222222222222222222222222222\"},\"payment\":{\"amount\":107000,\"currency\":\"USDC\"}}}"
+    "expectedCanonicalJson": "{\"documentRef\":\"s3://bucket/trade-1.pdf\",\"metadata\":{\"tradeId\":\"42\",\"version\":1},\"terms\":{\"incoterms\":\"FOB\",\"parties\":{\"buyer\":\"0x1111111111111111111111111111111111111111\",\"supplier\":\"0x2222222222222222222222222222222222222222\"},\"payment\":{\"amount\":107000,\"currency\":\"USDC\"}}}",
+    "expectedHash": "f21bbeac1de8d472a0c05cd34515f1c00fa4ddf80a5ce08d9a4c0deee71ede96"
   },
   {
     "name": "array-order-preserved",
@@ -40,6 +41,89 @@
         "pilot": true
       }
     },
-    "expectedCanonicalJson": "{\"documentRef\":\"doc://shipment/abc\",\"metadata\":{\"pilot\":true},\"terms\":{\"fees\":{\"logistics\":5000,\"platform\":2000},\"steps\":[\"LOCKED\",\"IN_TRANSIT\",\"ARRIVAL_CONFIRMED\"]}}"
+    "expectedCanonicalJson": "{\"documentRef\":\"doc://shipment/abc\",\"metadata\":{\"pilot\":true},\"terms\":{\"fees\":{\"logistics\":5000,\"platform\":2000},\"steps\":[\"LOCKED\",\"IN_TRANSIT\",\"ARRIVAL_CONFIRMED\"]}}",
+    "expectedHash": "47b35f1eefc81ec5bf2dbe65bf139e4cee51f3086564c699bca72f24f3498458"
+  },
+  {
+    "name": "unicode-null-nested-fields",
+    "input": {
+      "documentRef": "ipfs://QmZx9c7/contract-cafe.pdf",
+      "terms": {
+        "commodity": "Café Arabica",
+        "notes": "Msimu wa mvua — kupakia bandarini",
+        "logistics": {
+          "ports": [
+            "Dar es Salaam",
+            "Mombasa"
+          ],
+          "vessel": null,
+          "milestones": [
+            {
+              "code": "LOADED",
+              "at": "2026-02-01T12:00:00Z"
+            },
+            {
+              "code": "DELIVERED",
+              "at": "2026-02-21T09:30:00Z"
+            }
+          ]
+        }
+      },
+      "metadata": {
+        "locale": "sw-TZ",
+        "reviewer": "李雷",
+        "tags": [
+          "pilot",
+          "مرحبا"
+        ]
+      }
+    },
+    "expectedCanonicalJson": "{\"documentRef\":\"ipfs://QmZx9c7/contract-cafe.pdf\",\"metadata\":{\"locale\":\"sw-TZ\",\"reviewer\":\"李雷\",\"tags\":[\"pilot\",\"مرحبا\"]},\"terms\":{\"commodity\":\"Café Arabica\",\"logistics\":{\"milestones\":[{\"at\":\"2026-02-01T12:00:00Z\",\"code\":\"LOADED\"},{\"at\":\"2026-02-21T09:30:00Z\",\"code\":\"DELIVERED\"}],\"ports\":[\"Dar es Salaam\",\"Mombasa\"],\"vessel\":null},\"notes\":\"Msimu wa mvua — kupakia bandarini\"}}",
+    "expectedHash": "e6c6f17e6cfd6ca502c02edbb8ddca01e1b9b7f6333dce8cdc902ad409dc2f23"
+  },
+  {
+    "name": "optional-fields-and-empty-collections",
+    "input": {
+      "documentRef": "doc://trade/optional-fields",
+      "terms": {
+        "qualitySpec": {
+          "moisturePct": 12.5,
+          "defectsPct": 0,
+          "remarks": null
+        },
+        "attachments": []
+      },
+      "metadata": {
+        "approvals": [],
+        "notes": null
+      }
+    },
+    "expectedCanonicalJson": "{\"documentRef\":\"doc://trade/optional-fields\",\"metadata\":{\"approvals\":[],\"notes\":null},\"terms\":{\"attachments\":[],\"qualitySpec\":{\"defectsPct\":0,\"moisturePct\":12.5,\"remarks\":null}}}",
+    "expectedHash": "5c1bdbe21bc5ec928f1b431677bd15414a7e557b1784d5a10c0e109cbf6bee89"
+  },
+  {
+    "name": "nested-breakdown-with-decimals",
+    "input": {
+      "documentRef": "doc://trade/settlement-breakdown",
+      "terms": {
+        "settlement": {
+          "supplierFirstTranche": 40000,
+          "supplierSecondTranche": 60000,
+          "logisticsAmount": 5000,
+          "platformFeesAmount": 2500
+        },
+        "pricing": {
+          "unitPrice": 12.34,
+          "quantity": 8100,
+          "currency": "USDC"
+        }
+      },
+      "metadata": {
+        "source": "ops-import",
+        "version": 2
+      }
+    },
+    "expectedCanonicalJson": "{\"documentRef\":\"doc://trade/settlement-breakdown\",\"metadata\":{\"source\":\"ops-import\",\"version\":2},\"terms\":{\"pricing\":{\"currency\":\"USDC\",\"quantity\":8100,\"unitPrice\":12.34},\"settlement\":{\"logisticsAmount\":5000,\"platformFeesAmount\":2500,\"supplierFirstTranche\":40000,\"supplierSecondTranche\":60000}}}",
+    "expectedHash": "e64d7c56608a3b040baf4dfd0394a39b99871c7bd26b2168e5607074e67588f8"
   }
 ]

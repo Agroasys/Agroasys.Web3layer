@@ -5,7 +5,11 @@ export function createRouter(controller: TreasuryController, authMiddleware?: Re
   const router = Router();
 
   router.get('/health', (_, res) => {
-    res.status(200).json({ success: true, service: 'treasury', timestamp: new Date().toISOString() });
+    res.status(200).json({ success: true, service: 'treasury', status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  router.get('/ready', (_, res) => {
+    res.status(200).json({ success: true, service: 'treasury', ready: true, timestamp: new Date().toISOString() });
   });
 
   if (authMiddleware) {

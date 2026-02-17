@@ -7,7 +7,7 @@ interface LogMeta {
   [key: string]: unknown;
 }
 
-const SERVICE_NAME = 'treasury';
+const SERVICE_NAME = 'ricardian';
 
 function baseContext(meta?: LogMeta): Record<string, unknown> {
   return {

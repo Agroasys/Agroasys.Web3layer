@@ -52,6 +52,7 @@ async function bootstrap(): Promise<void> {
     Logger.info('Treasury service started', {
       port: config.port,
       indexerGraphqlUrl: config.indexerGraphqlUrl,
+      authEnabled: config.authEnabled,
     });
   });
 

@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { NextFunction, Request, Response } from 'express';
+import { incrementAuthFailure, incrementReplayReject } from '../metrics/counters';
 
 const SIGNATURE_HEX_REGEX = /^[a-f0-9]{64}$/i;
 
@@ -54,6 +55,7 @@ function timingSafeHexEquals(a: string, b: string): boolean {
 }
 
 function unauthorized(res: Response, message: string): void {
+  incrementAuthFailure(message);
   res.status(401).json({
     success: false,
     error: message,
@@ -61,6 +63,7 @@ function unauthorized(res: Response, message: string): void {
 }
 
 function forbidden(res: Response, message: string): void {
+  incrementAuthFailure(message);
   res.status(403).json({
     success: false,
     error: message,
@@ -68,6 +71,7 @@ function forbidden(res: Response, message: string): void {
 }
 
 function unavailable(res: Response): void {
+  incrementAuthFailure('auth_service_unavailable');
   res.status(503).json({
     success: false,
     error: 'Authentication service unavailable',
@@ -222,6 +226,7 @@ export function createServiceAuthMiddleware(options: ServiceAuthMiddlewareOption
     try {
       const accepted = await options.consumeNonce(apiKey, nonce, options.nonceTtlSeconds);
       if (!accepted) {
+        incrementReplayReject();
         unauthorized(res, 'Replay detected for nonce');
         return;
       }

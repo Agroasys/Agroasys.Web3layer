@@ -12,9 +12,20 @@ function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => P
 export function createRouter(controller: OracleController): Router {
     const router = Router();
 
-    router.get('/health', (req, res) => {
-        res.json({ 
-            status: 'ok', 
+    router.get('/health', (_req, res) => {
+        res.json({
+            success: true,
+            service: 'oracle',
+            status: 'ok',
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    router.get('/ready', (_req, res) => {
+        res.json({
+            success: true,
+            service: 'oracle',
+            ready: true,
             timestamp: new Date().toISOString()
         });
     });
