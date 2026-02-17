@@ -14,9 +14,14 @@ Append-only treasury accounting view for on-chain treasury-relevant events.
 - `POST /api/treasury/v1/entries/:entryId/state`
 - `GET /api/treasury/v1/export?format=json|csv`
 - `GET /api/treasury/v1/health`
+- `GET /api/treasury/v1/ready`
+
+Health semantics:
+- `/health`: process-level liveness
+- `/ready`: process-level readiness for request handling
 
 ## Service Auth (optional)
-When `AUTH_ENABLED=true`, all endpoints except health require:
+When `AUTH_ENABLED=true`, all endpoints except health/readiness require:
 - `X-Api-Key`
 - `X-Timestamp` (unix seconds)
 - `X-Nonce`
@@ -28,5 +33,16 @@ Canonical string format:
 Auth failures return structured JSON with stable `code` values (for example: `AUTH_MISSING_HEADERS`, `AUTH_INVALID_SIGNATURE`, `AUTH_FORBIDDEN`).
 `API_KEYS_JSON` entries must set `active` as an explicit boolean (`true` or `false`) for each key.
 
+## Observability
+Structured logs include baseline keys:
+- `service`
+- `env`
+
+Correlation keys are emitted by call path when available:
+- `tradeId`
+- `actionKey`
+- `requestId`
+- `txHash`
+
 ## Docker
-See `docs/docker-services.md` for compose profiles and runtime operations.
+See `docs/docker-services.md` and `docs/runbooks/docker-profiles.md` for runtime operations.

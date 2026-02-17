@@ -80,7 +80,7 @@ export function loadConfig(): OracleConfig {
         
         return config;
     } catch (error) {
-        console.error('Oracle config validation failed:', error);
+        console.error(JSON.stringify({ level: 'error', message: 'Oracle config validation failed', error: error instanceof Error ? error.message : String(error), service: 'oracle', env: process.env.NODE_ENV || 'development' }));
         process.exit(1);
     }
 }
