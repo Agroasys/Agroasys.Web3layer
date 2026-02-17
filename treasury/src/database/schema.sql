@@ -28,8 +28,8 @@ CREATE TABLE IF NOT EXISTS treasury_ingestion_state (
 );
 
 CREATE TABLE IF NOT EXISTS treasury_auth_nonces (
-    api_key VARCHAR(128) NOT NULL,
-    nonce VARCHAR(255) NOT NULL,
+    api_key VARCHAR(128) NOT NULL CHECK (length(trim(api_key)) > 0),
+    nonce VARCHAR(255) NOT NULL CHECK (length(trim(nonce)) > 0),
     expires_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     PRIMARY KEY (api_key, nonce)
@@ -44,3 +44,4 @@ CREATE INDEX IF NOT EXISTS idx_treasury_ledger_created_at ON treasury_ledger_ent
 CREATE INDEX IF NOT EXISTS idx_treasury_payout_state_created ON payout_lifecycle_events(state, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_treasury_payout_entry_created ON payout_lifecycle_events(ledger_entry_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_treasury_auth_nonces_expires_at ON treasury_auth_nonces(expires_at);
+CREATE INDEX IF NOT EXISTS idx_treasury_auth_nonces_key_expiry ON treasury_auth_nonces(api_key, nonce, expires_at);

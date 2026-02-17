@@ -49,17 +49,26 @@ export async function getRicardianHash(hash: string): Promise<RicardianHashRow |
 }
 
 export async function consumeServiceAuthNonce(apiKey: string, nonce: string, ttlSeconds: number): Promise<boolean> {
-  const result = await pool.query(
-    `WITH cleanup AS (
+  if (!Number.isInteger(ttlSeconds) || ttlSeconds <= 0) {
+    throw new Error('nonce ttlSeconds must be a positive integer');
+  }
+
+  const result = await pool.query<{ accepted: boolean }>(
+    `WITH pruned_nonce AS (
       DELETE FROM ricardian_auth_nonces
-      WHERE expires_at <= NOW()
+      WHERE api_key = $1
+        AND nonce = $2
+        AND expires_at <= NOW()
+    ),
+    consumed_nonce AS (
+      INSERT INTO ricardian_auth_nonces (api_key, nonce, expires_at)
+      VALUES ($1, $2, NOW() + ($3 * INTERVAL '1 second'))
+      ON CONFLICT (api_key, nonce) DO NOTHING
+      RETURNING 1
     )
-    INSERT INTO ricardian_auth_nonces (api_key, nonce, expires_at)
-    VALUES ($1, $2, NOW() + ($3 * INTERVAL '1 second'))
-    ON CONFLICT (api_key, nonce) DO NOTHING
-    RETURNING api_key`,
+    SELECT EXISTS(SELECT 1 FROM consumed_nonce) AS accepted`,
     [apiKey, nonce, ttlSeconds]
   );
 
-  return (result.rowCount ?? 0) > 0;
+  return Boolean(result.rows[0]?.accepted);
 }
