@@ -1,4 +1,4 @@
-name: Monorepo CI
+name: CI Release Gate
 
 on:
   pull_request:
@@ -7,18 +7,58 @@ on:
       - main
 
 jobs:
-  workspace-checks:
-    name: ${{ matrix.workspace }}
+  changes:
+    name: changes
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        workspace:
-          - contracts
-          - oracle
-          - indexer
-          - sdk
+    outputs:
+      shared: ${{ steps.filter.outputs.shared }}
+      contracts: ${{ steps.filter.outputs.contracts }}
+      sdk: ${{ steps.filter.outputs.sdk }}
+      oracle: ${{ steps.filter.outputs.oracle }}
+      indexer: ${{ steps.filter.outputs.indexer }}
+      notifications: ${{ steps.filter.outputs.notifications }}
+      reconciliation: ${{ steps.filter.outputs.reconciliation }}
+      ricardian: ${{ steps.filter.outputs.ricardian }}
+      treasury: ${{ steps.filter.outputs.treasury }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            shared:
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/**'
+              - 'README.md'
+              - 'CONTRIBUTING.md'
+            contracts:
+              - 'contracts/**'
+            sdk:
+              - 'sdk/**'
+            oracle:
+              - 'oracle/**'
+            indexer:
+              - 'indexer/**'
+            notifications:
+              - 'notifications/**'
+            reconciliation:
+              - 'reconciliation/**'
+            ricardian:
+              - 'ricardian/**'
+            treasury:
+              - 'treasury/**'
+
+  contracts:
+    name: ci/contracts
+    runs-on: ubuntu-latest
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.contracts == 'true'
     env:
+      WORKSPACE: contracts
       HARDHAT_VAR_PRIVATE_KEY: 0x0123456789012345678901234567890123456789012345678901234567890123
       HARDHAT_VAR_PRIVATE_KEY2: 0x1111111111111111111111111111111111111111111111111111111111111111
     steps:
@@ -28,24 +68,513 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: '20'
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build SDK artifacts for Oracle job
-        if: matrix.workspace == 'oracle'
-        run: npm run -w sdk build
+      - name: Run workspace checks
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-reports
+          report="ci-reports/${WORKSPACE}.txt"
+          fail=0
 
-      - name: Lint
-        run: npm run -w ${{ matrix.workspace }} lint --if-present
+          run_check() {
+            local label="$1"
+            local cmd="$2"
+            echo "[$label] command: $cmd" | tee -a "$report"
+            if bash -lc "$cmd"; then
+              echo "[$label] PASS" | tee -a "$report"
+            else
+              echo "[$label] FAIL" | tee -a "$report"
+              fail=1
+            fi
+            echo "" >> "$report"
+          }
 
-      - name: Compile
-        run: npm run -w ${{ matrix.workspace }} compile --if-present
+          run_check lint "npm run -w ${WORKSPACE} lint --if-present"
+          run_check typecheck "npm run -w ${WORKSPACE} typecheck --if-present"
+          run_check test "npm run -w ${WORKSPACE} test --if-present"
+          run_check build "npm run -w ${WORKSPACE} compile"
 
-      - name: Test
-        run: npm run -w ${{ matrix.workspace }} test --if-present
+          if [[ "$fail" -ne 0 ]]; then
+            exit 1
+          fi
 
-      - name: Build
-        run: npm run -w ${{ matrix.workspace }} build --if-present
+      - name: Upload workspace report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-${{ env.WORKSPACE }}
+          path: ci-reports/${{ env.WORKSPACE }}.txt
+
+  sdk:
+    name: ci/sdk
+    runs-on: ubuntu-latest
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.sdk == 'true'
+    env:
+      WORKSPACE: sdk
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run workspace checks
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-reports
+          report="ci-reports/${WORKSPACE}.txt"
+          fail=0
+
+          run_check() {
+            local label="$1"
+            local cmd="$2"
+            echo "[$label] command: $cmd" | tee -a "$report"
+            if bash -lc "$cmd"; then
+              echo "[$label] PASS" | tee -a "$report"
+            else
+              echo "[$label] FAIL" | tee -a "$report"
+              fail=1
+            fi
+            echo "" >> "$report"
+          }
+
+          run_check lint "npm run -w ${WORKSPACE} lint --if-present"
+          run_check typecheck "npm run -w ${WORKSPACE} typecheck --if-present"
+          run_check test "npm run -w ${WORKSPACE} test --if-present"
+          run_check build "npm run -w ${WORKSPACE} build --if-present"
+
+          if [[ "$fail" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload workspace report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-${{ env.WORKSPACE }}
+          path: ci-reports/${{ env.WORKSPACE }}.txt
+
+  oracle:
+    name: ci/oracle
+    runs-on: ubuntu-latest
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.oracle == 'true' || needs.changes.outputs.sdk == 'true' || needs.changes.outputs.notifications == 'true'
+    env:
+      WORKSPACE: oracle
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared runtime dependencies
+        run: |
+          npm run -w sdk build
+          npm run -w notifications build
+
+      - name: Run workspace checks
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-reports
+          report="ci-reports/${WORKSPACE}.txt"
+          fail=0
+
+          run_check() {
+            local label="$1"
+            local cmd="$2"
+            echo "[$label] command: $cmd" | tee -a "$report"
+            if bash -lc "$cmd"; then
+              echo "[$label] PASS" | tee -a "$report"
+            else
+              echo "[$label] FAIL" | tee -a "$report"
+              fail=1
+            fi
+            echo "" >> "$report"
+          }
+
+          run_check lint "npm run -w ${WORKSPACE} lint --if-present"
+          run_check typecheck "npm run -w ${WORKSPACE} typecheck --if-present"
+          run_check test "npm run -w ${WORKSPACE} test --if-present"
+          run_check build "npm run -w ${WORKSPACE} build --if-present"
+
+          if [[ "$fail" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload workspace report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-${{ env.WORKSPACE }}
+          path: ci-reports/${{ env.WORKSPACE }}.txt
+
+  indexer:
+    name: ci/indexer
+    runs-on: ubuntu-latest
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.indexer == 'true'
+    env:
+      WORKSPACE: indexer
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run workspace checks
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-reports
+          report="ci-reports/${WORKSPACE}.txt"
+          fail=0
+
+          run_check() {
+            local label="$1"
+            local cmd="$2"
+            echo "[$label] command: $cmd" | tee -a "$report"
+            if bash -lc "$cmd"; then
+              echo "[$label] PASS" | tee -a "$report"
+            else
+              echo "[$label] FAIL" | tee -a "$report"
+              fail=1
+            fi
+            echo "" >> "$report"
+          }
+
+          run_check lint "npm run -w ${WORKSPACE} lint --if-present"
+          run_check typecheck "npm run -w ${WORKSPACE} typecheck --if-present"
+          run_check test "npm run -w ${WORKSPACE} test --if-present"
+          run_check build "npm run -w ${WORKSPACE} build --if-present"
+
+          if [[ "$fail" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload workspace report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-${{ env.WORKSPACE }}
+          path: ci-reports/${{ env.WORKSPACE }}.txt
+
+  notifications:
+    name: ci/notifications
+    runs-on: ubuntu-latest
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.notifications == 'true'
+    env:
+      WORKSPACE: notifications
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run workspace checks
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-reports
+          report="ci-reports/${WORKSPACE}.txt"
+          fail=0
+
+          run_check() {
+            local label="$1"
+            local cmd="$2"
+            echo "[$label] command: $cmd" | tee -a "$report"
+            if bash -lc "$cmd"; then
+              echo "[$label] PASS" | tee -a "$report"
+            else
+              echo "[$label] FAIL" | tee -a "$report"
+              fail=1
+            fi
+            echo "" >> "$report"
+          }
+
+          run_check lint "npm run -w ${WORKSPACE} lint --if-present"
+          run_check typecheck "npm run -w ${WORKSPACE} typecheck --if-present"
+          run_check test "npm run -w ${WORKSPACE} test --if-present"
+          run_check build "npm run -w ${WORKSPACE} build --if-present"
+
+          if [[ "$fail" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload workspace report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-${{ env.WORKSPACE }}
+          path: ci-reports/${{ env.WORKSPACE }}.txt
+
+  reconciliation:
+    name: ci/reconciliation
+    runs-on: ubuntu-latest
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.reconciliation == 'true' || needs.changes.outputs.sdk == 'true' || needs.changes.outputs.notifications == 'true'
+    env:
+      WORKSPACE: reconciliation
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared runtime dependencies
+        run: |
+          npm run -w sdk build
+          npm run -w notifications build
+
+      - name: Run workspace checks
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-reports
+          report="ci-reports/${WORKSPACE}.txt"
+          fail=0
+
+          run_check() {
+            local label="$1"
+            local cmd="$2"
+            echo "[$label] command: $cmd" | tee -a "$report"
+            if bash -lc "$cmd"; then
+              echo "[$label] PASS" | tee -a "$report"
+            else
+              echo "[$label] FAIL" | tee -a "$report"
+              fail=1
+            fi
+            echo "" >> "$report"
+          }
+
+          run_check lint "npm run -w ${WORKSPACE} lint --if-present"
+          run_check typecheck "npm run -w ${WORKSPACE} typecheck --if-present"
+          run_check test "npm run -w ${WORKSPACE} test --if-present"
+          run_check build "npm run -w ${WORKSPACE} build --if-present"
+
+          if [[ "$fail" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload workspace report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-${{ env.WORKSPACE }}
+          path: ci-reports/${{ env.WORKSPACE }}.txt
+
+  ricardian:
+    name: ci/ricardian
+    runs-on: ubuntu-latest
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.ricardian == 'true'
+    env:
+      WORKSPACE: ricardian
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run workspace checks
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-reports
+          report="ci-reports/${WORKSPACE}.txt"
+          fail=0
+
+          run_check() {
+            local label="$1"
+            local cmd="$2"
+            echo "[$label] command: $cmd" | tee -a "$report"
+            if bash -lc "$cmd"; then
+              echo "[$label] PASS" | tee -a "$report"
+            else
+              echo "[$label] FAIL" | tee -a "$report"
+              fail=1
+            fi
+            echo "" >> "$report"
+          }
+
+          run_check lint "npm run -w ${WORKSPACE} lint --if-present"
+          run_check typecheck "npm run -w ${WORKSPACE} typecheck --if-present"
+          run_check test "npm run -w ${WORKSPACE} test --if-present"
+          run_check build "npm run -w ${WORKSPACE} build --if-present"
+
+          if [[ "$fail" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload workspace report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-${{ env.WORKSPACE }}
+          path: ci-reports/${{ env.WORKSPACE }}.txt
+
+  treasury:
+    name: ci/treasury
+    runs-on: ubuntu-latest
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.treasury == 'true'
+    env:
+      WORKSPACE: treasury
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run workspace checks
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-reports
+          report="ci-reports/${WORKSPACE}.txt"
+          fail=0
+
+          run_check() {
+            local label="$1"
+            local cmd="$2"
+            echo "[$label] command: $cmd" | tee -a "$report"
+            if bash -lc "$cmd"; then
+              echo "[$label] PASS" | tee -a "$report"
+            else
+              echo "[$label] FAIL" | tee -a "$report"
+              fail=1
+            fi
+            echo "" >> "$report"
+          }
+
+          run_check lint "npm run -w ${WORKSPACE} lint --if-present"
+          run_check typecheck "npm run -w ${WORKSPACE} typecheck --if-present"
+          run_check test "npm run -w ${WORKSPACE} test --if-present"
+          run_check build "npm run -w ${WORKSPACE} build --if-present"
+
+          if [[ "$fail" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload workspace report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-${{ env.WORKSPACE }}
+          path: ci-reports/${{ env.WORKSPACE }}.txt
+
+  release-gate:
+    name: ci/release-gate
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - contracts
+      - sdk
+      - oracle
+      - indexer
+      - notifications
+      - reconciliation
+      - ricardian
+      - treasury
+    steps:
+      - name: Evaluate required checks
+        shell: bash
+        run: |
+          mkdir -p ci-reports
+          report="ci-reports/release-gate.txt"
+
+          declare -A results
+          results["ci/contracts"]="${{ needs.contracts.result }}"
+          results["ci/sdk"]="${{ needs.sdk.result }}"
+          results["ci/oracle"]="${{ needs.oracle.result }}"
+          results["ci/indexer"]="${{ needs.indexer.result }}"
+          results["ci/notifications"]="${{ needs.notifications.result }}"
+          results["ci/reconciliation"]="${{ needs.reconciliation.result }}"
+          results["ci/ricardian"]="${{ needs.ricardian.result }}"
+          results["ci/treasury"]="${{ needs.treasury.result }}"
+
+          failed=0
+          for check in "${!results[@]}"; do
+            status="${results[$check]}"
+            echo "$check => $status" | tee -a "$report"
+            if [[ "$status" != "success" && "$status" != "skipped" ]]; then
+              failed=1
+            fi
+          done
+
+          {
+            echo "## Release Gate Summary"
+            echo ""
+            for check in "${!results[@]}"; do
+              echo "- \\`$check\\`: ${results[$check]}"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$failed" -ne 0 ]]; then
+            echo "release-gate failed" | tee -a "$report"
+            exit 1
+          fi
+
+      - name: Upload release gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-release-gate
+          path: ci-reports/release-gate.txt

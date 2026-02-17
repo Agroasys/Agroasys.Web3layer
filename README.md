@@ -128,3 +128,50 @@ npm run -w sdk build
 We welcome contributions from the Web3 and Trade Finance communities. Please read `CONTRIBUTING.md` for details on our code of conduct and the process for submitting pull requests.
 
 ##### Built with ❤️ for the future of Trade.
+
+## CI Release Gate Checks
+
+Branch protection should require these checks:
+
+- `ci/contracts`
+- `ci/sdk`
+- `ci/oracle`
+- `ci/indexer`
+- `ci/notifications`
+- `ci/reconciliation`
+- `ci/ricardian`
+- `ci/treasury`
+- `ci/release-gate`
+
+Local parity commands:
+
+```bash
+npm ci
+npm run -w contracts lint && npm run -w contracts compile && npm run -w contracts test
+npm run -w sdk lint && npm run -w sdk test && npm run -w sdk build
+npm run -w oracle lint && npm run -w oracle test && npm run -w oracle build
+npm run -w indexer lint && npm run -w indexer build
+npm run -w notifications lint && npm run -w notifications build
+npm run -w reconciliation lint && npm run -w reconciliation test && npm run -w reconciliation build
+npm run -w ricardian lint && npm run -w ricardian test && npm run -w ricardian build
+npm run -w treasury lint && npm run -w treasury test && npm run -w treasury build
+```
+
+## Docker Profiles
+
+Use these profile commands for deterministic runtime checks:
+
+```bash
+scripts/docker-services.sh up local
+scripts/docker-services.sh health local
+
+scripts/docker-services.sh up staging-e2e
+scripts/docker-services.sh health staging-e2e
+scripts/staging-e2e-gate.sh
+```
+
+See `docs/docker-services.md` and `docs/runbooks/staging-e2e-release-gate.md` for triage and rollback instructions.
+
+## Commit Convention
+
+This repo follows Conventional Commits. See `CONTRIBUTING.md` for examples and PR checklist.
