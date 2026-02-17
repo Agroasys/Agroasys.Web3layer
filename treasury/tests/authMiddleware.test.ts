@@ -136,7 +136,9 @@ describe('service auth middleware (treasury)', () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(response.status).toHaveBeenCalledWith(401);
-    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Invalid signature' }));
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'Invalid signature', code: 'AUTH_INVALID_SIGNATURE' })
+    );
   });
 
   test('expired timestamp fails', async () => {
@@ -159,7 +161,9 @@ describe('service auth middleware (treasury)', () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(response.status).toHaveBeenCalledWith(401);
-    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Timestamp outside allowed skew window' }));
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'Timestamp outside allowed skew window', code: 'AUTH_TIMESTAMP_SKEW' })
+    );
   });
 
   test('replayed nonce fails', async () => {
@@ -180,7 +184,9 @@ describe('service auth middleware (treasury)', () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(response.status).toHaveBeenCalledWith(401);
-    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Replay detected for nonce' }));
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'Replay detected for nonce', code: 'AUTH_NONCE_REPLAY' })
+    );
   });
 
   test('missing header fails', async () => {
@@ -203,7 +209,32 @@ describe('service auth middleware (treasury)', () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(response.status).toHaveBeenCalledWith(401);
-    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Missing authentication headers' }));
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'Missing authentication headers', code: 'AUTH_MISSING_HEADERS' })
+    );
+  });
+
+  test('invalid nonce format fails', async () => {
+    const middleware = createServiceAuthMiddleware({
+      enabled: true,
+      maxSkewSeconds: 300,
+      nonceTtlSeconds: 600,
+      lookupApiKey,
+      consumeNonce: jest.fn().mockResolvedValue(true),
+      nowSeconds,
+    });
+
+    const { request } = createSignedRequest({ nonce: '   ' });
+    const response = createMockResponse();
+    const next = jest.fn() as NextFunction;
+
+    await middleware(request, response, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(response.status).toHaveBeenCalledWith(401);
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'Invalid nonce format', code: 'AUTH_INVALID_NONCE' })
+    );
   });
 
   test('inactive key returns forbidden', async () => {
@@ -228,21 +259,25 @@ describe('service auth middleware (treasury)', () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(response.status).toHaveBeenCalledWith(403);
-    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'API key is inactive' }));
-  });
-  test('parseServiceApiKeys parses string false into inactive key', () => {
-    const parsed = parseServiceApiKeys(
-      JSON.stringify([{ id: 'svc-string-inactive', secret: 'secret', active: 'false' }])
-    );
-
-    expect(parsed).toHaveLength(1);
-    expect(parsed[0].active).toBe(false);
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'API key is inactive', code: 'AUTH_FORBIDDEN' }));
   });
 
-  test('parseServiceApiKeys rejects invalid active value', () => {
+  test('parseServiceApiKeys rejects string active values', () => {
     expect(() =>
-      parseServiceApiKeys(JSON.stringify([{ id: 'svc-invalid', secret: 'secret', active: 'not-a-boolean' }]))
-    ).toThrow('API_KEYS_JSON[0].active must be a boolean');
+      parseServiceApiKeys(JSON.stringify([{ id: 'svc-string', secret: 'secret', active: 'false' }]))
+    ).toThrow('API_KEYS_JSON[0].active must be a boolean true or false');
   });
 
+  test('parseServiceApiKeys rejects missing active values', () => {
+    expect(() => parseServiceApiKeys(JSON.stringify([{ id: 'svc-missing', secret: 'secret' }]))).toThrow(
+      'API_KEYS_JSON[0].active must be a boolean true or false'
+    );
+  });
+
+  test('parseServiceApiKeys rejects API key ids over max length', () => {
+    const oversizedId = 'a'.repeat(129);
+    expect(() =>
+      parseServiceApiKeys(JSON.stringify([{ id: oversizedId, secret: 'secret', active: true }]))
+    ).toThrow('API_KEYS_JSON[0].id must be <= 128 characters');
+  });
 });
