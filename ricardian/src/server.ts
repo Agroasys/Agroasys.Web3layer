@@ -54,7 +54,6 @@ async function bootstrap(): Promise<void> {
         },
       },
     },
-    logger: Logger,
   });
 
   app.use(helmet());
