@@ -7,13 +7,7 @@ PROFILE="${2:-}"
 SERVICE="${3:-}"
 
 usage() {
-  cat >&2 <<USAGE
-Usage: scripts/docker-services.sh <build|up|down|logs|ps|health> <local|staging-e2e|infra> [service]
-Examples:
-  scripts/docker-services.sh up local
-  scripts/docker-services.sh health staging-e2e
-  scripts/docker-services.sh logs local reconciliation
-USAGE
+  echo "Usage: scripts/docker-services.sh <build|up|down|logs|ps|health> <local-dev|staging-e2e|infra> [service]" >&2
 }
 
 if [[ -z "$ACTION" || -z "$PROFILE" ]]; then
@@ -22,7 +16,7 @@ if [[ -z "$ACTION" || -z "$PROFILE" ]]; then
 fi
 
 case "$PROFILE" in
-  local|staging-e2e|infra)
+  local-dev|staging-e2e|infra)
     ;;
   *)
     echo "Unsupported profile: $PROFILE" >&2
@@ -42,10 +36,10 @@ load_env_file() {
 }
 
 load_env_file ".env"
-if [[ "$PROFILE" == "local" ]]; then
+if [[ "$PROFILE" == "local-dev" ]]; then
   load_env_file ".env.local"
-elif [[ "$PROFILE" == "staging-e2e" ]]; then
-  load_env_file ".env.staging-e2e"
+else
+  load_env_file ".env.${PROFILE}"
 fi
 
 run_compose() {
@@ -74,11 +68,11 @@ check_required_services() {
   local required_services=()
 
   case "$PROFILE" in
-    local)
-      required_services=(postgres redis indexer oracle reconciliation ricardian treasury)
+    local-dev)
+      required_services=(postgres indexer oracle reconciliation ricardian treasury)
       ;;
     staging-e2e)
-      required_services=(postgres redis indexer-db indexer-pipeline indexer-graphql oracle reconciliation ricardian treasury)
+      required_services=(postgres indexer-pipeline indexer-graphql oracle reconciliation ricardian treasury)
       ;;
     infra)
       required_services=(postgres redis)
@@ -96,43 +90,23 @@ check_required_services() {
 }
 
 check_indexer_graphql() {
-  local service_name="$1"
+  local graphql_path="/graphql"
   local graphql_port="${INDEXER_GRAPHQL_PORT:-4350}"
 
-  run_compose exec -T "$service_name" node -e "fetch('http://127.0.0.1:${graphql_port}/graphql', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: 'query { __typename }' }) }).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
-  echo "indexer graphql endpoint: ok (${service_name})"
-}
+  if is_running "indexer"; then
+    run_compose exec -T indexer node -e "fetch('http://127.0.0.1:${graphql_port}${graphql_path}', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: 'query { __typename }' }) }).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+    echo "indexer graphql endpoint: ok (indexer)"
+    return 0
+  fi
 
-wait_for_indexer_graphql() {
-  local service_name="$1"
-  local max_attempts="${2:-30}"
-  local sleep_seconds="${3:-2}"
+  if is_running "indexer-graphql"; then
+    run_compose exec -T indexer-graphql node -e "fetch('http://127.0.0.1:${graphql_port}${graphql_path}', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: 'query { __typename }' }) }).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+    echo "indexer graphql endpoint: ok (indexer-graphql)"
+    return 0
+  fi
 
-  local attempt=1
-  while [[ "$attempt" -le "$max_attempts" ]]; do
-    if check_indexer_graphql "$service_name" >/dev/null 2>&1; then
-      echo "indexer graphql endpoint: ok (${service_name})"
-      return 0
-    fi
-
-    sleep "$sleep_seconds"
-    attempt=$((attempt + 1))
-  done
-
-  echo "indexer graphql endpoint failed after ${max_attempts} attempts (${service_name})" >&2
+  echo "indexer graphql endpoint check skipped: no indexer service running" >&2
   return 1
-}
-
-start_local() {
-  run_compose up -d postgres redis indexer ricardian treasury oracle
-  wait_for_indexer_graphql indexer
-  run_compose up -d reconciliation
-}
-
-start_staging() {
-  run_compose up -d postgres redis indexer-db indexer-pipeline indexer-graphql ricardian treasury oracle
-  wait_for_indexer_graphql indexer-graphql
-  run_compose up -d reconciliation
 }
 
 case "$ACTION" in
@@ -144,17 +118,7 @@ case "$ACTION" in
     fi
     ;;
   up)
-    case "$PROFILE" in
-      local)
-        start_local
-        ;;
-      staging-e2e)
-        start_staging
-        ;;
-      infra)
-        run_compose up -d postgres redis
-        ;;
-    esac
+    run_compose up -d
     ;;
   down)
     run_compose down -v
@@ -189,18 +153,11 @@ case "$ACTION" in
       run_compose exec -T reconciliation node reconciliation/dist/healthcheck.js >/dev/null
       echo "reconciliation healthcheck: ok"
     fi
-
-    case "$PROFILE" in
-      local)
-        check_indexer_graphql indexer
-        ;;
-      staging-e2e)
-        check_indexer_graphql indexer-graphql
-        ;;
-      infra)
-        echo "indexer graphql endpoint: skipped for infra profile"
-        ;;
-    esac
+    if [[ "$PROFILE" != "infra" ]]; then
+      check_indexer_graphql
+    else
+      echo "indexer graphql endpoint: skipped for infra profile"
+    fi
     ;;
   *)
     echo "Unknown action: $ACTION" >&2
