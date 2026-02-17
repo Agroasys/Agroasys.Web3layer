@@ -25,5 +25,8 @@ When `AUTH_ENABLED=true`, all endpoints except health require:
 Canonical string format:
 `METHOD\nPATH\nQUERY\nBODY_SHA256\nTIMESTAMP\nNONCE`
 
+Auth failures return structured JSON with stable `code` values (for example: `AUTH_MISSING_HEADERS`, `AUTH_INVALID_SIGNATURE`, `AUTH_FORBIDDEN`).
+`API_KEYS_JSON` entries must set `active` as an explicit boolean (`true` or `false`) for each key.
+
 ## Docker
 See `docs/docker-services.md` for compose profiles and runtime operations.
