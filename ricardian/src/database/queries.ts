@@ -56,9 +56,7 @@ export async function consumeServiceAuthNonce(apiKey: string, nonce: string, ttl
   const result = await pool.query<{ accepted: boolean }>(
     `WITH pruned_nonce AS (
       DELETE FROM ricardian_auth_nonces
-      WHERE api_key = $1
-        AND nonce = $2
-        AND expires_at <= NOW()
+      WHERE expires_at <= NOW()
     ),
     consumed_nonce AS (
       INSERT INTO ricardian_auth_nonces (api_key, nonce, expires_at)
