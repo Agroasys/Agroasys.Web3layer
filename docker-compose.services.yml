@@ -1,25 +1,25 @@
 services:
   postgres:
     image: postgres:16-alpine
-    profiles: ["local", "staging-e2e", "infra"]
+    profiles: ["local-dev", "staging-e2e", "infra"]
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-agroasys}
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./postgres/init/10-service-databases.sql:/docker-entrypoint-initdb.d/10-service-databases.sql:ro
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    profiles: ["local", "staging-e2e", "infra"]
+    profiles: ["local-dev", "staging-e2e", "infra"]
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
@@ -33,7 +33,7 @@ services:
 
   indexer:
     image: node:20-alpine
-    profiles: ["local"]
+    profiles: ["local-dev"]
     command:
       - node
       - -e
@@ -49,7 +49,7 @@ services:
           }
 
           req.on('data', () => {
-            // lightweight local-dev-fast responder
+            // request body intentionally ignored in lightweight local responder
           });
 
           req.on('end', () => {
@@ -74,20 +74,21 @@ services:
       timeout: 5s
       retries: 5
 
-  indexer-db:
-    image: postgres:16-alpine
+  indexer-migrate:
     profiles: ["staging-e2e"]
+    build:
+      context: ./indexer
+      dockerfile: Dockerfile
     environment:
-      POSTGRES_USER: ${INDEXER_DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${INDEXER_DB_PASSWORD:-postgres}
-      POSTGRES_DB: ${INDEXER_DB_NAME:-agroasys_indexer}
-    volumes:
-      - indexer-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${INDEXER_DB_USER:-postgres}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: "${INDEXER_DB_NAME}"
+      DB_USER: "${POSTGRES_USER}"
+      DB_PASSWORD: "${POSTGRES_PASSWORD}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npx", "squid-typeorm-migration", "apply"]
 
   indexer-pipeline:
     profiles: ["staging-e2e"]
@@ -95,25 +96,27 @@ services:
       context: ./indexer
       dockerfile: Dockerfile
     environment:
-      DB_HOST: indexer-db
-      DB_PORT: 5432
-      DB_NAME: ${INDEXER_DB_NAME:-agroasys_indexer}
-      DB_USER: ${INDEXER_DB_USER:-postgres}
-      DB_PASSWORD: ${INDEXER_DB_PASSWORD:-postgres}
-      GATEWAY_URL: ${INDEXER_GATEWAY_URL}
-      RPC_ENDPOINT: ${INDEXER_RPC_ENDPOINT}
-      START_BLOCK: ${INDEXER_START_BLOCK:-1}
-      RATE_LIMIT: ${INDEXER_RATE_LIMIT:-10}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: "${INDEXER_DB_NAME}"
+      DB_USER: "${POSTGRES_USER}"
+      DB_PASSWORD: "${POSTGRES_PASSWORD}"
+      GATEWAY_URL: "${INDEXER_GATEWAY_URL}"
+      RPC_ENDPOINT: "${INDEXER_RPC_ENDPOINT}"
+      START_BLOCK: "${INDEXER_START_BLOCK}"
+      RATE_LIMIT: "${INDEXER_RATE_LIMIT}"
       CONTRACT_ADDRESS: "${INDEXER_CONTRACT_ADDRESS}"
-      GRAPHQL_PORT: ${INDEXER_GRAPHQL_PORT:-4350}
+      GRAPHQL_PORT: "${INDEXER_GRAPHQL_PORT}"
     depends_on:
-      indexer-db:
+      postgres:
         condition: service_healthy
-    command:
-      - sh
-      - -lc
-      - |
-        npx squid-typeorm-migration apply && node -r dotenv/config lib/main.js
+      indexer-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -q '[l]ib/main.js'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   indexer-graphql:
     profiles: ["staging-e2e"]
@@ -121,17 +124,17 @@ services:
       context: ./indexer
       dockerfile: Dockerfile
     environment:
-      DB_HOST: indexer-db
-      DB_PORT: 5432
-      DB_NAME: ${INDEXER_DB_NAME:-agroasys_indexer}
-      DB_USER: ${INDEXER_DB_USER:-postgres}
-      DB_PASSWORD: ${INDEXER_DB_PASSWORD:-postgres}
-      GQL_PORT: ${INDEXER_GRAPHQL_PORT:-4350}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: "${INDEXER_DB_NAME}"
+      DB_USER: "${POSTGRES_USER}"
+      DB_PASSWORD: "${POSTGRES_PASSWORD}"
+      GQL_PORT: "${INDEXER_GRAPHQL_PORT}"
     depends_on:
-      indexer-db:
+      postgres:
         condition: service_healthy
-      indexer-pipeline:
-        condition: service_started
+      indexer-migrate:
+        condition: service_completed_successfully
     command: ["npx", "squid-graphql-server"]
     ports:
       - "${INDEXER_GRAPHQL_PORT:-4350}:${INDEXER_GRAPHQL_PORT:-4350}"
@@ -141,149 +144,160 @@ services:
         - node
         - -e
         - |
-          const port = process.env.GQL_PORT || '4350';
-          fetch('http://127.0.0.1:' + port + '/graphql', {
+          const p = process.env.GQL_PORT || '4350';
+          fetch('http://127.0.0.1:' + p + '/graphql', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: 'query { __typename }' }),
+            body: JSON.stringify({ query: '{ __typename }' }),
           })
             .then((response) => process.exit(response.ok ? 0 : 1))
             .catch(() => process.exit(1));
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 8
 
   ricardian:
-    profiles: ["local", "staging-e2e"]
+    profiles: ["local-dev", "staging-e2e"]
     build:
       context: .
       dockerfile: ricardian/Dockerfile
+    environment:
+      PORT: "${RICARDIAN_PORT}"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: "${RICARDIAN_DB_NAME}"
+      DB_USER: "${POSTGRES_USER}"
+      DB_PASSWORD: "${POSTGRES_PASSWORD}"
+      AUTH_ENABLED: "${RICARDIAN_AUTH_ENABLED}"
+      API_KEYS_JSON: "${RICARDIAN_API_KEYS_JSON}"
+      AUTH_MAX_SKEW_SECONDS: "${RICARDIAN_AUTH_MAX_SKEW_SECONDS}"
+      AUTH_NONCE_TTL_SECONDS: "${RICARDIAN_AUTH_NONCE_TTL_SECONDS}"
+      RATE_LIMIT_ENABLED: "${RICARDIAN_RATE_LIMIT_ENABLED}"
+      RATE_LIMIT_REDIS_URL: "${RICARDIAN_RATE_LIMIT_REDIS_URL}"
     depends_on:
       postgres:
         condition: service_healthy
-    environment:
-      PORT: ${RICARDIAN_PORT:-3100}
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: ${RICARDIAN_DB_NAME:-agroasys_ricardian}
-      DB_USER: ${POSTGRES_USER:-postgres}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      AUTH_ENABLED: ${RICARDIAN_AUTH_ENABLED:-false}
-      API_KEYS_JSON: ${RICARDIAN_API_KEYS_JSON:-[]}
-      AUTH_MAX_SKEW_SECONDS: ${RICARDIAN_AUTH_MAX_SKEW_SECONDS:-300}
-      AUTH_NONCE_TTL_SECONDS: ${RICARDIAN_AUTH_NONCE_TTL_SECONDS:-600}
-      RATE_LIMIT_ENABLED: ${RICARDIAN_RATE_LIMIT_ENABLED:-false}
-      RATE_LIMIT_REDIS_URL: ${RICARDIAN_RATE_LIMIT_REDIS_URL:-redis://redis:6379}
-      RATE_LIMIT_WRITE_BURST_LIMIT: ${RICARDIAN_RATE_LIMIT_WRITE_BURST_LIMIT:-10}
-      RATE_LIMIT_WRITE_BURST_WINDOW_SECONDS: ${RICARDIAN_RATE_LIMIT_WRITE_BURST_WINDOW_SECONDS:-10}
-      RATE_LIMIT_WRITE_SUSTAINED_LIMIT: ${RICARDIAN_RATE_LIMIT_WRITE_SUSTAINED_LIMIT:-120}
-      RATE_LIMIT_WRITE_SUSTAINED_WINDOW_SECONDS: ${RICARDIAN_RATE_LIMIT_WRITE_SUSTAINED_WINDOW_SECONDS:-60}
-      RATE_LIMIT_READ_BURST_LIMIT: ${RICARDIAN_RATE_LIMIT_READ_BURST_LIMIT:-30}
-      RATE_LIMIT_READ_BURST_WINDOW_SECONDS: ${RICARDIAN_RATE_LIMIT_READ_BURST_WINDOW_SECONDS:-10}
-      RATE_LIMIT_READ_SUSTAINED_LIMIT: ${RICARDIAN_RATE_LIMIT_READ_SUSTAINED_LIMIT:-600}
-      RATE_LIMIT_READ_SUSTAINED_WINDOW_SECONDS: ${RICARDIAN_RATE_LIMIT_READ_SUSTAINED_WINDOW_SECONDS:-60}
+      redis:
+        condition: service_healthy
     ports:
-      - "${RICARDIAN_PORT:-3100}:3100"
+      - "${RICARDIAN_PORT:-3100}:${RICARDIAN_PORT:-3100}"
 
   treasury:
-    profiles: ["local", "staging-e2e"]
+    profiles: ["local-dev", "staging-e2e"]
     build:
       context: .
       dockerfile: treasury/Dockerfile
+    environment:
+      PORT: "${TREASURY_PORT}"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: "${TREASURY_DB_NAME}"
+      DB_USER: "${POSTGRES_USER}"
+      DB_PASSWORD: "${POSTGRES_PASSWORD}"
+      INDEXER_GRAPHQL_URL: "${TREASURY_INDEXER_GRAPHQL_URL}"
+      TREASURY_INGEST_BATCH_SIZE: "${TREASURY_INGEST_BATCH_SIZE}"
+      TREASURY_INGEST_MAX_EVENTS: "${TREASURY_INGEST_MAX_EVENTS}"
+      AUTH_ENABLED: "${TREASURY_AUTH_ENABLED}"
+      API_KEYS_JSON: "${TREASURY_API_KEYS_JSON}"
+      AUTH_MAX_SKEW_SECONDS: "${TREASURY_AUTH_MAX_SKEW_SECONDS}"
+      AUTH_NONCE_TTL_SECONDS: "${TREASURY_AUTH_NONCE_TTL_SECONDS}"
     depends_on:
       postgres:
         condition: service_healthy
-    environment:
-      PORT: ${TREASURY_PORT:-3200}
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: ${TREASURY_DB_NAME:-agroasys_treasury}
-      DB_USER: ${POSTGRES_USER:-postgres}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      INDEXER_GRAPHQL_URL: ${TREASURY_INDEXER_GRAPHQL_URL:-http://indexer:4350/graphql}
-      TREASURY_INGEST_BATCH_SIZE: ${TREASURY_INGEST_BATCH_SIZE:-100}
-      TREASURY_INGEST_MAX_EVENTS: ${TREASURY_INGEST_MAX_EVENTS:-2000}
-      AUTH_ENABLED: ${TREASURY_AUTH_ENABLED:-false}
-      API_KEYS_JSON: ${TREASURY_API_KEYS_JSON:-[]}
-      AUTH_MAX_SKEW_SECONDS: ${TREASURY_AUTH_MAX_SKEW_SECONDS:-300}
-      AUTH_NONCE_TTL_SECONDS: ${TREASURY_AUTH_NONCE_TTL_SECONDS:-600}
+      indexer:
+        condition: service_healthy
+        required: false
+      indexer-graphql:
+        condition: service_healthy
+        required: false
     ports:
-      - "${TREASURY_PORT:-3200}:3200"
+      - "${TREASURY_PORT:-3200}:${TREASURY_PORT:-3200}"
 
   oracle:
-    profiles: ["local", "staging-e2e"]
+    profiles: ["local-dev", "staging-e2e"]
     build:
       context: .
       dockerfile: oracle/Dockerfile
-    depends_on:
-      postgres:
-        condition: service_healthy
     environment:
-      PORT: ${ORACLE_PORT:-3001}
-      API_KEY: ${ORACLE_API_KEY:-local-api-key}
-      HMAC_SECRET: ${ORACLE_HMAC_SECRET:-local-hmac-secret}
-      RPC_URL: ${ORACLE_RPC_URL}
-      CHAIN_ID: ${ORACLE_CHAIN_ID:-31337}
+      PORT: "${ORACLE_PORT}"
+      API_KEY: "${ORACLE_API_KEY}"
+      HMAC_SECRET: "${ORACLE_HMAC_SECRET}"
+      RPC_URL: "${ORACLE_RPC_URL}"
+      CHAIN_ID: "${ORACLE_CHAIN_ID}"
       ESCROW_ADDRESS: "${ORACLE_ESCROW_ADDRESS}"
       USDC_ADDRESS: "${ORACLE_USDC_ADDRESS}"
       ORACLE_PRIVATE_KEY: "${ORACLE_PRIVATE_KEY}"
       DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: ${ORACLE_DB_NAME:-agroasys_oracle}
-      DB_USER: ${POSTGRES_USER:-postgres}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      INDEXER_GRAPHQL_URL: ${ORACLE_INDEXER_GRAPHQL_URL:-http://indexer:4350/graphql}
-      RETRY_ATTEMPTS: ${ORACLE_RETRY_ATTEMPTS:-3}
-      RETRY_DELAY: ${ORACLE_RETRY_DELAY:-1000}
-      NOTIFICATIONS_ENABLED: ${ORACLE_NOTIFICATIONS_ENABLED:-false}
-      NOTIFICATIONS_WEBHOOK_URL: ${ORACLE_NOTIFICATIONS_WEBHOOK_URL:-}
-      NOTIFICATIONS_COOLDOWN_MS: ${ORACLE_NOTIFICATIONS_COOLDOWN_MS:-300000}
-      NOTIFICATIONS_REQUEST_TIMEOUT_MS: ${ORACLE_NOTIFICATIONS_REQUEST_TIMEOUT_MS:-5000}
+      DB_PORT: "5432"
+      DB_NAME: "${ORACLE_DB_NAME}"
+      DB_USER: "${POSTGRES_USER}"
+      DB_PASSWORD: "${POSTGRES_PASSWORD}"
+      INDEXER_GRAPHQL_URL: "${ORACLE_INDEXER_GRAPHQL_URL}"
+      RETRY_ATTEMPTS: "${ORACLE_RETRY_ATTEMPTS}"
+      RETRY_DELAY: "${ORACLE_RETRY_DELAY}"
+      NOTIFICATIONS_ENABLED: "${ORACLE_NOTIFICATIONS_ENABLED}"
+      NOTIFICATIONS_WEBHOOK_URL: "${ORACLE_NOTIFICATIONS_WEBHOOK_URL}"
+      NOTIFICATIONS_COOLDOWN_MS: "${ORACLE_NOTIFICATIONS_COOLDOWN_MS}"
+      NOTIFICATIONS_REQUEST_TIMEOUT_MS: "${ORACLE_NOTIFICATIONS_REQUEST_TIMEOUT_MS}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      indexer:
+        condition: service_healthy
+        required: false
+      indexer-graphql:
+        condition: service_healthy
+        required: false
     ports:
-      - "${ORACLE_PORT:-3001}:3001"
+      - "${ORACLE_PORT:-3001}:${ORACLE_PORT:-3001}"
     healthcheck:
       test:
         - CMD
         - node
         - -e
         - |
-          const port = process.env.PORT || '3001';
-          fetch('http://127.0.0.1:' + port + '/api/oracle/health')
+          const p = process.env.PORT || '3001';
+          fetch('http://127.0.0.1:' + p + '/api/oracle/health')
             .then((response) => process.exit(response.ok ? 0 : 1))
             .catch(() => process.exit(1));
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 8
 
   reconciliation:
-    profiles: ["local", "staging-e2e"]
+    profiles: ["local-dev", "staging-e2e"]
     build:
       context: .
       dockerfile: reconciliation/Dockerfile
+    environment:
+      RECONCILIATION_ENABLED: "${RECONCILIATION_ENABLED}"
+      RECONCILIATION_DAEMON_INTERVAL_MS: "${RECONCILIATION_DAEMON_INTERVAL_MS}"
+      RECONCILIATION_BATCH_SIZE: "${RECONCILIATION_BATCH_SIZE}"
+      RECONCILIATION_MAX_TRADES_PER_RUN: "${RECONCILIATION_MAX_TRADES_PER_RUN}"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: "${RECONCILIATION_DB_NAME}"
+      DB_USER: "${POSTGRES_USER}"
+      DB_PASSWORD: "${POSTGRES_PASSWORD}"
+      RPC_URL: "${RECONCILIATION_RPC_URL}"
+      CHAIN_ID: "${RECONCILIATION_CHAIN_ID}"
+      ESCROW_ADDRESS: "${RECONCILIATION_ESCROW_ADDRESS}"
+      USDC_ADDRESS: "${RECONCILIATION_USDC_ADDRESS}"
+      INDEXER_GRAPHQL_URL: "${RECONCILIATION_INDEXER_GRAPHQL_URL}"
+      NOTIFICATIONS_ENABLED: "${RECONCILIATION_NOTIFICATIONS_ENABLED}"
+      NOTIFICATIONS_WEBHOOK_URL: "${RECONCILIATION_NOTIFICATIONS_WEBHOOK_URL}"
+      NOTIFICATIONS_COOLDOWN_MS: "${RECONCILIATION_NOTIFICATIONS_COOLDOWN_MS}"
+      NOTIFICATIONS_REQUEST_TIMEOUT_MS: "${RECONCILIATION_NOTIFICATIONS_REQUEST_TIMEOUT_MS}"
     depends_on:
       postgres:
         condition: service_healthy
-    environment:
-      RECONCILIATION_ENABLED: ${RECONCILIATION_ENABLED:-true}
-      RECONCILIATION_DAEMON_INTERVAL_MS: ${RECONCILIATION_DAEMON_INTERVAL_MS:-60000}
-      RECONCILIATION_BATCH_SIZE: ${RECONCILIATION_BATCH_SIZE:-100}
-      RECONCILIATION_MAX_TRADES_PER_RUN: ${RECONCILIATION_MAX_TRADES_PER_RUN:-1000}
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: ${RECONCILIATION_DB_NAME:-agroasys_reconciliation}
-      DB_USER: ${POSTGRES_USER:-postgres}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      RPC_URL: ${RECONCILIATION_RPC_URL}
-      CHAIN_ID: ${RECONCILIATION_CHAIN_ID:-31337}
-      ESCROW_ADDRESS: "${RECONCILIATION_ESCROW_ADDRESS}"
-      USDC_ADDRESS: "${RECONCILIATION_USDC_ADDRESS}"
-      INDEXER_GRAPHQL_URL: ${RECONCILIATION_INDEXER_GRAPHQL_URL:-http://indexer:4350/graphql}
-      NOTIFICATIONS_ENABLED: ${RECONCILIATION_NOTIFICATIONS_ENABLED:-false}
-      NOTIFICATIONS_WEBHOOK_URL: ${RECONCILIATION_NOTIFICATIONS_WEBHOOK_URL:-}
-      NOTIFICATIONS_COOLDOWN_MS: ${RECONCILIATION_NOTIFICATIONS_COOLDOWN_MS:-300000}
-      NOTIFICATIONS_REQUEST_TIMEOUT_MS: ${RECONCILIATION_NOTIFICATIONS_REQUEST_TIMEOUT_MS:-5000}
+      indexer:
+        condition: service_healthy
+        required: false
+      indexer-graphql:
+        condition: service_healthy
+        required: false
 
 volumes:
   postgres-data:
   redis-data:
-  indexer-data:

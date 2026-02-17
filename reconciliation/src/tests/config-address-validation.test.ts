@@ -23,14 +23,23 @@ const BASE_ENV: Record<string, string> = {
   NOTIFICATIONS_REQUEST_TIMEOUT_MS: '5000',
 };
 
-function withEnv(overrides: Record<string, string>, fn: () => void): void {
+function withEnv(overrides: Record<string, string | undefined>, fn: () => void): void {
   const snapshot = { ...process.env };
 
   for (const key of Object.keys(BASE_ENV)) {
     delete process.env[key];
   }
 
-  Object.assign(process.env, BASE_ENV, overrides);
+  Object.assign(process.env, BASE_ENV);
+
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) {
+      delete process.env[key];
+      continue;
+    }
+
+    process.env[key] = value;
+  }
 
   try {
     fn();
@@ -61,5 +70,23 @@ test('valid lowercase config addresses are normalized and accepted', () => {
 
     assert.equal(config.escrowAddress, '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266');
     assert.equal(config.usdcAddress, '0x70997970C51812dc3A010C7d01b50e0d17dc79C8');
+  });
+});
+
+test('missing INDEXER_GRAPHQL_URL fails with explicit config error', () => {
+  withEnv({ INDEXER_GRAPHQL_URL: undefined }, () => {
+    assert.throws(
+      () => loadConfigModule(),
+      /INDEXER_GRAPHQL_URL is missing/,
+    );
+  });
+});
+
+test('malformed RPC_URL fails with explicit config error', () => {
+  withEnv({ RPC_URL: 'not-a-url' }, () => {
+    assert.throws(
+      () => loadConfigModule(),
+      /RPC_URL must be a valid URL, received "not-a-url"/,
+    );
   });
 });

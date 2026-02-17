@@ -55,6 +55,24 @@ function envAddress(name: string): string {
   return normalizeAddressOrThrow(value, name);
 }
 
+function envUrl(name: string): string {
+  const value = env(name);
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${name} must be a valid URL, received "${value}"`);
+  }
+
+  assert(
+    parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'ws:' || parsed.protocol === 'wss:',
+    `${name} must use http, https, ws, or wss protocol`,
+  );
+
+  return value;
+}
+
 export function loadConfig(): ReconciliationConfig {
   const notificationsEnabled = envBool('NOTIFICATIONS_ENABLED', false);
   const notificationsWebhookUrl = process.env.NOTIFICATIONS_WEBHOOK_URL;
@@ -73,11 +91,11 @@ export function loadConfig(): ReconciliationConfig {
     dbName: env('DB_NAME'),
     dbUser: env('DB_USER'),
     dbPassword: env('DB_PASSWORD'),
-    rpcUrl: env('RPC_URL'),
+    rpcUrl: envUrl('RPC_URL'),
     chainId: envNumber('CHAIN_ID'),
     escrowAddress: envAddress('ESCROW_ADDRESS'),
     usdcAddress: envAddress('USDC_ADDRESS'),
-    indexerGraphqlUrl: env('INDEXER_GRAPHQL_URL'),
+    indexerGraphqlUrl: envUrl('INDEXER_GRAPHQL_URL'),
     notificationsEnabled,
     notificationsWebhookUrl,
     notificationsCooldownMs: envNumber('NOTIFICATIONS_COOLDOWN_MS', 300000),

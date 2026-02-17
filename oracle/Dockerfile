@@ -1,31 +1,45 @@
-FROM node
-
+FROM node:20-bookworm-slim AS builder
 WORKDIR /app
 
 COPY package*.json ./
+COPY sdk sdk
+COPY notifications notifications
+COPY oracle oracle
 
-COPY sdk/package*.json ./sdk/
-COPY sdk/tsconfig.json ./sdk/
-COPY sdk/src/ ./sdk/src/
-RUN cd /app/sdk && npm install && npm run build
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
 
-COPY notifications/package*.json ./notifications/
-COPY notifications/tsconfig.json ./notifications/
-COPY notifications/src/ ./notifications/src/
-RUN cd /app/notifications && npm install && npm run build
+RUN npm ci
 
-COPY oracle/package*.json ./oracle/
-COPY oracle/tsconfig.json ./oracle/
+RUN npm run -w @agroasys/sdk build \
+  && npm run -w @agroasys/notifications build \
+  && npm run -w oracle build
 
+FROM node:20-bookworm-slim AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+
+COPY --from=builder /app/node_modules /app/node_modules
+COPY --from=builder /app/oracle/package.json /app/oracle/package.json
+COPY --from=builder /app/oracle/dist /app/oracle/dist
+COPY --from=builder /app/oracle/src/database/schema.sql /app/oracle/src/database/schema.sql
+COPY --from=builder /app/oracle/node_modules /app/oracle/node_modules
+COPY --from=builder /app/sdk/package.json /app/sdk/package.json
+COPY --from=builder /app/sdk/dist /app/sdk/dist
+COPY --from=builder /app/notifications/package.json /app/notifications/package.json
+COPY --from=builder /app/notifications/dist /app/notifications/dist
+
+RUN groupadd --system agro \
+  && useradd --system --gid agro --create-home agro \
+  && chown -R agro:agro /app
+
+USER agro
 WORKDIR /app/oracle
-RUN npm install ../sdk
-RUN npm install ../notifications
-RUN npm install
-
-COPY oracle/src/ ./src/
-
-RUN npm run build
 
 EXPOSE 3001
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "const p=process.env.PORT||3001;fetch('http://127.0.0.1:'+p+'/api/oracle/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1));"
 
 CMD ["node", "dist/server.js"]
