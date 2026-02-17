@@ -9,7 +9,11 @@ export function createRouter(
   const router = Router();
 
   router.get('/health', (_, res) => {
-    res.status(200).json({ success: true, service: 'ricardian', timestamp: new Date().toISOString() });
+    res.status(200).json({ success: true, service: 'ricardian', status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  router.get('/ready', (_, res) => {
+    res.status(200).json({ success: true, service: 'ricardian', ready: true, timestamp: new Date().toISOString() });
   });
 
   if (rateLimitMiddleware) {

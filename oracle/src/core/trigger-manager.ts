@@ -5,6 +5,7 @@ import {createTrigger,getTriggerByIdempotencyKey,getLatestTriggerByActionKey,upd
 import {generateActionKey,generateRequestId,generateIdempotencyKey,calculateBackoff,} from '../utils/crypto';
 import {classifyError,determineNextStatus,OracleError,ValidationError,} from '../utils/errors';
 import { Logger } from '../utils/logger';
+import { incrementOracleExhaustedRetries, incrementOracleRedriveAttempts } from '../metrics/counters';
 import { WebhookNotifier } from '@agroasys/notifications';
 
 export interface TriggerRequest {
@@ -106,6 +107,7 @@ export class TriggerManager {
             actionKey: exhaustedTrigger.action_key,
             previousAttempts: exhaustedTrigger.attempt_count,
         });
+        incrementOracleRedriveAttempts(exhaustedTrigger.action_key);
 
         try {
             const trade = await this.sdkClient.getTrade(exhaustedTrigger.trade_id);
@@ -329,6 +331,7 @@ export class TriggerManager {
                 if (nextStatus === TriggerStatus.EXHAUSTED_NEEDS_REDRIVE) {
                     const exhaustedMessage =
                         "Exhausted " + this.maxAttempts + " attempts: " + oracleError.message + ". Use re-drive endpoint to retry.";
+                    incrementOracleExhaustedRetries(actionKey);
                     await this.notifyTerminalStatus(trigger, actionKey, nextStatus, exhaustedMessage, attempt);
                     return {
                         idempotencyKey: trigger.idempotency_key,
