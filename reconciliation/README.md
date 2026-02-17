@@ -28,5 +28,18 @@ After building, run:
 npm run healthcheck
 ```
 
+Reconciliation is a worker process (no HTTP server), so readiness is exposed through process startup + healthcheck command rather than `/ready`.
+
+## Observability
+Structured logs include baseline keys:
+- `service`
+- `env`
+
+Correlation keys are emitted by reconciliation findings when available:
+- `tradeId`
+- `actionKey`
+- `requestId`
+- `txHash`
+
 ## Docker
-See `docs/docker-services.md` for compose profiles, build/up/down/logs, and health verification.
+See `docs/docker-services.md` and `docs/runbooks/reconciliation.md`.

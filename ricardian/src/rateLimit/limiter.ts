@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { NextFunction, Request, RequestHandler, Response } from 'express';
 import Redis from 'ioredis';
+import { Logger } from '../utils/logger';
 
 export interface RateLimitWindowConfig {
   limit: number;
@@ -129,17 +130,7 @@ class RedisRateLimitStore implements RateLimitStore {
 }
 
 function fallbackLogger(): RateLimiterLogger {
-  return {
-    info: (message, meta) => {
-      console.log(JSON.stringify({ level: 'info', message, ...meta }));
-    },
-    warn: (message, meta) => {
-      console.warn(JSON.stringify({ level: 'warn', message, ...meta }));
-    },
-    error: (message, meta) => {
-      console.error(JSON.stringify({ level: 'error', message, ...meta }));
-    },
-  };
+  return Logger;
 }
 
 function fingerprint(value: string): string {

@@ -150,26 +150,13 @@ npm run -w treasury build
 > Note: `contracts` commands need a Hardhat variable for local runs:
 > `HARDHAT_VAR_PRIVATE_KEY=0x0123456789012345678901234567890123456789012345678901234567890123`
 
-## **Docker Profiles**
+## **Operational Runbooks**
 
-Use explicit profiles to avoid mixing lightweight local checks with staging readiness:
+- `docs/runbooks/reconciliation.md`
+- `docs/runbooks/oracle-redrive.md`
+- `docs/runbooks/emergency-disable-unpause.md`
+- `docs/runbooks/docker-profiles.md`
 
-```bash
-cp .env.example .env
-cp .env.local.example .env.local
-cp .env.staging-e2e.example .env.staging-e2e
-
-scripts/docker-services.sh build local-dev
-scripts/docker-services.sh up local-dev
-scripts/docker-services.sh health local-dev
-
-scripts/docker-services.sh build staging-e2e
-scripts/docker-services.sh up staging-e2e
-scripts/docker-services.sh health staging-e2e
-scripts/staging-e2e-gate.sh
-```
-
-See `docs/docker-services.md` for full runbook and troubleshooting.
 ## **Contributing**
 
 We welcome contributions from the Web3 and Trade Finance communities. Please read `CONTRIBUTING.md` for details on our code of conduct and the process for submitting pull requests.

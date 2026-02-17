@@ -6,9 +6,14 @@ Deterministic canonicalization and SHA-256 hashing service for Ricardian payload
 - `POST /api/ricardian/v1/hash`
 - `GET /api/ricardian/v1/hash/:hash`
 - `GET /api/ricardian/v1/health`
+- `GET /api/ricardian/v1/ready`
+
+Health semantics:
+- `/health`: process-level liveness
+- `/ready`: process-level readiness for request handling
 
 ## Service Auth (optional)
-When `AUTH_ENABLED=true`, all endpoints except health require:
+When `AUTH_ENABLED=true`, all endpoints except health/readiness require:
 - `X-Api-Key`
 - `X-Timestamp` (unix seconds)
 - `X-Nonce`
@@ -31,10 +36,21 @@ Set `RATE_LIMIT_ENABLED=true` to enforce per-route limits.
 Redis-backed mode is used when `RATE_LIMIT_REDIS_URL` is configured.
 In-memory fallback is allowed for local/dev environments only.
 
+## Observability
+Structured logs include baseline keys:
+- `service`
+- `env`
+
+Correlation keys are emitted by call path when available:
+- `tradeId`
+- `actionKey`
+- `requestId`
+- `txHash`
+
 ## Notes
 - Canonicalization rules are versioned (`RICARDIAN_CANONICAL_V1`).
 - Hashes and metadata are persisted for auditability.
 - Service does not perform legal interpretation.
 
 ## Docker
-See `docs/docker-services.md` for compose profiles and runtime operations.
+See `docs/docker-services.md` and `docs/runbooks/docker-profiles.md` for runtime operations.

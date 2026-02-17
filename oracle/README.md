@@ -116,6 +116,7 @@ All requests require HMAC signature verification and API key.
 * POST /finalize-trade
 * POST /redrive
 * GET /health
+* GET /ready
 
 
 
@@ -128,3 +129,20 @@ For `POST /release-stage1`, `POST /confirm-arrival`, and `POST /finalize-trade`:
   * `Authorization: Bearer <API_KEY>`
   * `X-Timestamp`
   * `X-Signature` (HMAC-SHA256 of `timestamp + rawBody`)
+
+## Health and Readiness
+
+- `GET /health` reports process liveness.
+- `GET /ready` reports process readiness to serve requests.
+
+## Observability
+
+Structured logs include baseline keys:
+- `service`
+- `env`
+
+Correlation keys are emitted when available:
+- `tradeId`
+- `actionKey`
+- `requestId`
+- `txHash`
