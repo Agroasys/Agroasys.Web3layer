@@ -1,131 +1,182 @@
-# Contributing to Agroasys Settlement Protocol
+# Contributing to Agroasys.Web3layer
 
-First off, thank you for considering a contribution to the Agroasys Settlement Protocol. It is people like you who make the open-source community such an amazing place to learn, inspire, and create.
+Thanks for contributing. This repository is production-bound Web3 settlement infrastructure.
+Changes can impact financial safety, on-chain correctness, and operational reliability.
+Contributions are welcome, but quality and safety bars are strict.
 
-**Agroasys is financial infrastructure.** Code merged here controls real value and legally binding settlement logic. Therefore, we hold all contributions to a high standard of security, testing, and documentation.
+By contributing, you agree to license your work under [Apache-2.0](LICENSE).
 
-By participating in this project, you agree to abide by the terms of the [Apache 2.0 License](LICENSE).
+## Security Reporting
+Do **not** report vulnerabilities in public issues.
 
----
+Report security issues privately to: `security@agroasys.com`
 
-## Security Vulnerabilities
+Include:
+- impacted module(s)
+- severity and exploit/failure scenario
+- minimal reproducible steps
+- proposed remediation (if available)
 
-**DO NOT** report security vulnerabilities through public GitHub issues.
+## Repository Scope
+This monorepo currently contains:
+- `contracts`: escrow smart contracts and tests
+- `sdk`: shared TypeScript SDK
+- `oracle`: oracle service
+- `indexer`: indexing service
+- `reconciliation`: reconciliation worker
+- `notifications`: shared notifications library (no standalone runtime)
+- `ricardian`: deterministic hash service
+- `treasury`: treasury ledger service
 
-If you believe you have found a security vulnerability in the `Escrow` contract, `Oracle` logic, or `Signing` service, please email us immediately at **security@agroasys.com**.
+## Hard Safety Guardrails
+Unless explicitly requested by maintainers:
+- do not change escrow payout economics
+- do not change token-flow paths
+- do not change contract ABI/event signatures
+- do not merge undocumented behavior changes
+- do not log secrets, private keys, signatures, or raw auth material
 
-We will work with you to verify the issue and patch it. We appreciate your responsible disclosure and will acknowledge your contribution once the vulnerability is resolved.
+If your change touches any guarded area, document impact and rollback plan in the PR.
 
----
+## Prerequisites
+- Node.js 20.x
+- npm 10+
+- Docker + Docker Compose (for infra/runtime checks)
 
-## How to Contribute
+## Setup
+```bash
+git clone https://github.com/Agroasys/Agroasys.Web3layer.git
+cd Agroasys.Web3layer
+npm ci
+```
 
-### 1. Reporting Bugs
-Bugs are tracked as [GitHub Issues](https://github.com/your-org/agroasys-web3/issues).
+For local contracts checks, set test private key variables as needed by Hardhat:
+```bash
+export HARDHAT_VAR_PRIVATE_KEY=0x0123456789012345678901234567890123456789012345678901234567890123
+export HARDHAT_VAR_PRIVATE_KEY2=0x1111111111111111111111111111111111111111111111111111111111111111
+```
 
-When filing an issue, please include:
+## Branching and Commit Style
+- Branch from `main`
+- Keep one concern per branch/PR
+- Keep diffs small and reversible
+- Use Conventional Commits: `<type>(<scope>): <subject>`
 
-* **Severity:** (Critical / High / Medium / Low)
-* **Component:** (Smart Contract, Indexer, Oracle, SDK)
-* **Steps to Reproduce:** Provide a minimal code snippet or test case.
-* **Expected Behavior:** What you thought would happen.
-* **Actual Behavior:** What actually happened.
-* **Environment:** (e.g., Node v18, Hardhat, Polkadot Westend)
-
-### 2. Suggesting Enhancements
-Feature requests are welcome. Please open an issue with the label `enhancement`.
-* **Context:** Describe the problem you are trying to solve.
-* **Proposal:** Describe the solution you would like to see.
-* **Rationale:** Explain why this feature belongs in the core protocol rather than in an external application layer.
-
-### 3. Your First Pull Request
-Working on your first Pull Request? You can learn how from this free video series:
-[How to Contribute to an Open Source Project on GitHub](https://kcd.im/pull-request)
-
----
+Examples:
+- `fix(security): reject invalid auth nonce format`
+- `docs(runbook): add reconciliation rollback procedure`
+- `ci(matrix): add workspace release gate report`
 
 ## Development Workflow
-
-1.  **Fork** the repository on GitHub.
-2.  **Clone** your fork locally.
-    ```bash
-    git clone [https://github.com/your-username/agroasys-web3.git](https://github.com/your-username/agroasys-web3.git)
-    cd agroasys-web3
-    ```
-3.  **Install Dependencies.**
-    ```bash
-    yarn install
-    ```
-4.  **Create a Branch** for your feature or fix.
-    ```bash
-    git checkout -b feat/amazing-new-feature
-    ```
-5.  **Develop & Test.** Ensure all local tests pass before committing.
-    ```bash
-    yarn test
-    ```
-6.  **Commit** your changes using descriptive commit messages (see *Commit Convention* below).
-7.  **Push** to your fork and submit a **Pull Request (PR)** to the `main` branch.
-
----
-
-## Coding Standards
-
-### Smart Contracts (Solidity)
-* **Security First:** All external inputs must be validated. Use `nonReentrant` modifiers where appropriate.
-* **NatSpec:** All public functions and state variables must have full [NatSpec](https://docs.soliditylang.org/en/latest/natspec-format.html) documentation (`/// @notice`, `/// @param`).
-* **Style:** Follow the official [Solidity Style Guide](https://docs.soliditylang.org/en/latest/style-guide.html).
-* **Compiler:** Ensure compatibility with the PolkaVM Solidity compiler versions specified in `hardhat.config.ts`.
-* **Gas Efficiency:** Optimize for the PolkaVM execution model. Avoid unbounded loops.
-
-### TypeScript / Node.js
-* **Linting:** Run `yarn lint` before committing. We use ESLint and Prettier.
-* **Types:** Strict typing is enforced. Avoid `any` wherever possible. Define interfaces for all data structures.
-* **Async/Await:** Prefer `async/await` over raw Promises for readability.
-
----
-
-## Commit Convention
-
-We follow the **Conventional Commits** specification. This allows us to automatically generate changelogs.
-
-**Format:** `<type>(<scope>): <subject>`
-
-**Types:**
-* `feat`: A new feature
-* `fix`: A bug fix
-* `docs`: Documentation only changes
-* `style`: Changes that do not affect the meaning of the code (white-space, formatting, etc)
-* `refactor`: A code change that neither fixes a bug nor adds a feature
-* `perf`: A code change that improves performance
-* `test`: Adding missing tests or correcting existing tests
-* `chore`: Changes to the build process or auxiliary tools
-
-**Examples:**
-* `feat(contract): allow oracle to update treasury address`
-* `fix(oracle): resolve reentrancy risk in split logic`
-* `docs(readme): update deployment steps for Westend`
-* `test(sdk): add unit tests for stage 2 release`
-
----
-
-## Pull Request Checklist
-
-Before submitting your PR, ensure you have done the following:
-
-1.  [ ] **Run Tests:** `yarn test` passes locally.
-2.  [ ] **New Tests:** You have added unit tests for new features or regression tests for bug fixes.
-3.  [ ] **Documentation:** You have updated the `README.md` or code comments if API changes were made.
-4.  [ ] **Clean History:** Your commit history is clean and descriptive.
-5.  [ ] **License:** You certify that you have the right to submit this code under the Apache 2.0 License.
-
----
-
-## Legal: Developer Certificate of Origin (DCO)
-
-By contributing to this project, you certify that you own the rights to your code and you are contributing it under the terms of the **Apache 2.0 License**.
-
-To signal this, you must **sign off** on your commits.
-
+1. Create branch
 ```bash
-git commit -s -m "feat: my commit message"
+git checkout -b <type>/<short-topic>
+```
+2. Implement minimal scoped changes
+3. Add or update tests for changed behavior
+4. Run validation commands for touched workspaces
+5. Open PR with clear summary, risk notes, and rollback steps
+
+## Validation Requirements
+Run checks for each changed workspace.
+
+### Common
+```bash
+npm run lint
+```
+
+### Workspace checks (examples)
+```bash
+npm run -w contracts lint
+npm run -w contracts compile
+npm run -w contracts test
+
+npm run -w sdk lint
+npm run -w sdk test
+npm run -w sdk build
+
+npm run -w oracle lint
+npm run -w oracle test
+npm run -w oracle build
+
+npm run -w indexer lint
+npm run -w indexer build
+
+npm run -w reconciliation lint
+npm run -w reconciliation test
+npm run -w reconciliation build
+
+npm run -w ricardian lint
+npm run -w ricardian test
+npm run -w ricardian build
+
+npm run -w treasury lint
+npm run -w treasury test
+npm run -w treasury build
+```
+
+Use `--if-present` where needed if a workspace does not define a script in your branch context.
+
+## Docker/Runtime Validation (When Infra Is Touched)
+Use profile-aware scripts:
+```bash
+scripts/docker-services.sh up local-dev
+scripts/docker-services.sh health local-dev
+
+scripts/docker-services.sh up staging-e2e
+scripts/docker-services.sh health staging-e2e
+scripts/staging-e2e-gate.sh
+```
+
+Use service DNS inside compose networking (never `localhost` for inter-container calls).
+
+## Testing Expectations
+- add deterministic tests for any logic change
+- avoid flaky time/race assumptions
+- for replay/auth/rate-limit logic, include negative-path tests
+- preserve existing passing suites; do not silence failures
+
+## Documentation Expectations
+Update docs when behavior or operations change:
+- `README.md` for user-facing usage changes
+- service `README.md` for endpoint/config changes
+- `docs/runbooks/*` for operational procedures
+
+## Pull Request Requirements
+Use `.github/pull_request_template.md` and complete all relevant checks.
+
+Every PR should include:
+- what changed and why
+- validation commands run and results
+- safety impact statement
+- rollback steps
+
+If applicable, explicitly confirm:
+- no escrow contract ABI changes
+- no escrow economics/payout-path changes
+- no token-flow changes
+
+## Code Review Criteria
+Reviewers will prioritize:
+- correctness and security
+- backward compatibility
+- deterministic tests
+- operational clarity and runbook quality
+- minimal, focused diffs
+
+## Issue Reporting
+Use GitHub Issues:
+- https://github.com/Agroasys/Agroasys.Web3layer/issues
+
+Include:
+- affected module
+- reproducible steps
+- expected vs actual behavior
+- environment details
+- logs/error snippets (sanitized)
+
+## DCO Sign-off
+Sign commits with `-s`:
+```bash
+git commit -s -m "fix(scope): summary"
+```
