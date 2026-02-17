@@ -134,7 +134,11 @@ export function parseServiceApiKeys(raw: string | undefined): ServiceApiKey[] {
     const active = parseActiveFlag(candidate.active, index);
 
     if (!id) {
-      throw new Error(`API_KEYS_JSON[${index}].id is required`);
+      throw new Error(`API_KEYS_JSON[].id is required`);
+    }
+
+    if (id.length > API_KEY_MAX_LENGTH) {
+      throw new Error(`API_KEYS_JSON[${index}].id must be <= ${API_KEY_MAX_LENGTH} characters`);
     }
 
     if (id.length > API_KEY_MAX_LENGTH) {

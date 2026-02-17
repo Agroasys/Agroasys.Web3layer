@@ -273,4 +273,11 @@ describe('service auth middleware (treasury)', () => {
       'API_KEYS_JSON[0].active must be a boolean true or false'
     );
   });
+
+  test('parseServiceApiKeys rejects API key ids over max length', () => {
+    const oversizedId = 'a'.repeat(129);
+    expect(() =>
+      parseServiceApiKeys(JSON.stringify([{ id: oversizedId, secret: 'secret', active: true }]))
+    ).toThrow('API_KEYS_JSON[0].id must be <= 128 characters');
+  });
 });
