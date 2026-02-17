@@ -104,20 +104,47 @@ Run the same checks locally that GitHub Actions runs:
 
 ```bash
 npm ci
+npm run -w sdk lint
+npm run -w sdk typecheck --if-present
+npm run -w sdk test
+npm run -w sdk build
+
+npm run -w notifications lint
+npm run -w notifications typecheck --if-present
+npm run -w notifications test --if-present
+npm run -w notifications build
+
 npm run -w contracts lint
+npm run -w contracts typecheck --if-present
 npm run -w contracts compile
 npm run -w contracts test
+npm run -w contracts build --if-present
 
 npm run -w oracle lint
+npm run -w oracle typecheck --if-present
+npm run -w oracle compile --if-present
 npm run -w oracle test
 npm run -w oracle build
 
 npm run -w indexer lint
+npm run -w indexer typecheck --if-present
+npm run -w indexer test --if-present
 npm run -w indexer build
 
-npm run -w sdk lint
-npm run -w sdk test
-npm run -w sdk build
+npm run -w reconciliation lint
+npm run -w reconciliation typecheck --if-present
+npm run -w reconciliation test
+npm run -w reconciliation build
+
+npm run -w ricardian lint
+npm run -w ricardian typecheck --if-present
+npm run -w ricardian test
+npm run -w ricardian build
+
+npm run -w treasury lint
+npm run -w treasury typecheck --if-present
+npm run -w treasury test
+npm run -w treasury build
 ```
 
 > Note: `contracts` commands need a Hardhat variable for local runs:
