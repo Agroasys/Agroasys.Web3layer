@@ -7,6 +7,7 @@
 - [ ] Tests passed for changed workspaces
 - [ ] Build passed for changed workspaces
 - [ ] Docs updated for behavior/config changes
+- [ ] I have signed off all commits (DCO)
 
 ## Safety checklist
 - [ ] No escrow contract ABI changes
