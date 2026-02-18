@@ -1,3 +1,6 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ */
 export enum DisputeStatus {
     REFUND = 0,
     RESOLVE = 1

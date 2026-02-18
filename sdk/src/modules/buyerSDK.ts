@@ -1,3 +1,6 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { Client } from '../client';
 import { TradeParameters, TradeResult, Trade, TradeStatus } from '../types/trade';
 import { ethers } from 'ethers';

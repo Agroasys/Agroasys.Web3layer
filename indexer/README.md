@@ -204,3 +204,7 @@ The indexer exposes a GraphQL endpoint for read-only queries. Use it from the ba
 - Full event timelines for audits
 
 > Do not expose write/mutation operations from this indexer.
+
+## License
+Licensed under Apache-2.0.
+See the repository root `LICENSE` file.

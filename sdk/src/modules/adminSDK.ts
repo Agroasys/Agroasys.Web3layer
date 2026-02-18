@@ -1,3 +1,6 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { Client } from '../client';
 import { ethers } from 'ethers';
 import { DisputeStatus, DisputeResult, DisputeProposal } from '../types/dispute';

@@ -1,3 +1,6 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ */
 // 3 SDK roles
 export { BuyerSDK } from './modules/buyerSDK';
 export { AdminSDK } from './modules/adminSDK';

@@ -43,3 +43,7 @@ Correlation keys are emitted by reconciliation findings when available:
 
 ## Docker
 See `docs/docker-services.md` and `docs/runbooks/reconciliation.md`.
+
+## License
+Licensed under Apache-2.0.
+See the repository root `LICENSE` file.

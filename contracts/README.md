@@ -475,3 +475,7 @@ npm run test:buyer
 npm run test:admin
 npm run test:oracle
 ```
+
+## License
+Licensed under Apache-2.0.
+See the repository root `LICENSE` file.

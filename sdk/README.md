@@ -164,3 +164,7 @@ ADMIN2_PRIVATE_KEY=
 CLIENT_ID=
 WEB3AUTH_NETWORK=SAPPHIRE_DEVNET
 ```
+
+## License
+Licensed under Apache-2.0.
+See the repository root `LICENSE` file.
