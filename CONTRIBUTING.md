@@ -202,4 +202,4 @@ git commit --amend -s --no-edit
 git rebase --continue
 ```
 
-See `.github/DCO.md` for the full policy and workflow details.
+See `.github/DCO.md` for the full policy and workflow details
