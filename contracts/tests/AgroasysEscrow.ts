@@ -1,3 +1,6 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { AgroasysEscrow, MockUSDC } from "../typechain-types";

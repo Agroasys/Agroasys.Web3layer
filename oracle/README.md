@@ -146,3 +146,7 @@ Correlation keys are emitted when available:
 - `actionKey`
 - `requestId`
 - `txHash`
+
+## License
+Licensed under Apache-2.0.
+See the repository root `LICENSE` file.

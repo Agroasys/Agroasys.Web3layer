@@ -1,3 +1,6 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ */
 export interface TradeParameters {
     supplier: string;
     totalAmount: bigint;

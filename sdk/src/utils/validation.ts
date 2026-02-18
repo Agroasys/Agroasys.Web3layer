@@ -1,3 +1,6 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { ethers } from 'ethers';
 import { ValidationError } from '../types/errors';
 import { TradeParameters } from '../types/trade';

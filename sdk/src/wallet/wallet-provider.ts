@@ -1,3 +1,6 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { Web3Auth, WEB3AUTH_NETWORK } from '@web3auth/modal';
 import { ethers } from 'ethers';
 

@@ -1,3 +1,6 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { OracleSDK } from '../src/modules/oracleSDK';
 import { TEST_CONFIG, assertRequiredEnv, getOracleSigner, hasRequiredEnv } from './setup';
 

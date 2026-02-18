@@ -54,3 +54,7 @@ Correlation keys are emitted by call path when available:
 
 ## Docker
 See `docs/docker-services.md` and `docs/runbooks/docker-profiles.md` for runtime operations.
+
+## License
+Licensed under Apache-2.0.
+See the repository root `LICENSE` file.

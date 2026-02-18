@@ -1,3 +1,6 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { BuyerSDK } from '../src/modules/buyerSDK';
 import {
   TEST_CONFIG,

@@ -1,3 +1,6 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { RicardianHashEnvelope, RicardianHashRecord, RicardianHashRequest } from '../types/ricardian';
 
 export interface RicardianClientConfig {
