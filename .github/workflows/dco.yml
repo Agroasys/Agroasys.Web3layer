@@ -1,0 +1,19 @@
+name: DCO Check
+
+on:
+  pull_request:
+
+jobs:
+  dco:
+    name: dco/check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check DCO sign-offs
+        uses: cpanato/dco-check-action@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          pull_request_number: ${{ github.event.number }}

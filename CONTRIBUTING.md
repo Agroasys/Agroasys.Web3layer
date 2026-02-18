@@ -175,8 +175,31 @@ Include:
 - environment details
 - logs/error snippets (sanitized)
 
-## DCO Sign-off
-Sign commits with `-s`:
+## DCO Sign-off (Required)
+All commits in pull requests must include `Signed-off-by`.
+
+Quick command for new commits:
 ```bash
 git commit -s -m "fix(scope): summary"
 ```
+
+Fix a single existing commit:
+```bash
+git commit --amend -s --no-edit
+```
+
+Fix sign-off across multiple commits:
+```bash
+git rebase --signoff origin/main
+```
+
+If manual per-commit edits are needed:
+```bash
+git rebase -i origin/main
+# mark commits as edit
+# for each commit:
+git commit --amend -s --no-edit
+git rebase --continue
+```
+
+See `.github/DCO.md` for the full policy and workflow details.
