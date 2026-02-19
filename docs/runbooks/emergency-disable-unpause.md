@@ -20,6 +20,11 @@ Operational playbook for emergency stop and controlled recovery path.
 - Attempting recovery before root cause containment.
 - Partial recovery without oracle reactivation governance.
 
+## First 15 Minutes Checklist
+- Execute `docs/incidents/first-15-minutes-checklist.md`.
+- Confirm containment actions are complete before any recovery action.
+- Verify reconciliation drift is stable before unpause proposal execution.
+
 ## Rollback / backout
 1. Keep protocol paused if verification is incomplete.
 2. Re-run reconciliation to verify state consistency before unpause.

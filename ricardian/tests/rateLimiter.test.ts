@@ -15,7 +15,13 @@ function createMockResponse(): MockResponse {
   return response;
 }
 
-function createRequest(path: string, method: string = 'POST', apiKey?: string, ip: string = '127.0.0.1'): Request {
+function createRequest(
+  path: string,
+  method: string = 'POST',
+  apiKey?: string,
+  ip: string = '127.0.0.1',
+  authenticatedApiKeyId?: string,
+): Request {
   return {
     method,
     path,
@@ -29,6 +35,12 @@ function createRequest(path: string, method: string = 'POST', apiKey?: string, i
     socket: {
       remoteAddress: ip,
     },
+    serviceAuth: authenticatedApiKeyId
+      ? {
+          apiKeyId: authenticatedApiKeyId,
+          scheme: 'api_key',
+        }
+      : undefined,
   } as unknown as Request;
 }
 
@@ -155,6 +167,7 @@ describe('ricardian rate limiter', () => {
 
     await limiter.close();
   });
+
   test('write limiter applies to trailing slash hash route', async () => {
     const limiter = await createRicardianRateLimiter({
       config: {
@@ -216,4 +229,36 @@ describe('ricardian rate limiter', () => {
     await limiter.close();
   });
 
+  test('write limiter namespaces authenticated requests by api key and ip', async () => {
+    const limiter = await createRicardianRateLimiter({
+      config: {
+        enabled: true,
+        nodeEnv: 'development',
+        writeRoute: {
+          burst: { limit: 1, windowSeconds: 10 },
+          sustained: { limit: 10, windowSeconds: 60 },
+        },
+        readRoute: {
+          burst: { limit: 4, windowSeconds: 10 },
+          sustained: { limit: 30, windowSeconds: 60 },
+        },
+      },
+      logger,
+      nowSeconds: () => 1700000000,
+    });
+
+    const firstReq = createRequest('/hash', 'POST', 'svc-a', '127.0.0.1', 'svc-a');
+    const secondReq = createRequest('/hash', 'POST', 'svc-b', '127.0.0.1', 'svc-b');
+
+    const firstNext = jest.fn() as NextFunction;
+    const secondNext = jest.fn() as NextFunction;
+
+    await limiter.middleware(firstReq, createMockResponse(), firstNext);
+    await limiter.middleware(secondReq, createMockResponse(), secondNext);
+
+    expect(firstNext).toHaveBeenCalledTimes(1);
+    expect(secondNext).toHaveBeenCalledTimes(1);
+
+    await limiter.close();
+  });
 });

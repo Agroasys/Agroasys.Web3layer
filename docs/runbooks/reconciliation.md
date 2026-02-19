@@ -40,6 +40,11 @@ scripts/docker-services.sh logs local-dev reconciliation
 - `INDEXER_GRAPHQL_URL is missing`: profile env not loaded.
 - Address validation errors: malformed `ESCROW_ADDRESS` or `USDC_ADDRESS`.
 
+## First 15 Minutes Checklist
+- Execute `docs/incidents/first-15-minutes-checklist.md`.
+- Capture reconciliation logs and identify affected `tradeId`/`requestId` pairs.
+- Confirm whether failure source is RPC, indexer GraphQL, or DB.
+
 ## Rollback / backout
 1. Stop daemon:
 

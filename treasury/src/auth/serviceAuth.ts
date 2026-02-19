@@ -5,6 +5,7 @@ import { incrementAuthFailure, incrementReplayReject } from '../metrics/counters
 const SIGNATURE_HEX_REGEX = /^[a-f0-9]{64}$/i;
 const API_KEY_MAX_LENGTH = 128;
 const NONCE_MAX_LENGTH = 255;
+const SHARED_HMAC_KEY_ID = '__shared_hmac__';
 
 export interface ServiceApiKey {
   id: string;
@@ -12,10 +13,16 @@ export interface ServiceApiKey {
   active: boolean;
 }
 
+export interface ServiceAuthContext {
+  apiKeyId: string;
+  scheme: 'api_key' | 'shared_secret';
+}
+
 export interface ServiceAuthMiddlewareOptions {
   enabled: boolean;
   maxSkewSeconds: number;
   nonceTtlSeconds: number;
+  sharedSecret?: string;
   nowSeconds?: () => number;
   lookupApiKey: (apiKey: string) => ServiceApiKey | undefined;
   consumeNonce: (apiKey: string, nonce: string, ttlSeconds: number) => Promise<boolean>;
@@ -32,6 +39,14 @@ interface CanonicalRequestParts {
 
 interface RawBodyRequest extends Request {
   rawBody?: Buffer;
+  serviceAuth?: ServiceAuthContext;
+}
+
+interface ServiceAuthPrincipal {
+  id: string;
+  secret: string;
+  active: boolean;
+  scheme: 'api_key' | 'shared_secret';
 }
 
 function bodyHash(rawBody: Buffer | undefined): string {
@@ -91,20 +106,70 @@ function requestPathAndQuery(req: Request): { path: string; query: string } {
   };
 }
 
-export function buildServiceAuthCanonicalString(parts: CanonicalRequestParts): string {
-  return [parts.method, parts.path, parts.query, parts.bodySha256, parts.timestamp, parts.nonce].join('\n');
-}
-
-export function signServiceAuthCanonicalString(secret: string, canonicalString: string): string {
-  return crypto.createHmac('sha256', secret).update(canonicalString).digest('hex');
-}
-
 function parseActiveFlag(rawActive: unknown, index: number): boolean {
   if (typeof rawActive === 'boolean') {
     return rawActive;
   }
 
   throw new Error(`API_KEYS_JSON[${index}].active must be a boolean true or false`);
+}
+
+function firstHeader(req: Request, headerNames: string[]): string | undefined {
+  for (const headerName of headerNames) {
+    const value = req.header(headerName);
+    if (value && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return undefined;
+}
+
+function resolvePrincipal(apiKey: string | undefined, options: ServiceAuthMiddlewareOptions): ServiceAuthPrincipal | null {
+  if (apiKey) {
+    if (apiKey.length > API_KEY_MAX_LENGTH) {
+      return null;
+    }
+
+    const apiKeyRecord = options.lookupApiKey(apiKey);
+    if (!apiKeyRecord) {
+      return null;
+    }
+
+    return {
+      id: apiKeyRecord.id,
+      secret: apiKeyRecord.secret,
+      active: apiKeyRecord.active,
+      scheme: 'api_key',
+    };
+  }
+
+  if (options.sharedSecret && options.sharedSecret.trim()) {
+    return {
+      id: SHARED_HMAC_KEY_ID,
+      secret: options.sharedSecret.trim(),
+      active: true,
+      scheme: 'shared_secret',
+    };
+  }
+
+  return null;
+}
+
+function deriveNonce(parts: Omit<CanonicalRequestParts, 'nonce'>): string {
+  return crypto
+    .createHash('sha256')
+    .update([parts.method, parts.path, parts.query, parts.bodySha256, parts.timestamp].join('\n'))
+    .digest('hex')
+    .slice(0, NONCE_MAX_LENGTH);
+}
+
+export function buildServiceAuthCanonicalString(parts: CanonicalRequestParts): string {
+  return [parts.method, parts.path, parts.query, parts.bodySha256, parts.timestamp, parts.nonce].join('\n');
+}
+
+export function signServiceAuthCanonicalString(secret: string, canonicalString: string): string {
+  return crypto.createHmac('sha256', secret).update(canonicalString).digest('hex');
 }
 
 export function parseServiceApiKeys(raw: string | undefined): ServiceApiKey[] {
@@ -134,11 +199,7 @@ export function parseServiceApiKeys(raw: string | undefined): ServiceApiKey[] {
     const active = parseActiveFlag(candidate.active, index);
 
     if (!id) {
-      throw new Error(`API_KEYS_JSON[].id is required`);
-    }
-
-    if (id.length > API_KEY_MAX_LENGTH) {
-      throw new Error(`API_KEYS_JSON[${index}].id must be <= ${API_KEY_MAX_LENGTH} characters`);
+      throw new Error('API_KEYS_JSON[].id is required');
     }
 
     if (id.length > API_KEY_MAX_LENGTH) {
@@ -166,28 +227,18 @@ export function createServiceAuthMiddleware(options: ServiceAuthMiddlewareOption
       return;
     }
 
-    const apiKey = req.header('X-Api-Key');
-    const timestamp = req.header('X-Timestamp');
-    const nonce = req.header('X-Nonce');
-    const signature = req.header('X-Signature');
+    const apiKey = firstHeader(req, ['X-Api-Key']);
+    const timestamp = firstHeader(req, ['x-agroasys-timestamp', 'X-Timestamp']);
+    const nonceHeader = firstHeader(req, ['x-agroasys-nonce', 'X-Nonce']);
+    const signature = firstHeader(req, ['x-agroasys-signature', 'X-Signature']);
 
-    if (!apiKey || !timestamp || !nonce || !signature) {
+    if (!timestamp || !signature) {
       unauthorized(res, 'AUTH_MISSING_HEADERS', 'Missing authentication headers');
       return;
     }
 
     if (!/^\d+$/.test(timestamp)) {
       unauthorized(res, 'AUTH_INVALID_TIMESTAMP', 'Invalid timestamp format');
-      return;
-    }
-
-    if (apiKey.length > API_KEY_MAX_LENGTH) {
-      unauthorized(res, 'AUTH_INVALID_API_KEY', 'Invalid API key format');
-      return;
-    }
-
-    if (!nonce.trim() || nonce.length > NONCE_MAX_LENGTH) {
-      unauthorized(res, 'AUTH_INVALID_NONCE', 'Invalid nonce format');
       return;
     }
 
@@ -203,35 +254,49 @@ export function createServiceAuthMiddleware(options: ServiceAuthMiddlewareOption
       return;
     }
 
-    const apiKeyRecord = options.lookupApiKey(apiKey);
-    if (!apiKeyRecord) {
+    const principal = resolvePrincipal(apiKey, options);
+    if (!principal) {
       unauthorized(res, 'AUTH_UNKNOWN_API_KEY', 'Unknown API key');
       return;
     }
 
-    if (!apiKeyRecord.active) {
+    if (!principal.active) {
       forbidden(res, 'API key is inactive');
       return;
     }
 
     const { path, query } = requestPathAndQuery(req);
+    const bodySha256 = bodyHash((req as RawBodyRequest).rawBody);
+    const nonce = nonceHeader || deriveNonce({
+      method: req.method.toUpperCase(),
+      path,
+      query,
+      bodySha256,
+      timestamp,
+    });
+
+    if (!nonce.trim() || nonce.length > NONCE_MAX_LENGTH) {
+      unauthorized(res, 'AUTH_INVALID_NONCE', 'Invalid nonce format');
+      return;
+    }
+
     const canonicalString = buildServiceAuthCanonicalString({
       method: req.method.toUpperCase(),
       path,
       query,
-      bodySha256: bodyHash((req as RawBodyRequest).rawBody),
+      bodySha256,
       timestamp,
       nonce,
     });
 
-    const expectedSignature = signServiceAuthCanonicalString(apiKeyRecord.secret, canonicalString);
+    const expectedSignature = signServiceAuthCanonicalString(principal.secret, canonicalString);
     if (!timingSafeHexEquals(signature, expectedSignature)) {
       unauthorized(res, 'AUTH_INVALID_SIGNATURE', 'Invalid signature');
       return;
     }
 
     try {
-      const accepted = await options.consumeNonce(apiKey, nonce, options.nonceTtlSeconds);
+      const accepted = await options.consumeNonce(principal.id, nonce, options.nonceTtlSeconds);
       if (!accepted) {
         incrementReplayReject();
         unauthorized(res, 'AUTH_NONCE_REPLAY', 'Replay detected for nonce');
@@ -241,6 +306,11 @@ export function createServiceAuthMiddleware(options: ServiceAuthMiddlewareOption
       unavailable(res);
       return;
     }
+
+    (req as RawBodyRequest).serviceAuth = {
+      apiKeyId: principal.id,
+      scheme: principal.scheme,
+    };
 
     next();
   };
