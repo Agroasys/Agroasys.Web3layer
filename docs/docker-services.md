@@ -15,7 +15,10 @@ This runbook covers containerized orchestration for these services:
 Fast feedback mode with a lightweight in-memory indexer GraphQL responder.
 
 ### `staging-e2e`
-Release-gate mode with real indexer pipeline components:
+Existing staging profile.
+
+### `staging-e2e-real`
+Staging-grade release-gate profile with real indexer pipeline components:
 - `indexer-migrate`
 - `indexer-pipeline`
 - `indexer-graphql`
@@ -31,6 +34,7 @@ Release-gate mode with real indexer pipeline components:
 cp .env.example .env
 cp .env.local.example .env.local
 cp .env.staging-e2e.example .env.staging-e2e
+cp .env.staging-e2e-real.example .env.staging-e2e-real
 ```
 
 ## Local Dev
@@ -43,16 +47,16 @@ scripts/docker-services.sh logs local-dev reconciliation
 scripts/docker-services.sh down local-dev
 ```
 
-## Staging E2E
+## Staging E2E Real
 
 ```bash
-scripts/docker-services.sh build staging-e2e
-scripts/docker-services.sh up staging-e2e
-scripts/docker-services.sh health staging-e2e
-scripts/staging-e2e-gate.sh
-scripts/docker-services.sh logs staging-e2e reconciliation
-scripts/docker-services.sh logs staging-e2e indexer-pipeline
-scripts/docker-services.sh down staging-e2e
+scripts/docker-services.sh build staging-e2e-real
+scripts/docker-services.sh up staging-e2e-real
+scripts/docker-services.sh health staging-e2e-real
+scripts/staging-e2e-real-gate.sh
+scripts/docker-services.sh logs staging-e2e-real reconciliation
+scripts/docker-services.sh logs staging-e2e-real indexer-pipeline
+scripts/docker-services.sh down staging-e2e-real
 ```
 
 ## Health Endpoints
@@ -66,4 +70,4 @@ scripts/docker-services.sh down staging-e2e
 
 - Inter-container calls always use service DNS names (for example `indexer`, `indexer-graphql`, `postgres`), never `localhost`.
 - Reconciliation startup remains fail-fast when `RPC_URL` is missing/unreachable.
-- `staging-e2e` gate fails on ENS resolver errors, indexer fetch failures, schema mismatches, and indexer lag threshold breaches.
+- `staging-e2e-real` gate fails on ENS resolver errors, indexer fetch failures, schema mismatches, and indexer lag threshold breaches.

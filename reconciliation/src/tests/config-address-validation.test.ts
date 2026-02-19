@@ -17,6 +17,7 @@ const BASE_ENV: Record<string, string> = {
   ESCROW_ADDRESS: '0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266',
   USDC_ADDRESS: '0x70997970c51812dc3a010c7d01b50e0d17dc79c8',
   INDEXER_GRAPHQL_URL: 'http://127.0.0.1:4350/graphql',
+  RECONCILIATION_REQUIRE_CONTAINER_SAFE_INDEXER_URL: 'false',
   NOTIFICATIONS_ENABLED: 'false',
   NOTIFICATIONS_WEBHOOK_URL: '',
   NOTIFICATIONS_COOLDOWN_MS: '300000',
@@ -90,3 +91,35 @@ test('malformed RPC_URL fails with explicit config error', () => {
     );
   });
 });
+
+
+test('container-safe indexer URL check rejects localhost when enabled', () => {
+  withEnv(
+    {
+      RECONCILIATION_REQUIRE_CONTAINER_SAFE_INDEXER_URL: 'true',
+      INDEXER_GRAPHQL_URL: 'http://localhost:4350/graphql',
+    },
+    () => {
+      assert.throws(
+        () => loadConfigModule(),
+        /INDEXER_GRAPHQL_URL must not use localhost\/loopback when RECONCILIATION_REQUIRE_CONTAINER_SAFE_INDEXER_URL=true/,
+      );
+    },
+  );
+});
+
+test('container-safe indexer URL check allows service DNS names when enabled', () => {
+  withEnv(
+    {
+      RECONCILIATION_REQUIRE_CONTAINER_SAFE_INDEXER_URL: 'true',
+      INDEXER_GRAPHQL_URL: 'http://indexer-graphql:4350/graphql',
+    },
+    () => {
+      const { loadConfig } = loadConfigModule();
+      const config = loadConfig();
+      assert.equal(config.indexerGraphqlUrl, 'http://indexer-graphql:4350/graphql');
+      assert.equal(config.enforceContainerSafeIndexerUrl, true);
+    },
+  );
+});
+

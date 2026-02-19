@@ -201,10 +201,13 @@ scripts/docker-services.sh health local-dev
 
 scripts/docker-services.sh up staging-e2e
 scripts/docker-services.sh health staging-e2e
-scripts/staging-e2e-gate.sh
+
+scripts/docker-services.sh up staging-e2e-real
+scripts/docker-services.sh health staging-e2e-real
+scripts/staging-e2e-real-gate.sh
 ```
 
-See `docs/docker-services.md` and `docs/runbooks/staging-e2e-release-gate.md` for triage and rollback instructions.
+See `docs/docker-services.md`, `docs/runbooks/staging-e2e-release-gate.md`, and `docs/runbooks/staging-e2e-real-release-gate.md` for triage and rollback instructions.
 
 ## Commit Convention
 

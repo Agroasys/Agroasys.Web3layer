@@ -1,0 +1,64 @@
+# Staging E2E Real Release Gate
+
+## Purpose
+Run a staging-grade release gate against the real indexer pipeline profile (`staging-e2e-real`) and validate reconciliation against indexed chain state.
+
+## Profile differences
+- `local-dev`: lightweight in-memory GraphQL responder (`indexer`) for fast iteration.
+- `staging-e2e`: existing staging profile.
+- `staging-e2e-real`: explicit release-gate profile using real indexer components:
+  - `indexer-migrate`
+  - `indexer-pipeline`
+  - `indexer-graphql`
+
+## Preconditions
+- Docker Engine + Compose plugin installed.
+- Env files created:
+  - `.env`
+  - `.env.staging-e2e-real`
+- Reconciliation/oracle RPC and indexer endpoints must target the same chain dataset.
+- Optional dynamic start-block controls: `STAGING_E2E_REAL_DYNAMIC_START_BLOCK=true` and `STAGING_E2E_REAL_START_BLOCK_BACKOFF=250`.
+
+## Commands
+```bash
+cp .env.example .env
+cp .env.staging-e2e-real.example .env.staging-e2e-real
+
+scripts/docker-services.sh down staging-e2e-real || true
+scripts/docker-services.sh up staging-e2e-real
+scripts/docker-services.sh health staging-e2e-real
+scripts/staging-e2e-real-gate.sh
+scripts/docker-services.sh logs staging-e2e-real reconciliation
+scripts/docker-services.sh logs staging-e2e-real indexer-graphql
+scripts/docker-services.sh down staging-e2e-real
+```
+
+## Expected output
+- `health staging-e2e-real` reports required services running and healthy.
+- `scripts/staging-e2e-real-gate.sh` reports:
+  - schema parity result
+  - indexer head + lag metrics
+  - reorg/resync probe result
+  - reconciliation run summary
+  - drift classification snapshot
+
+## Common failure modes
+- `STAGING_E2E_REAL_REQUIRE_INDEXED_DATA=true` with empty contract scope: gate fails until a seeded contract/event stream is available.
+- `negative lag`: RPC and indexer pipeline are on different networks.
+- `indexer head metric unavailable`: `indexer-graphql` not ready or no squid status response.
+- `reconciliation once run failed`: invalid RPC/contract addresses or DB connectivity issue.
+- `indexed data requirement enabled but no indexed trades found`: contract/start block scope has no indexed events yet.
+
+## Rollback / backout
+1. Stop profile:
+```bash
+scripts/docker-services.sh down staging-e2e-real
+```
+2. Revert `.env.staging-e2e-real` to last known-good values.
+3. Re-run the command sequence from a clean start.
+
+## Escalation
+Escalate if any of the following persists after one clean restart:
+- Indexer GraphQL never reaches readiness.
+- Lag remains negative.
+- Reconciliation fails with repeated critical drift or on-chain read errors.

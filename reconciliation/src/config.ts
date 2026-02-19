@@ -19,6 +19,7 @@ export interface ReconciliationConfig {
   escrowAddress: string;
   usdcAddress: string;
   indexerGraphqlUrl: string;
+  enforceContainerSafeIndexerUrl: boolean;
   notificationsEnabled: boolean;
   notificationsWebhookUrl?: string;
   notificationsCooldownMs: number;
@@ -73,12 +74,34 @@ function envUrl(name: string): string {
   return value;
 }
 
+function assertContainerSafeIndexerUrl(url: string, name: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`${name} must be a valid URL, received "${url}"`);
+  }
+
+  const loopbackHosts = new Set(['localhost', '127.0.0.1', '::1']);
+  assert(
+    !loopbackHosts.has(parsed.hostname),
+    `${name} must not use localhost/loopback when RECONCILIATION_REQUIRE_CONTAINER_SAFE_INDEXER_URL=true`,
+  );
+}
+
 export function loadConfig(): ReconciliationConfig {
   const notificationsEnabled = envBool('NOTIFICATIONS_ENABLED', false);
   const notificationsWebhookUrl = process.env.NOTIFICATIONS_WEBHOOK_URL;
 
   if (notificationsEnabled) {
     assert(notificationsWebhookUrl, 'NOTIFICATIONS_WEBHOOK_URL is required when NOTIFICATIONS_ENABLED=true');
+  }
+
+  const indexerGraphqlUrl = envUrl('INDEXER_GRAPHQL_URL');
+  const enforceContainerSafeIndexerUrl = envBool('RECONCILIATION_REQUIRE_CONTAINER_SAFE_INDEXER_URL', false);
+
+  if (enforceContainerSafeIndexerUrl) {
+    assertContainerSafeIndexerUrl(indexerGraphqlUrl, 'INDEXER_GRAPHQL_URL');
   }
 
   const config: ReconciliationConfig = {
@@ -95,7 +118,8 @@ export function loadConfig(): ReconciliationConfig {
     chainId: envNumber('CHAIN_ID'),
     escrowAddress: envAddress('ESCROW_ADDRESS'),
     usdcAddress: envAddress('USDC_ADDRESS'),
-    indexerGraphqlUrl: envUrl('INDEXER_GRAPHQL_URL'),
+    indexerGraphqlUrl,
+    enforceContainerSafeIndexerUrl,
     notificationsEnabled,
     notificationsWebhookUrl,
     notificationsCooldownMs: envNumber('NOTIFICATIONS_COOLDOWN_MS', 300000),

@@ -3,6 +3,8 @@
 ## Purpose
 Run deterministic staging checks before merge/release.
 
+For staging-grade validation with the explicit real indexer profile, use `docs/runbooks/staging-e2e-real-release-gate.md`.
+
 ## Preconditions
 - `.env` and `.env.staging-e2e` populated.
 - Contract/indexer addresses target the same chain.

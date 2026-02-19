@@ -1,7 +1,9 @@
 name: CI Release Gate
 
 on:
+  workflow_dispatch:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches:
       - main
@@ -578,3 +580,43 @@ jobs:
         with:
           name: ci-report-release-gate
           path: ci-reports/release-gate.txt
+
+  staging-e2e-real:
+    name: release/staging-e2e-real
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && contains(toJson(github.event.pull_request.labels.*.name), 'release-gate-staging-e2e-real'))
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare env files
+        run: |
+          cp .env.example .env
+          cp .env.staging-e2e-real.example .env.staging-e2e-real
+
+      - name: Build indexer workspace
+        run: npm run -w indexer build
+
+      - name: Run staging-e2e-real gate
+        run: |
+          scripts/docker-services.sh down staging-e2e-real || true
+          scripts/docker-services.sh up staging-e2e-real
+          scripts/docker-services.sh health staging-e2e-real
+          scripts/staging-e2e-real-gate.sh
+
+      - name: Teardown staging-e2e-real
+        if: always()
+        run: scripts/docker-services.sh down staging-e2e-real
+
