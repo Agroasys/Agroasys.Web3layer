@@ -42,4 +42,5 @@ gh api graphql \
 
 ## Required Repository Configuration
 - Repository variable: `ROADMAP_PROJECT_ID` (Project v2 node id).
-- Workflow permission: `.github/workflows/pr-roadmap-policy.yml` must keep `projects: read`.
+- Workflow permission: `.github/workflows/pr-roadmap-policy.yml` must keep `repository-projects: read`.
+- Roadmap policy auth/runbook: `docs/runbooks/roadmap-policy.md`.

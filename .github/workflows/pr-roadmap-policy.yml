@@ -13,9 +13,53 @@ jobs:
       pull-requests: read
       repository-projects: read
     steps:
+      - name: Create roadmap app token (preferred)
+        id: app_token
+        if: ${{ secrets.ROADMAP_APP_ID != '' && secrets.ROADMAP_APP_PRIVATE_KEY != '' }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ROADMAP_APP_ID }}
+          private-key: ${{ secrets.ROADMAP_APP_PRIVATE_KEY }}
+          installation-id: ${{ secrets.ROADMAP_APP_INSTALLATION_ID }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Resolve roadmap auth token
+        id: auth
+        env:
+          APP_TOKEN: ${{ steps.app_token.outputs.token }}
+          ROADMAP_PROJECT_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
+          GITHUB_TOKEN_FALLBACK: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Fail fast on obviously broad personal OAuth tokens.
+          if [[ -n "${ROADMAP_PROJECT_TOKEN:-}" && "${ROADMAP_PROJECT_TOKEN}" == gho_* ]]; then
+            echo "::error::ROADMAP_PROJECT_TOKEN appears to be a broad OAuth token (gho_*)."
+            echo "::error::Replace it with ROADMAP_APP_ID + ROADMAP_APP_PRIVATE_KEY (preferred) or a fine-grained PAT, then delete ROADMAP_PROJECT_TOKEN."
+            exit 1
+          fi
+
+          source="github-token"
+          token="$GITHUB_TOKEN_FALLBACK"
+
+          if [[ -n "${APP_TOKEN:-}" ]]; then
+            source="github-app"
+            token="$APP_TOKEN"
+          elif [[ -n "${ROADMAP_PROJECT_TOKEN:-}" ]]; then
+            source="fine-grained-pat"
+            token="$ROADMAP_PROJECT_TOKEN"
+          fi
+
+          echo "::add-mask::$token"
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
       - name: Enforce milestone + project association
         env:
-          GH_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN || github.token }}
+          GH_TOKEN: ${{ steps.auth.outputs.token }}
+          TOKEN_SOURCE: ${{ steps.auth.outputs.source }}
           PROJECT_ID: ${{ vars.ROADMAP_PROJECT_ID }}
           PROJECT_TITLE: ${{ vars.ROADMAP_PROJECT_TITLE }}
           PR_NODE_ID: ${{ github.event.pull_request.node_id }}
@@ -26,6 +70,17 @@ jobs:
         run: |
           set -euo pipefail
 
+          pr_err="/tmp/pr_roadmap_err.log"
+          project_err="/tmp/pr_roadmap_project_err.log"
+          fallback_err="/tmp/pr_roadmap_fallback_err.log"
+
+          sanitize_err() {
+            local file="$1"
+            if [[ -s "$file" ]]; then
+              sed -n '1,20p' "$file" | sed 's/^/::error::/g'
+            fi
+          }
+
           if [[ -z "${PR_MILESTONE:-}" || "${PR_MILESTONE}" == "null" ]]; then
             echo "::error::Missing PR Milestone. Remediation: gh pr edit ${PR_NUMBER} --repo ${REPO} --milestone \"<Milestone Name>\""
             exit 1
@@ -33,7 +88,6 @@ jobs:
 
           if [[ -z "${PROJECT_ID:-}" ]]; then
             echo "::error::Missing repository variable ROADMAP_PROJECT_ID (Project v2 node id)."
-            echo "::error::Set ROADMAP_PROJECT_ID, then add the PR to the project."
             exit 1
           fi
 
@@ -42,36 +96,87 @@ jobs:
           fi
 
           if [[ -z "${GH_TOKEN:-}" ]]; then
-            echo "::error::Missing github.token in workflow environment."
+            echo "::error::Missing token for roadmap policy check."
             exit 1
           fi
 
-          query='query($prId:ID!){ node(id:$prId){ ... on PullRequest { projectItems(first:100){ nodes { project { id title url } } } } } }'
-          if ! response="$(gh api graphql -f query="$query" -F prId="$PR_NODE_ID" 2>/tmp/pr_roadmap_err.log)"; then
-            echo "::error::Unable to query Project items for this PR."
-            echo "::error::Ensure workflow has 'repository-projects: read' permission and set ROADMAP_PROJECT_TOKEN (PAT with project scope) when org project visibility blocks github.token."
-            sed -n '1,80p' /tmp/pr_roadmap_err.log | sed 's/^/::error::/g'
+          pr_query='query($prId:ID!){ node(id:$prId){ ... on PullRequest { projectItems(first:100){ nodes { project { id title url } } } } } }'
+          if ! pr_response="$(gh api graphql -f query="$pr_query" -F prId="$PR_NODE_ID" 2>"$pr_err")"; then
+            echo "::error::Unable to query PR project items."
+            if [[ "$TOKEN_SOURCE" == "github-token" ]]; then
+              echo "::error::github.token may not have Organization ProjectV2 visibility. Configure ROADMAP_APP_ID + ROADMAP_APP_PRIVATE_KEY (preferred), or ROADMAP_PROJECT_TOKEN (fine-grained PAT)."
+            fi
+            sanitize_err "$pr_err"
             exit 1
           fi
 
-          if ! jq -e --arg project_id "$PROJECT_ID" '.data.node.projectItems.nodes | map(.project.id) | index($project_id) != null' <<<"$response" >/dev/null; then
-            project_query='query($projectId:ID!){ node(id:$projectId){ ... on ProjectV2 { items(first:100){ nodes { content { __typename ... on PullRequest { id } } } } } } }'
-            project_response="$(gh api graphql -f query="$project_query" -F projectId="$PROJECT_ID" 2>/tmp/pr_roadmap_project_err.log || true)"
-            if [[ -n "$project_response" ]] && jq -e --arg pr_id "$PR_NODE_ID" '.data.node.items.nodes | map(select(.content.__typename == "PullRequest") | .content.id) | index($pr_id) != null' <<<"$project_response" >/dev/null; then
-              echo "Roadmap policy check passed for PR #${PR_NUMBER} (matched by project contents)"
-              exit 0
+          if jq -e --arg project_id "$PROJECT_ID" '.data.node.projectItems.nodes // [] | map(.project.id) | index($project_id) != null' <<<"$pr_response" >/dev/null 2>&1; then
+            echo "Roadmap policy check passed for PR #${PR_NUMBER}"
+            exit 0
+          fi
+
+          project_found="false"
+          project_query_failed="false"
+          cursor=""
+
+          while :; do
+            if [[ -n "$cursor" ]]; then
+              project_query='query($projectId:ID!,$after:String!){ node(id:$projectId){ ... on ProjectV2 { items(first:100, after:$after){ nodes { content { __typename ... on PullRequest { id } } } pageInfo { hasNextPage endCursor } } } } }'
+              if ! project_response="$(gh api graphql -f query="$project_query" -F projectId="$PROJECT_ID" -F after="$cursor" 2>"$project_err")"; then
+                project_query_failed="true"
+                break
+              fi
+            else
+              project_query='query($projectId:ID!){ node(id:$projectId){ ... on ProjectV2 { items(first:100){ nodes { content { __typename ... on PullRequest { id } } } pageInfo { hasNextPage endCursor } } } } }'
+              if ! project_response="$(gh api graphql -f query="$project_query" -F projectId="$PROJECT_ID" 2>"$project_err")"; then
+                project_query_failed="true"
+                break
+              fi
             fi
 
-            fallback_response="$(gh pr view "$PR_NUMBER" --repo "$REPO" --json projectItems 2>/tmp/pr_roadmap_fallback_err.log || true)"
-            if [[ -n "$fallback_response" ]] && jq -e --arg project_title "$PROJECT_TITLE" '.projectItems | map(.title) | index($project_title) != null' <<<"$fallback_response" >/dev/null; then
-              echo "Roadmap policy check passed for PR #${PR_NUMBER} (matched by project title)"
-              exit 0
+            if jq -e --arg pr_id "$PR_NODE_ID" '.data.node.items.nodes // [] | map(select(.content.__typename == "PullRequest") | .content.id) | index($pr_id) != null' <<<"$project_response" >/dev/null 2>&1; then
+              project_found="true"
+              break
             fi
-            echo "::error::PR #${PR_NUMBER} is not added to required Project v2."
-            echo "::error::Remediation:"
-            echo "::error::  1) pr_id=\$(gh pr view ${PR_NUMBER} --repo ${REPO} --json id -q .id)"
-            echo "::error::  2) gh api graphql -f query='mutation(\$project:ID!,\$content:ID!){ addProjectV2ItemById(input:{projectId:\$project,contentId:\$content}) { item { id } } }' -F project='${PROJECT_ID}' -F content=\"\$pr_id\""
-            exit 1
+
+            has_next="$(jq -r '.data.node.items.pageInfo.hasNextPage // false' <<<"$project_response" 2>/dev/null || echo false)"
+            end_cursor="$(jq -r '.data.node.items.pageInfo.endCursor // empty' <<<"$project_response" 2>/dev/null || true)"
+
+            if [[ "$has_next" != "true" || -z "$end_cursor" ]]; then
+              break
+            fi
+
+            cursor="$end_cursor"
+          done
+
+          if [[ "$project_found" == "true" ]]; then
+            echo "Roadmap policy check passed for PR #${PR_NUMBER}"
+            exit 0
           fi
 
-          echo "Roadmap policy check passed for PR #${PR_NUMBER}"
+          fallback_response=""
+          if fallback_response="$(gh pr view "$PR_NUMBER" --repo "$REPO" --json projectItems 2>"$fallback_err")"; then
+            if jq -e --arg project_title "$PROJECT_TITLE" '.projectItems // [] | map(.title) | index($project_title) != null' <<<"$fallback_response" >/dev/null 2>&1; then
+              echo "Roadmap policy check passed for PR #${PR_NUMBER}"
+              exit 0
+            fi
+          fi
+
+          if [[ "$project_query_failed" == "true" ]]; then
+            echo "::error::Unable to query ProjectV2 contents during membership validation."
+            if [[ "$TOKEN_SOURCE" == "github-token" ]]; then
+              echo "::error::github.token cannot read the target org project. Configure ROADMAP_APP_ID + ROADMAP_APP_PRIVATE_KEY (preferred), or ROADMAP_PROJECT_TOKEN (fine-grained PAT)."
+            fi
+            sanitize_err "$project_err"
+          fi
+
+          if [[ -s "$fallback_err" ]]; then
+            echo "::error::Fallback project title lookup failed."
+            sanitize_err "$fallback_err"
+          fi
+
+          echo "::error::PR #${PR_NUMBER} is not added to required Project v2."
+          echo "::error::Remediation:"
+          echo "::error::  1) pr_id=\$(gh pr view ${PR_NUMBER} --repo ${REPO} --json id -q .id)"
+          echo "::error::  2) gh api graphql -f query='mutation(\$project:ID!,\$content:ID!){ addProjectV2ItemById(input:{projectId:\$project,contentId:\$content}) { item { id } } }' -F project='${PROJECT_ID}' -F content=\"\$pr_id\""
+          exit 1
