@@ -74,6 +74,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate contract typechain artifacts
+        run: npm run -w contracts compile
+
       - name: Run workspace checks
         shell: bash
         run: |
@@ -563,7 +566,7 @@ jobs:
             echo "## Release Gate Summary"
             echo ""
             for check in "${!results[@]}"; do
-              echo "- \\`$check\\`: ${results[$check]}"
+              printf -- '- `%s`: %s\n' "$check" "${results[$check]}"
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
