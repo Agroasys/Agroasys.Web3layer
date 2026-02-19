@@ -77,8 +77,8 @@ services:
   indexer-migrate:
     profiles: ["staging-e2e", "staging-e2e-real"]
     build:
-      context: ./indexer
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: indexer/Dockerfile
     environment:
       DB_HOST: postgres
       DB_PORT: "5432"
@@ -93,8 +93,8 @@ services:
   indexer-pipeline:
     profiles: ["staging-e2e", "staging-e2e-real"]
     build:
-      context: ./indexer
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: indexer/Dockerfile
     environment:
       DB_HOST: postgres
       DB_PORT: "5432"
@@ -121,8 +121,8 @@ services:
   indexer-graphql:
     profiles: ["staging-e2e", "staging-e2e-real"]
     build:
-      context: ./indexer
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: indexer/Dockerfile
     environment:
       DB_HOST: postgres
       DB_PORT: "5432"

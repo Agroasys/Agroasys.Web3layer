@@ -24,7 +24,7 @@ jobs:
       treasury: ${{ steps.filter.outputs.treasury }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Validate docker-services and gate script guardrails
         run: |
@@ -65,6 +65,16 @@ jobs:
             treasury:
               - 'treasury/**'
 
+  docs-profile-guard:
+    name: ci/docs-profile-guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Check deprecated profile names in docs
+        run: scripts/tests/docs-profile-name-guard.sh
+
   contracts:
     name: ci/contracts
     runs-on: ubuntu-latest
@@ -72,20 +82,23 @@ jobs:
     if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.contracts == 'true'
     env:
       WORKSPACE: contracts
-      HARDHAT_VAR_PRIVATE_KEY: 0x0123456789012345678901234567890123456789012345678901234567890123
-      HARDHAT_VAR_PRIVATE_KEY2: 0x1111111111111111111111111111111111111111111111111111111111111111
+      HARDHAT_VAR_PRIVATE_KEY: '0x0123456789012345678901234567890123456789012345678901234567890123'
+      HARDHAT_VAR_PRIVATE_KEY2: '0x1111111111111111111111111111111111111111111111111111111111111111'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Generate contract typechain artifacts
+        run: npm run -w contracts compile
 
       - name: Run workspace checks
         shell: bash
@@ -119,7 +132,7 @@ jobs:
 
       - name: Upload workspace report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ci-report-${{ env.WORKSPACE }}
           path: ci-reports/${{ env.WORKSPACE }}.txt
@@ -133,10 +146,10 @@ jobs:
       WORKSPACE: sdk
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
@@ -176,7 +189,7 @@ jobs:
 
       - name: Upload workspace report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ci-report-${{ env.WORKSPACE }}
           path: ci-reports/${{ env.WORKSPACE }}.txt
@@ -190,10 +203,10 @@ jobs:
       WORKSPACE: oracle
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
@@ -238,7 +251,7 @@ jobs:
 
       - name: Upload workspace report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ci-report-${{ env.WORKSPACE }}
           path: ci-reports/${{ env.WORKSPACE }}.txt
@@ -252,10 +265,10 @@ jobs:
       WORKSPACE: indexer
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
@@ -295,7 +308,7 @@ jobs:
 
       - name: Upload workspace report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ci-report-${{ env.WORKSPACE }}
           path: ci-reports/${{ env.WORKSPACE }}.txt
@@ -309,10 +322,10 @@ jobs:
       WORKSPACE: notifications
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
@@ -352,7 +365,7 @@ jobs:
 
       - name: Upload workspace report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ci-report-${{ env.WORKSPACE }}
           path: ci-reports/${{ env.WORKSPACE }}.txt
@@ -366,10 +379,10 @@ jobs:
       WORKSPACE: reconciliation
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
@@ -414,7 +427,7 @@ jobs:
 
       - name: Upload workspace report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ci-report-${{ env.WORKSPACE }}
           path: ci-reports/${{ env.WORKSPACE }}.txt
@@ -428,10 +441,10 @@ jobs:
       WORKSPACE: ricardian
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
@@ -471,7 +484,7 @@ jobs:
 
       - name: Upload workspace report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ci-report-${{ env.WORKSPACE }}
           path: ci-reports/${{ env.WORKSPACE }}.txt
@@ -485,10 +498,10 @@ jobs:
       WORKSPACE: treasury
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
@@ -528,7 +541,7 @@ jobs:
 
       - name: Upload workspace report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ci-report-${{ env.WORKSPACE }}
           path: ci-reports/${{ env.WORKSPACE }}.txt
@@ -538,6 +551,7 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     needs:
+      - docs-profile-guard
       - contracts
       - sdk
       - oracle
@@ -554,6 +568,7 @@ jobs:
           report="ci-reports/release-gate.txt"
 
           declare -A results
+          results["ci/docs-profile-guard"]="${{ needs.docs-profile-guard.result }}"
           results["ci/contracts"]="${{ needs.contracts.result }}"
           results["ci/sdk"]="${{ needs.sdk.result }}"
           results["ci/oracle"]="${{ needs.oracle.result }}"
@@ -576,7 +591,7 @@ jobs:
             echo "## Release Gate Summary"
             echo ""
             for check in "${!results[@]}"; do
-              echo "- \\`$check\\`: ${results[$check]}"
+              printf -- '- `%s`: %s\n' "$check" "${results[$check]}"
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -587,7 +602,7 @@ jobs:
 
       - name: Upload release gate report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ci-report-release-gate
           path: ci-reports/release-gate.txt
