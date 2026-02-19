@@ -5,17 +5,17 @@
 3. Capture current service health:
 
 ```bash
-scripts/docker-services.sh ps local
-scripts/docker-services.sh health local
+scripts/docker-services.sh ps local-dev
+scripts/docker-services.sh health local-dev
 ```
 
 4. Capture key logs:
 
 ```bash
-scripts/docker-services.sh logs local oracle
-scripts/docker-services.sh logs local reconciliation
-scripts/docker-services.sh logs local treasury
-scripts/docker-services.sh logs local ricardian
+scripts/docker-services.sh logs local-dev oracle
+scripts/docker-services.sh logs local-dev reconciliation
+scripts/docker-services.sh logs local-dev treasury
+scripts/docker-services.sh logs local-dev ricardian
 ```
 
 5. Confirm whether issue is chain connectivity, indexer drift, auth failures, or data-layer fault.
