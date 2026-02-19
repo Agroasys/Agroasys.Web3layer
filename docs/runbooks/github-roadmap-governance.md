@@ -5,9 +5,12 @@ Maintain a single execution board for `Agroasys.Web3layer` where every roadmap i
 
 ## Project v2 Definition
 - Project name: `Agroasys.Web3layer Roadmap`
+- Project URL: `https://github.com/orgs/Agroasys/projects/5`
+- Project node ID: `PVT_kwDODMhsg84BPnYZ`
 - Status values: `Backlog`, `In Progress`, `In Review`, `Blocked`, `Done`
 - Milestone values: `Milestone A: PolkaVM Smart Contract Escrow & Ricardian Architecture`, `Milestone B: Non-Custodial Integration & Hybrid Split Settlement`, `Milestone C: Pilot with 1 Buyer + 1 Cooperative & Enforceability Memo`, `Needs Triage`
 - Area values: `Contracts`, `Oracle`, `Indexer`, `SDK`, `Reconciliation`, `Ricardian`, `Treasury`, `Notifications`, `Ops/CI`, `Docs/Runbooks`, `Security`
+- Work type values: `Feature`, `Bug`, `Refactor`, `Ops`, `Docs`, `Security` (`Type` is a reserved project field name in GitHub UI/API).
 
 ## Runtime Profile Context
 - `local-dev`: fast local feedback with lightweight indexer responder.
