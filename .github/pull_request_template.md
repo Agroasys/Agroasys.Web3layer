@@ -16,7 +16,7 @@
 - [ ] I have signed off all commits (DCO)
 
 ## Safety checklist
-- [ ] No escrow contract ABI changes
+- [ ] No ABI-breaking changes unless explicitly approved
 - [ ] No escrow economics/payout-path changes
 - [ ] No token flow changes
 - [ ] No key material or secrets added to logs
