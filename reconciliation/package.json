@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@agroasys/sdk": "^1.0.0",
-    "dotenv": "^16.4.5",
+    "dotenv": "^17.3.1",
     "pg": "^8.18.0",
     "@agroasys/notifications": "^1.0.0"
   },
