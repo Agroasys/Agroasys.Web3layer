@@ -1,31 +1,42 @@
 import { RequestHandler, Router } from 'express';
 import { RicardianController } from './controller';
 
-export function createRouter(
-  controller: RicardianController,
-  authMiddleware?: RequestHandler,
-  rateLimitMiddleware?: RequestHandler,
-): Router {
+export interface RicardianRouterOptions {
+  authMiddleware?: RequestHandler;
+  rateLimitMiddleware?: RequestHandler;
+  readinessCheck?: () => Promise<void>;
+}
+
+export function createRouter(controller: RicardianController, options: RicardianRouterOptions = {}): Router {
   const router = Router();
 
-  router.get('/health', (_, res) => {
+  router.get('/health', (_req, res) => {
     res.status(200).json({ success: true, service: 'ricardian', status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  router.get('/ready', (_, res) => {
-    res.status(200).json({ success: true, service: 'ricardian', ready: true, timestamp: new Date().toISOString() });
+  router.get('/ready', async (_req, res) => {
+    try {
+      if (options.readinessCheck) {
+        await options.readinessCheck();
+      }
+
+      res.status(200).json({ success: true, service: 'ricardian', ready: true, timestamp: new Date().toISOString() });
+    } catch {
+      res
+        .status(503)
+        .json({ success: false, service: 'ricardian', ready: false, error: 'Dependencies not ready' });
+    }
   });
 
-  if (rateLimitMiddleware) {
-    router.use(rateLimitMiddleware);
-  }
+  const writeMiddlewares: RequestHandler[] = [options.authMiddleware, options.rateLimitMiddleware].filter(
+    Boolean
+  ) as RequestHandler[];
+  const readMiddlewares: RequestHandler[] = [options.authMiddleware, options.rateLimitMiddleware].filter(
+    Boolean
+  ) as RequestHandler[];
 
-  if (authMiddleware) {
-    router.use(authMiddleware);
-  }
-
-  router.post('/hash', controller.createHash.bind(controller));
-  router.get('/hash/:hash', controller.getHash.bind(controller));
+  router.post('/hash', ...writeMiddlewares, controller.createHash.bind(controller));
+  router.get('/hash/:hash', ...readMiddlewares, controller.getHash.bind(controller));
 
   return router;
 }

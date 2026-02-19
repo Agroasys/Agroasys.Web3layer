@@ -46,7 +46,7 @@ interface RateLimiterOptions {
 
 interface CallerContext {
   key: string;
-  keyType: 'ip';
+  keyType: 'ip' | 'apiKey+ip';
   fingerprint: string;
 }
 
@@ -137,8 +137,25 @@ function fingerprint(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex').slice(0, 12);
 }
 
+interface AuthAwareRequest extends Request {
+  serviceAuth?: {
+    apiKeyId: string;
+  };
+}
+
 function callerContext(req: Request): CallerContext {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const authContext = (req as AuthAwareRequest).serviceAuth;
+
+  if (authContext?.apiKeyId) {
+    const scopedIdentity = `apiKey:${authContext.apiKeyId}:ip:${ip}`;
+    return {
+      key: scopedIdentity,
+      keyType: 'apiKey+ip',
+      fingerprint: fingerprint(scopedIdentity),
+    };
+  }
+
   return {
     key: `ip:${ip}`,
     keyType: 'ip',

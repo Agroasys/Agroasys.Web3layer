@@ -4,6 +4,8 @@ import { parseServiceApiKeys, ServiceApiKey } from './auth/serviceAuth';
 
 dotenv.config();
 
+export type NonceStoreMode = 'redis' | 'postgres' | 'inmemory';
+
 export interface RicardianConfig {
   port: number;
   dbHost: string;
@@ -13,8 +15,12 @@ export interface RicardianConfig {
   dbPassword: string;
   authEnabled: boolean;
   apiKeys: ServiceApiKey[];
+  hmacSecret?: string;
   authMaxSkewSeconds: number;
   authNonceTtlSeconds: number;
+  nonceStore: NonceStoreMode;
+  nonceRedisUrl?: string;
+  nonceTtlSeconds: number;
   rateLimitEnabled: boolean;
   rateLimitRedisUrl?: string;
   rateLimitWriteBurstLimit: number;
@@ -62,12 +68,49 @@ function envNumber(name: string, fallback?: number): number {
   return parsed;
 }
 
+function resolveNonceStoreMode(nodeEnv: string): NonceStoreMode {
+  const rawMode = process.env.NONCE_STORE?.trim().toLowerCase();
+
+  if (!rawMode) {
+    if (nodeEnv === 'production') {
+      return process.env.REDIS_URL?.trim() ? 'redis' : 'postgres';
+    }
+
+    return 'inmemory';
+  }
+
+  if (rawMode === 'redis' || rawMode === 'postgres' || rawMode === 'inmemory') {
+    return rawMode;
+  }
+
+  throw new Error('NONCE_STORE must be one of: redis, postgres, inmemory');
+}
+
 export function loadConfig(): RicardianConfig {
+  const nodeEnv = process.env.NODE_ENV || 'development';
   const authEnabled = envBool('AUTH_ENABLED', false);
   const apiKeys = parseServiceApiKeys(process.env.API_KEYS_JSON);
+  const hmacSecret = process.env.HMAC_SECRET?.trim();
+  const nonceStore = resolveNonceStoreMode(nodeEnv);
+  const nonceRedisUrl = process.env.REDIS_URL?.trim() || undefined;
+  const authNonceTtlSeconds = envNumber('AUTH_NONCE_TTL_SECONDS', 600);
+  const nonceTtlSeconds = process.env.NONCE_TTL_SECONDS
+    ? envNumber('NONCE_TTL_SECONDS')
+    : authNonceTtlSeconds;
 
   if (authEnabled) {
-    assert(apiKeys.length > 0, 'API_KEYS_JSON must contain at least one API key when AUTH_ENABLED=true');
+    assert(
+      apiKeys.length > 0 || Boolean(hmacSecret),
+      'AUTH_ENABLED=true requires either API_KEYS_JSON entries or HMAC_SECRET'
+    );
+  }
+
+  if (nodeEnv === 'production' && nonceStore === 'inmemory') {
+    throw new Error('NONCE_STORE=inmemory is not allowed when NODE_ENV=production');
+  }
+
+  if (nonceStore === 'redis') {
+    assert(nonceRedisUrl, 'REDIS_URL is required when NONCE_STORE=redis');
   }
 
   const rateLimitEnabled = envBool('RATE_LIMIT_ENABLED', false);
@@ -81,8 +124,12 @@ export function loadConfig(): RicardianConfig {
     dbPassword: env('DB_PASSWORD'),
     authEnabled,
     apiKeys,
+    hmacSecret,
     authMaxSkewSeconds: envNumber('AUTH_MAX_SKEW_SECONDS', 300),
-    authNonceTtlSeconds: envNumber('AUTH_NONCE_TTL_SECONDS', 600),
+    authNonceTtlSeconds,
+    nonceStore,
+    nonceRedisUrl,
+    nonceTtlSeconds,
     rateLimitEnabled,
     rateLimitRedisUrl: process.env.RATE_LIMIT_REDIS_URL,
     rateLimitWriteBurstLimit: envNumber('RATE_LIMIT_WRITE_BURST_LIMIT', 10),
@@ -97,6 +144,7 @@ export function loadConfig(): RicardianConfig {
 
   assert(config.authMaxSkewSeconds > 0, 'AUTH_MAX_SKEW_SECONDS must be > 0');
   assert(config.authNonceTtlSeconds > 0, 'AUTH_NONCE_TTL_SECONDS must be > 0');
+  assert(config.nonceTtlSeconds > 0, 'NONCE_TTL_SECONDS must be > 0');
   assert(config.rateLimitWriteBurstLimit > 0, 'RATE_LIMIT_WRITE_BURST_LIMIT must be > 0');
   assert(config.rateLimitWriteBurstWindowSeconds > 0, 'RATE_LIMIT_WRITE_BURST_WINDOW_SECONDS must be > 0');
   assert(config.rateLimitWriteSustainedLimit > 0, 'RATE_LIMIT_WRITE_SUSTAINED_LIMIT must be > 0');

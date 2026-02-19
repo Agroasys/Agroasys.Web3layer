@@ -14,6 +14,7 @@ Service health:
 
 ```bash
 curl -fsS http://127.0.0.1:3001/api/oracle/health
+curl -fsS http://127.0.0.1:3001/api/oracle/ready
 ```
 
 Example re-drive request:
@@ -35,6 +36,11 @@ curl -X POST http://127.0.0.1:3001/api/oracle/redrive \
 - Invalid trade status for trigger type.
 - Signature/auth failures.
 - RPC or indexer outages causing verification failure.
+
+## First 15 Minutes Checklist
+- Execute `docs/incidents/first-15-minutes-checklist.md`.
+- Confirm `actionKey` and `requestId` for failing triggers.
+- Verify on-chain status first before any manual re-drive retry.
 
 ## Rollback / backout
 1. Pause redrive requests.

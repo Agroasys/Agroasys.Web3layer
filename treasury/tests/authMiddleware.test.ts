@@ -12,6 +12,14 @@ interface MockResponse extends Response {
   json: jest.Mock;
 }
 
+interface RawBodyRequest extends Request {
+  rawBody?: Buffer;
+  serviceAuth?: {
+    apiKeyId: string;
+    scheme: 'api_key' | 'shared_secret';
+  };
+}
+
 function createMockResponse(): MockResponse {
   const response = {} as MockResponse;
   response.status = jest.fn().mockReturnValue(response);
@@ -29,11 +37,12 @@ function createSignedRequest(options?: {
   nonce?: string;
   secret?: string;
   signatureOverride?: string;
+  useLegacyHeaders?: boolean;
 }) {
   const method = options?.method || 'POST';
   const path = options?.path || '/api/treasury/v1/ingest';
   const query = options?.query || '';
-  const body = options?.body || Buffer.from('{"ingest":true}');
+  const body = options?.body || Buffer.from('{"foo":"bar"}');
   const timestamp = options?.timestamp || '1700000000';
   const nonce = options?.nonce || 'nonce-1';
   const apiKey = options?.apiKey || 'svc-a';
@@ -52,12 +61,21 @@ function createSignedRequest(options?: {
   const signature = options?.signatureOverride || signServiceAuthCanonicalString(secret, canonical);
   const originalUrl = query ? `${path}?${query}` : path;
 
-  const headers = new Map<string, string>([
-    ['x-api-key', apiKey],
-    ['x-timestamp', timestamp],
-    ['x-nonce', nonce],
-    ['x-signature', signature],
-  ]);
+  const headers = new Map<string, string>();
+
+  if (options?.useLegacyHeaders) {
+    headers.set('x-timestamp', timestamp);
+    headers.set('x-nonce', nonce);
+    headers.set('x-signature', signature);
+  } else {
+    headers.set('x-agroasys-timestamp', timestamp);
+    headers.set('x-agroasys-nonce', nonce);
+    headers.set('x-agroasys-signature', signature);
+  }
+
+  if (apiKey) {
+    headers.set('x-api-key', apiKey);
+  }
 
   const request = {
     method,
@@ -114,6 +132,42 @@ describe('service auth middleware (treasury)', () => {
     expect(next).toHaveBeenCalledTimes(1);
     expect(response.status).not.toHaveBeenCalled();
     expect(consumeNonce).toHaveBeenCalledWith('svc-a', 'nonce-1', 600);
+    expect((request as RawBodyRequest).serviceAuth).toEqual({
+      apiKeyId: 'svc-a',
+      scheme: 'api_key',
+    });
+  });
+
+  test('valid shared-secret signature passes without API key header', async () => {
+    const consumeNonce = jest.fn().mockResolvedValue(true);
+    const middleware = createServiceAuthMiddleware({
+      enabled: true,
+      maxSkewSeconds: 300,
+      nonceTtlSeconds: 600,
+      sharedSecret: 'shared-secret',
+      lookupApiKey,
+      consumeNonce,
+      nowSeconds,
+    });
+
+    const { request, headers } = createSignedRequest({
+      apiKey: undefined,
+      secret: 'shared-secret',
+      nonce: 'shared-nonce',
+    });
+    headers.delete('x-api-key');
+
+    const response = createMockResponse();
+    const next = jest.fn() as NextFunction;
+
+    await middleware(request, response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(consumeNonce).toHaveBeenCalledWith('__shared_hmac__', 'shared-nonce', 600);
+    expect((request as RawBodyRequest).serviceAuth).toEqual({
+      apiKeyId: '__shared_hmac__',
+      scheme: 'shared_secret',
+    });
   });
 
   test('invalid signature fails', async () => {
@@ -200,7 +254,7 @@ describe('service auth middleware (treasury)', () => {
     });
 
     const { request, headers } = createSignedRequest();
-    headers.delete('x-signature');
+    headers.delete('x-agroasys-signature');
 
     const response = createMockResponse();
     const next = jest.fn() as NextFunction;
@@ -214,27 +268,47 @@ describe('service auth middleware (treasury)', () => {
     );
   });
 
-  test('invalid nonce format fails', async () => {
+  test('nonce is derived when nonce header is omitted', async () => {
+    const consumeNonce = jest.fn().mockResolvedValue(true);
     const middleware = createServiceAuthMiddleware({
       enabled: true,
       maxSkewSeconds: 300,
       nonceTtlSeconds: 600,
       lookupApiKey,
-      consumeNonce: jest.fn().mockResolvedValue(true),
+      consumeNonce,
       nowSeconds,
     });
 
-    const { request } = createSignedRequest({ nonce: '   ' });
+    const method = 'POST';
+    const path = '/api/treasury/v1/ingest';
+    const query = 'entryId=abc';
+    const body = Buffer.from('{"foo":"bar"}');
+    const timestamp = '1700000000';
+    const bodySha256 = crypto.createHash('sha256').update(body).digest('hex');
+    const derivedNonce = crypto
+      .createHash('sha256')
+      .update([method, path, query, bodySha256, timestamp].join('\n'))
+      .digest('hex')
+      .slice(0, 255);
+
+    const { request, headers } = createSignedRequest({
+      method,
+      path,
+      query,
+      body,
+      timestamp,
+      nonce: derivedNonce,
+    });
+
+    headers.delete('x-agroasys-nonce');
+
     const response = createMockResponse();
     const next = jest.fn() as NextFunction;
 
     await middleware(request, response, next);
 
-    expect(next).not.toHaveBeenCalled();
-    expect(response.status).toHaveBeenCalledWith(401);
-    expect(response.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: 'Invalid nonce format', code: 'AUTH_INVALID_NONCE' })
-    );
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(consumeNonce).toHaveBeenCalledWith('svc-a', derivedNonce, 600);
   });
 
   test('inactive key returns forbidden', async () => {
@@ -259,7 +333,9 @@ describe('service auth middleware (treasury)', () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(response.status).toHaveBeenCalledWith(403);
-    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'API key is inactive', code: 'AUTH_FORBIDDEN' }));
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'API key is inactive', code: 'AUTH_FORBIDDEN' })
+    );
   });
 
   test('parseServiceApiKeys rejects string active values', () => {
@@ -276,8 +352,8 @@ describe('service auth middleware (treasury)', () => {
 
   test('parseServiceApiKeys rejects API key ids over max length', () => {
     const oversizedId = 'a'.repeat(129);
-    expect(() =>
-      parseServiceApiKeys(JSON.stringify([{ id: oversizedId, secret: 'secret', active: true }]))
-    ).toThrow('API_KEYS_JSON[0].id must be <= 128 characters');
+    expect(() => parseServiceApiKeys(JSON.stringify([{ id: oversizedId, secret: 'secret', active: true }]))).toThrow(
+      'API_KEYS_JSON[0].id must be <= 128 characters'
+    );
   });
 });

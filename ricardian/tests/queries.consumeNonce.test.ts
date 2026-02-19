@@ -24,10 +24,10 @@ describe('ricardian consumeServiceAuthNonce', () => {
     const sql = mockPoolQuery.mock.calls[0][0] as string;
     const params = mockPoolQuery.mock.calls[0][1] as unknown[];
 
-    expect(sql).toContain('DELETE FROM ricardian_auth_nonces');
-    expect(sql).toContain('WHERE expires_at <= NOW()');
+    expect(sql).toContain('DELETE FROM "ricardian_auth_nonces"');
+    expect(sql).toContain('WHERE "expires_at" <= NOW()');
     expect(sql).not.toContain('WHERE api_key = $1');
-    expect(sql).toContain('ON CONFLICT (api_key, nonce) DO NOTHING');
+    expect(sql).toContain('ON CONFLICT ("api_key", "nonce") DO NOTHING');
     expect(params).toEqual(['svc-a', 'nonce-1', 60]);
   });
 
