@@ -11,10 +11,11 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      projects: read
     steps:
       - name: Enforce milestone + project association
         env:
-          GH_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           PROJECT_ID: ${{ vars.ROADMAP_PROJECT_ID }}
           PR_NODE_ID: ${{ github.event.pull_request.node_id }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -36,13 +37,17 @@ jobs:
           fi
 
           if [[ -z "${GH_TOKEN:-}" ]]; then
-            echo "::error::Missing secret ROADMAP_PROJECT_TOKEN."
-            echo "::error::Create a PAT with repo + read:project + project scopes and save it as ROADMAP_PROJECT_TOKEN."
+            echo "::error::Missing github.token in workflow environment."
             exit 1
           fi
 
           query='query($prId:ID!){ node(id:$prId){ ... on PullRequest { projectItems(first:100){ nodes { project { id title url } } } } } }'
-          response="$(gh api graphql -f query="$query" -F prId="$PR_NODE_ID")"
+          if ! response="$(gh api graphql -f query="$query" -F prId="$PR_NODE_ID" 2>/tmp/pr_roadmap_err.log)"; then
+            echo "::error::Unable to query Project items for this PR."
+            echo "::error::Ensure workflow has 'projects: read' permission and org policy allows Actions to read org projects."
+            sed -n '1,80p' /tmp/pr_roadmap_err.log | sed 's/^/::error::/g'
+            exit 1
+          fi
 
           if ! jq -e --arg project_id "$PROJECT_ID" '.data.node.projectItems.nodes | map(.project.id) | index($project_id) != null' <<<"$response" >/dev/null; then
             echo "::error::PR #${PR_NUMBER} is not added to required Project v2."

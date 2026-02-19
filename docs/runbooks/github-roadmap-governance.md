@@ -35,8 +35,8 @@ gh api graphql \
   -F project="$ROADMAP_PROJECT_ID" \
   -F content="$pr_id"
 ```
-3. Set project fields (`Status`, `Milestone`, `Area`, `Priority`, `Type`, `Risk`, `% Complete`, `Target Date`).
+3. Set project fields (`Status`, `Roadmap Milestone`, `Area`, `Priority`, `Work Type`, `Risk`, `% Complete`, `Target Date`).
 
 ## Required Repository Configuration
 - Repository variable: `ROADMAP_PROJECT_ID` (Project v2 node id).
-- Repository secret: `ROADMAP_PROJECT_TOKEN` (PAT with `repo`, `read:project`, `project` scopes).
+- Workflow permission: `.github/workflows/pr-roadmap-policy.yml` must keep `projects: read`.
