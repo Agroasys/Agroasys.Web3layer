@@ -8,8 +8,8 @@ import { closeConnection, testConnection } from './database/connection';
 import { runMigrations } from './database/migrations';
 import { Logger } from './utils/logger';
 import { TreasuryIngestionService } from './core/ingestion';
-import { consumeServiceAuthNonce } from './database/queries';
 import { createServiceAuthMiddleware } from './auth/serviceAuth';
+import { createTreasuryNonceStore } from './auth/nonceStore';
 
 async function bootstrap(): Promise<void> {
   await testConnection();
@@ -27,13 +27,15 @@ async function bootstrap(): Promise<void> {
   const app = express();
   const controller = new TreasuryController();
   const apiKeysById = new Map(config.apiKeys.map((key) => [key.id, key]));
+  const nonceStore = createTreasuryNonceStore(config);
 
   const authMiddleware = createServiceAuthMiddleware({
     enabled: config.authEnabled,
     maxSkewSeconds: config.authMaxSkewSeconds,
-    nonceTtlSeconds: config.authNonceTtlSeconds,
+    nonceTtlSeconds: config.nonceTtlSeconds,
+    sharedSecret: config.hmacSecret,
     lookupApiKey: (apiKey) => apiKeysById.get(apiKey),
-    consumeNonce: consumeServiceAuthNonce,
+    consumeNonce: nonceStore.consume,
   });
 
   app.use(helmet());
@@ -46,18 +48,26 @@ async function bootstrap(): Promise<void> {
     })
   );
 
-  app.use('/api/treasury/v1', createRouter(controller, authMiddleware));
+  app.use(
+    '/api/treasury/v1',
+    createRouter(controller, {
+      authMiddleware,
+      readinessCheck: testConnection,
+    })
+  );
 
   app.listen(config.port, () => {
     Logger.info('Treasury service started', {
       port: config.port,
       indexerGraphqlUrl: config.indexerGraphqlUrl,
       authEnabled: config.authEnabled,
+      nonceStore: config.nonceStore,
     });
   });
 
   const shutdown = async (signal: string): Promise<void> => {
     Logger.info('Shutting down treasury service', { signal });
+    await nonceStore.close();
     await closeConnection();
     process.exit(0);
   };

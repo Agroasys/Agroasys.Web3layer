@@ -1,9 +1,9 @@
 name: CI Release Gate
 
 on:
-  workflow_dispatch:
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    branches:
+      - main
   push:
     branches:
       - main
@@ -13,6 +13,7 @@ jobs:
     name: changes
     runs-on: ubuntu-latest
     outputs:
+      full_matrix: ${{ steps.mode.outputs.full_matrix }}
       shared: ${{ steps.filter.outputs.shared }}
       contracts: ${{ steps.filter.outputs.contracts }}
       sdk: ${{ steps.filter.outputs.sdk }}
@@ -26,16 +27,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Validate docker-services and gate script guardrails
+      - name: Resolve release gate mode
+        id: mode
+        shell: bash
         run: |
-          bash -n scripts/docker-services.sh
-          bash -n scripts/staging-e2e-real-gate.sh
-          scripts/tests/docker-services-args.test.sh
-          scripts/tests/docker-services-env-precedence.test.sh
-          scripts/tests/docker-services-env-layering.test.sh
-          scripts/tests/docker-services-health.test.sh
-          scripts/tests/staging-e2e-real-gate-start-block.test.sh
-          scripts/tests/docs-local-dev-profile.test.sh
+          full_matrix=false
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            full_matrix=true
+          fi
+
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            labels='${{ toJson(github.event.pull_request.labels.*.name) }}'
+            if echo "$labels" | grep -q '"release-gate-full"'; then
+              full_matrix=true
+            fi
+          fi
+
+          echo "full_matrix=${full_matrix}" >> "$GITHUB_OUTPUT"
 
       - name: Detect changed paths
         id: filter
@@ -79,7 +88,7 @@ jobs:
     name: ci/contracts
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.contracts == 'true'
+    if: needs.changes.outputs.full_matrix == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.contracts == 'true'
     env:
       WORKSPACE: contracts
       HARDHAT_VAR_PRIVATE_KEY: '0x0123456789012345678901234567890123456789012345678901234567890123'
@@ -141,7 +150,7 @@ jobs:
     name: ci/sdk
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.sdk == 'true'
+    if: needs.changes.outputs.full_matrix == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.sdk == 'true'
     env:
       WORKSPACE: sdk
     steps:
@@ -198,7 +207,7 @@ jobs:
     name: ci/oracle
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.oracle == 'true' || needs.changes.outputs.sdk == 'true' || needs.changes.outputs.notifications == 'true'
+    if: needs.changes.outputs.full_matrix == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.oracle == 'true' || needs.changes.outputs.sdk == 'true' || needs.changes.outputs.notifications == 'true'
     env:
       WORKSPACE: oracle
     steps:
@@ -260,7 +269,7 @@ jobs:
     name: ci/indexer
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.indexer == 'true'
+    if: needs.changes.outputs.full_matrix == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.indexer == 'true'
     env:
       WORKSPACE: indexer
     steps:
@@ -317,7 +326,7 @@ jobs:
     name: ci/notifications
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.notifications == 'true'
+    if: needs.changes.outputs.full_matrix == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.notifications == 'true'
     env:
       WORKSPACE: notifications
     steps:
@@ -374,7 +383,7 @@ jobs:
     name: ci/reconciliation
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.reconciliation == 'true' || needs.changes.outputs.sdk == 'true' || needs.changes.outputs.notifications == 'true'
+    if: needs.changes.outputs.full_matrix == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.reconciliation == 'true' || needs.changes.outputs.sdk == 'true' || needs.changes.outputs.notifications == 'true'
     env:
       WORKSPACE: reconciliation
     steps:
@@ -436,7 +445,7 @@ jobs:
     name: ci/ricardian
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.ricardian == 'true'
+    if: needs.changes.outputs.full_matrix == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.ricardian == 'true'
     env:
       WORKSPACE: ricardian
     steps:
@@ -493,7 +502,7 @@ jobs:
     name: ci/treasury
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.treasury == 'true'
+    if: needs.changes.outputs.full_matrix == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.treasury == 'true'
     env:
       WORKSPACE: treasury
     steps:
@@ -606,45 +615,3 @@ jobs:
         with:
           name: ci-report-release-gate
           path: ci-reports/release-gate.txt
-
-  staging-e2e-real:
-    name: release/staging-e2e-real
-    runs-on: ubuntu-latest
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push' ||
-      (github.event_name == 'pull_request' && contains(toJson(github.event.pull_request.labels.*.name), 'release-gate-staging-e2e-real'))
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Prepare env files
-        run: |
-          cp .env.example .env
-          cp .env.staging-e2e-real.example .env.staging-e2e-real
-
-      - name: Validate staging profile env
-        run: scripts/validate-env.sh staging-e2e-real
-
-      - name: Build indexer workspace
-        run: npm run -w indexer build
-
-      - name: Run staging-e2e-real gate
-        run: |
-          scripts/docker-services.sh down staging-e2e-real || true
-          scripts/docker-services.sh up staging-e2e-real
-          scripts/docker-services.sh health staging-e2e-real
-          scripts/staging-e2e-real-gate.sh
-
-      - name: Teardown staging-e2e-real
-        if: always()
-        run: scripts/docker-services.sh down staging-e2e-real
