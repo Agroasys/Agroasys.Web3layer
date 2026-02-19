@@ -22,7 +22,7 @@ jobs:
       treasury: ${{ steps.filter.outputs.treasury }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Detect changed paths
         id: filter
@@ -57,7 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check deprecated profile names in docs
         run: scripts/tests/docs-profile-name-guard.sh
@@ -73,7 +73,7 @@ jobs:
       HARDHAT_VAR_PRIVATE_KEY2: '0x1111111111111111111111111111111111111111111111111111111111111111'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -133,7 +133,7 @@ jobs:
       WORKSPACE: sdk
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -190,7 +190,7 @@ jobs:
       WORKSPACE: oracle
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -252,7 +252,7 @@ jobs:
       WORKSPACE: indexer
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -309,7 +309,7 @@ jobs:
       WORKSPACE: notifications
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -366,7 +366,7 @@ jobs:
       WORKSPACE: reconciliation
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -428,7 +428,7 @@ jobs:
       WORKSPACE: ricardian
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -485,7 +485,7 @@ jobs:
       WORKSPACE: treasury
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
