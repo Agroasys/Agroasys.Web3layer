@@ -108,7 +108,7 @@ if [[ "$DYNAMIC_START_BLOCK" == "true" && -n "$RPC_GATEWAY_URL_HOST" ]]; then
   fi
 fi
 
-scripts/docker-services.sh up "$PROFILE"
+INDEXER_START_BLOCK="${INDEXER_START_BLOCK:-}" scripts/docker-services.sh up "$PROFILE"
 if scripts/docker-services.sh health "$PROFILE"; then
   pass "profile health check passed"
 else

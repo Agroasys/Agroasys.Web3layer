@@ -26,6 +26,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate docker-services env precedence guard
+        run: scripts/tests/docker-services-env-precedence.test.sh
+
       - name: Detect changed paths
         id: filter
         uses: dorny/paths-filter@v3
@@ -606,6 +609,9 @@ jobs:
           cp .env.example .env
           cp .env.staging-e2e-real.example .env.staging-e2e-real
 
+      - name: Validate staging profile env
+        run: scripts/validate-env.sh staging-e2e-real
+
       - name: Build indexer workspace
         run: npm run -w indexer build
 
@@ -619,4 +625,3 @@ jobs:
       - name: Teardown staging-e2e-real
         if: always()
         run: scripts/docker-services.sh down staging-e2e-real
-

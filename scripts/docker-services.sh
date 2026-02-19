@@ -9,7 +9,7 @@ HEALTH_RETRIES="${DOCKER_SERVICES_HEALTH_RETRIES:-15}"
 HEALTH_RETRY_DELAY_SECONDS="${DOCKER_SERVICES_HEALTH_RETRY_DELAY_SECONDS:-2}"
 
 usage() {
-  echo "Usage: scripts/docker-services.sh <build|up|down|logs|ps|health> <local-dev|staging-e2e|staging-e2e-real|infra> [service]" >&2
+  echo "Usage: scripts/docker-services.sh <build|up|down|logs|ps|health|config> <local-dev|staging-e2e|staging-e2e-real|infra> [service]" >&2
 }
 
 if [[ -z "$ACTION" || -z "$PROFILE" ]]; then
@@ -30,10 +30,34 @@ esac
 load_env_file() {
   local file="$1"
   if [[ -f "$file" ]]; then
+    local preserved_keys=()
+    local preserved_values=()
+    local line=""
+
+    while IFS= read -r line; do
+      [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+      local key="${line%%=*}"
+      if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        continue
+      fi
+
+      if [[ -n "${!key+x}" ]]; then
+        preserved_keys+=("$key")
+        preserved_values+=("${!key}")
+      fi
+    done < "$file"
+
     set -a
     # shellcheck disable=SC1090
     source "$file"
     set +a
+
+    local idx=0
+    for key in "${preserved_keys[@]}"; do
+      export "$key=${preserved_values[$idx]}"
+      idx=$((idx + 1))
+    done
   fi
 }
 
@@ -197,6 +221,9 @@ case "$ACTION" in
     ;;
   ps)
     run_compose ps
+    ;;
+  config)
+    run_compose config
     ;;
   health)
     run_compose ps

@@ -15,6 +15,7 @@ For staging-grade validation with the explicit real indexer profile, use `docs/r
 scripts/docker-services.sh down staging-e2e
 scripts/docker-services.sh up staging-e2e
 scripts/docker-services.sh health staging-e2e
+scripts/validate-env.sh staging-e2e
 scripts/docker-services.sh logs staging-e2e reconciliation
 scripts/docker-services.sh logs staging-e2e indexer-graphql
 ```

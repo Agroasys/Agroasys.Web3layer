@@ -24,6 +24,7 @@ Run a staging-grade release gate against the real indexer pipeline profile (`sta
 cp .env.example .env
 cp .env.staging-e2e-real.example .env.staging-e2e-real
 
+scripts/validate-env.sh staging-e2e-real
 scripts/docker-services.sh down staging-e2e-real || true
 scripts/docker-services.sh up staging-e2e-real
 scripts/docker-services.sh health staging-e2e-real
