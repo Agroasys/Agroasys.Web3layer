@@ -12,6 +12,9 @@ Validation order is strict:
 
 If all checks fail, the workflow fails.
 
+Related automation:
+- `.github/workflows/roadmap-weighted-progress-sync.yml` keeps weighted milestone progress in sync with roadmap deliverable issues and updates gate issue/project fields.
+
 ## Temporary rollout mode (current)
 - Milestone check is always enforced (blocking).
 - Project-link check runs in advisory mode when GitHub App auth is not configured.
