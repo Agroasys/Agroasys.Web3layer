@@ -28,8 +28,12 @@ export class DisputeEvent {
     timestamp!: Date
 
     @Index_()
-    @StringColumn_({nullable: false})
-    txHash!: string
+    @StringColumn_({nullable: true})
+    txHash!: string | undefined | null
+
+    @Index_()
+    @StringColumn_({nullable: true})
+    extrinsicHash!: string | undefined | null
 
     @IntColumn_({nullable: false})
     extrinsicIndex!: number

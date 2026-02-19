@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { generateRequestHash, verifyRequestSignature } from '../src/utils/crypto';
 
-const runManualE2E = process.env.RUN_MANUAL_E2E === 'true';
+const runManualE2E = process.env.RUN_E2E === 'true' || process.env.RUN_MANUAL_E2E === 'true';
 const describeManual = runManualE2E ? describe : describe.skip;
 
 describe('Oracle request signing', () => {
