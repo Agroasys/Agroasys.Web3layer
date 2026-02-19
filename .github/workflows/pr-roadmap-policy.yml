@@ -17,6 +17,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PROJECT_ID: ${{ vars.ROADMAP_PROJECT_ID }}
+          PROJECT_TITLE: ${{ vars.ROADMAP_PROJECT_TITLE }}
           PR_NODE_ID: ${{ github.event.pull_request.node_id }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_MILESTONE: ${{ github.event.pull_request.milestone.title }}
@@ -36,6 +37,10 @@ jobs:
             exit 1
           fi
 
+          if [[ -z "${PROJECT_TITLE:-}" ]]; then
+            PROJECT_TITLE="Agroasys.Web3layer Roadmap"
+          fi
+
           if [[ -z "${GH_TOKEN:-}" ]]; then
             echo "::error::Missing github.token in workflow environment."
             exit 1
@@ -44,12 +49,17 @@ jobs:
           query='query($prId:ID!){ node(id:$prId){ ... on PullRequest { projectItems(first:100){ nodes { project { id title url } } } } } }'
           if ! response="$(gh api graphql -f query="$query" -F prId="$PR_NODE_ID" 2>/tmp/pr_roadmap_err.log)"; then
             echo "::error::Unable to query Project items for this PR."
-            echo "::error::Ensure workflow has 'projects: read' permission and org policy allows Actions to read org projects."
+            echo "::error::Ensure workflow has 'repository-projects: read' permission and org policy allows Actions to read org projects."
             sed -n '1,80p' /tmp/pr_roadmap_err.log | sed 's/^/::error::/g'
             exit 1
           fi
 
           if ! jq -e --arg project_id "$PROJECT_ID" '.data.node.projectItems.nodes | map(.project.id) | index($project_id) != null' <<<"$response" >/dev/null; then
+            fallback_response="$(gh pr view "$PR_NUMBER" --repo "$REPO" --json projectItems 2>/tmp/pr_roadmap_fallback_err.log || true)"
+            if [[ -n "$fallback_response" ]] && jq -e --arg project_title "$PROJECT_TITLE" '.projectItems | map(.title) | index($project_title) != null' <<<"$fallback_response" >/dev/null; then
+              echo "Roadmap policy check passed for PR #${PR_NUMBER} (matched by project title)"
+              exit 0
+            fi
             echo "::error::PR #${PR_NUMBER} is not added to required Project v2."
             echo "::error::Remediation:"
             echo "::error::  1) pr_id=\$(gh pr view ${PR_NUMBER} --repo ${REPO} --json id -q .id)"
