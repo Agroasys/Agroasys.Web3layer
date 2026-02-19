@@ -13,9 +13,23 @@ jobs:
       pull-requests: read
       repository-projects: read
     steps:
+      - name: Detect roadmap app credentials
+        id: app_config
+        env:
+          ROADMAP_APP_ID: ${{ secrets.ROADMAP_APP_ID }}
+          ROADMAP_APP_PRIVATE_KEY: ${{ secrets.ROADMAP_APP_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${ROADMAP_APP_ID:-}" && -n "${ROADMAP_APP_PRIVATE_KEY:-}" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create roadmap app token (preferred)
         id: app_token
-        if: ${{ secrets.ROADMAP_APP_ID != '' && secrets.ROADMAP_APP_PRIVATE_KEY != '' }}
+        if: ${{ steps.app_config.outputs.enabled == 'true' }}
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.ROADMAP_APP_ID }}
