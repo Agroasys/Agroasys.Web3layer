@@ -6,10 +6,10 @@ import { RicardianController } from './api/controller';
 import { createRouter } from './api/routes';
 import { closeConnection, testConnection } from './database/connection';
 import { runMigrations } from './database/migrations';
-import { consumeServiceAuthNonce } from './database/queries';
 import { createServiceAuthMiddleware } from './auth/serviceAuth';
 import { createRicardianRateLimiter } from './rateLimit/limiter';
 import { Logger } from './utils/logger';
+import { createInMemoryNonceStore } from './auth/inMemoryNonceStore';
 
 async function bootstrap(): Promise<void> {
   await testConnection();
@@ -18,13 +18,15 @@ async function bootstrap(): Promise<void> {
   const app = express();
   const controller = new RicardianController();
   const apiKeysById = new Map(config.apiKeys.map((key) => [key.id, key]));
+  const nonceStore = createInMemoryNonceStore();
 
   const authMiddleware = createServiceAuthMiddleware({
     enabled: config.authEnabled,
     maxSkewSeconds: config.authMaxSkewSeconds,
     nonceTtlSeconds: config.authNonceTtlSeconds,
+    sharedSecret: config.hmacSecret,
     lookupApiKey: (apiKey) => apiKeysById.get(apiKey),
-    consumeNonce: consumeServiceAuthNonce,
+    consumeNonce: nonceStore.consume,
   });
 
   const rateLimiter = await createRicardianRateLimiter({
@@ -66,7 +68,14 @@ async function bootstrap(): Promise<void> {
     })
   );
 
-  app.use('/api/ricardian/v1', createRouter(controller, authMiddleware, rateLimiter.middleware));
+  app.use(
+    '/api/ricardian/v1',
+    createRouter(controller, {
+      authMiddleware,
+      rateLimitMiddleware: rateLimiter.middleware,
+      readinessCheck: testConnection,
+    })
+  );
 
   app.listen(config.port, () => {
     Logger.info('Ricardian service started', {

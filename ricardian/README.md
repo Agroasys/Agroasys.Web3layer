@@ -10,14 +10,17 @@ Deterministic canonicalization and SHA-256 hashing service for Ricardian payload
 
 Health semantics:
 - `/health`: process-level liveness
-- `/ready`: process-level readiness for request handling
+- `/ready`: dependency readiness (database connectivity check)
 
 ## Service Auth (optional)
-When `AUTH_ENABLED=true`, all endpoints except health/readiness require:
-- `X-Api-Key`
-- `X-Timestamp` (unix seconds)
-- `X-Nonce`
-- `X-Signature` (HMAC-SHA256)
+When `AUTH_ENABLED=true`, sensitive write endpoints require HMAC headers:
+- `x-agroasys-timestamp` (unix seconds)
+- `x-agroasys-signature` (HMAC-SHA256)
+- `x-agroasys-nonce` (optional; deterministic fallback derived when omitted)
+
+Optional key-based mode:
+- `X-Api-Key` to select key-specific secret from `API_KEYS_JSON`
+- If `X-Api-Key` is omitted, middleware can verify with `HMAC_SECRET`
 
 Canonical string format:
 `METHOD\nPATH\nQUERY\nBODY_SHA256\nTIMESTAMP\nNONCE`
@@ -30,8 +33,10 @@ Set `RATE_LIMIT_ENABLED=true` to enforce per-route limits.
 
 - Write route (`POST /hash`): stricter burst + sustained limits
 - Read route (`GET /hash/:hash`): looser burst + sustained limits
-- Limiter identity: caller IP (header spoofing safe for unauthenticated requests)
-- Response includes `RateLimit-*` headers
+- Limiter identity:
+  - authenticated write calls: `apiKey + ip`
+  - unauthenticated calls: `ip` fallback
+- Response includes `RateLimit-*` headers and `Retry-After` on 429
 
 Redis-backed mode is used when `RATE_LIMIT_REDIS_URL` is configured.
 In-memory fallback is allowed for local/dev environments only.

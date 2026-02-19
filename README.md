@@ -167,6 +167,8 @@ We welcome contributions from the Web3 and Trade Finance communities. Please rea
 
 Branch protection should require these checks:
 
+- Optional full-matrix override on PRs: add label `release-gate-full` to force all workspace jobs regardless of path filters.
+
 - `ci/contracts`
 - `ci/sdk`
 - `ci/oracle`

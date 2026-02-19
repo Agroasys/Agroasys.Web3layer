@@ -93,7 +93,7 @@ async function bootstrap() {
             next();
         });
 
-        const router = createRouter(controller);
+        const router = createRouter(controller, testConnection);
         app.use('/api/oracle', router);
 
         app.use(errorHandler);

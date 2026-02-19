@@ -13,6 +13,7 @@ export interface RicardianConfig {
   dbPassword: string;
   authEnabled: boolean;
   apiKeys: ServiceApiKey[];
+  hmacSecret?: string;
   authMaxSkewSeconds: number;
   authNonceTtlSeconds: number;
   rateLimitEnabled: boolean;
@@ -65,9 +66,13 @@ function envNumber(name: string, fallback?: number): number {
 export function loadConfig(): RicardianConfig {
   const authEnabled = envBool('AUTH_ENABLED', false);
   const apiKeys = parseServiceApiKeys(process.env.API_KEYS_JSON);
+  const hmacSecret = process.env.HMAC_SECRET?.trim();
 
   if (authEnabled) {
-    assert(apiKeys.length > 0, 'API_KEYS_JSON must contain at least one API key when AUTH_ENABLED=true');
+    assert(
+      apiKeys.length > 0 || Boolean(hmacSecret),
+      'AUTH_ENABLED=true requires either API_KEYS_JSON entries or HMAC_SECRET'
+    );
   }
 
   const rateLimitEnabled = envBool('RATE_LIMIT_ENABLED', false);
@@ -81,6 +86,7 @@ export function loadConfig(): RicardianConfig {
     dbPassword: env('DB_PASSWORD'),
     authEnabled,
     apiKeys,
+    hmacSecret,
     authMaxSkewSeconds: envNumber('AUTH_MAX_SKEW_SECONDS', 300),
     authNonceTtlSeconds: envNumber('AUTH_NONCE_TTL_SECONDS', 600),
     rateLimitEnabled,

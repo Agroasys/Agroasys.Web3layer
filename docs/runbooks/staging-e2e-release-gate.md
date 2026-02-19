@@ -15,10 +15,11 @@ scripts/docker-services.sh up staging-e2e
 scripts/docker-services.sh health staging-e2e
 scripts/docker-services.sh logs staging-e2e reconciliation
 scripts/docker-services.sh logs staging-e2e indexer-graphql
+scripts/staging-e2e-gate.sh
 ```
 
 ## Expected outputs
-- All required staging services running (`postgres`, `redis`, `indexer-db`, `indexer-pipeline`, `indexer-graphql`, `oracle`, `reconciliation`, `ricardian`, `treasury`).
+- All required staging services running (`postgres`, `redis`, `indexer-pipeline`, `indexer-graphql`, `oracle`, `reconciliation`, `ricardian`, `treasury`).
 - Health checks pass for service endpoints and indexer GraphQL.
 - Reconciliation logs have no ENS resolution errors and no recurring indexer fetch failures.
 
@@ -26,6 +27,11 @@ scripts/docker-services.sh logs staging-e2e indexer-graphql
 - `indexer graphql endpoint failed`: indexer pipeline not synced or DB auth mismatch.
 - `RPC endpoint is unreachable`: reconciliation/oracle RPC URL mismatch.
 - Negative lag or chain mismatch symptoms between RPC and indexer datasets.
+
+## First 15 Minutes Checklist
+- Execute `docs/incidents/first-15-minutes-checklist.md`.
+- Run health checks and capture reconciliation + indexer logs.
+- Record indexer head lag and drift summary before deciding rollback.
 
 ## Rollback / backout
 1. Stop staging profile.

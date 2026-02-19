@@ -8,7 +8,7 @@ function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => P
     };
 }
 
-export function createRouter(controller: OracleController): Router {
+export function createRouter(controller: OracleController, readinessCheck?: () => Promise<void>): Router {
     const router = Router();
 
     router.get('/health', (_req, res) => {
@@ -20,13 +20,27 @@ export function createRouter(controller: OracleController): Router {
         });
     });
 
-    router.get('/ready', (_req, res) => {
-        res.json({
-            success: true,
-            service: 'oracle',
-            ready: true,
-            timestamp: new Date().toISOString()
-        });
+    router.get('/ready', async (_req, res) => {
+        try {
+            if (readinessCheck) {
+                await readinessCheck();
+            }
+
+            res.json({
+                success: true,
+                service: 'oracle',
+                ready: true,
+                timestamp: new Date().toISOString()
+            });
+        } catch {
+            res.status(503).json({
+                success: false,
+                service: 'oracle',
+                ready: false,
+                error: 'Dependencies not ready',
+                timestamp: new Date().toISOString(),
+            });
+        }
     });
 
     router.post(

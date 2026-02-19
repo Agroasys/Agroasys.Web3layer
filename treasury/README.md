@@ -18,14 +18,21 @@ Append-only treasury accounting view for on-chain treasury-relevant events.
 
 Health semantics:
 - `/health`: process-level liveness
-- `/ready`: process-level readiness for request handling
+- `/ready`: dependency readiness (database connectivity check)
 
 ## Service Auth (optional)
-When `AUTH_ENABLED=true`, all endpoints except health/readiness require:
-- `X-Api-Key`
-- `X-Timestamp` (unix seconds)
-- `X-Nonce`
-- `X-Signature` (HMAC-SHA256)
+When `AUTH_ENABLED=true`, sensitive write endpoints require HMAC headers:
+- `x-agroasys-timestamp` (unix seconds)
+- `x-agroasys-signature` (HMAC-SHA256)
+- `x-agroasys-nonce` (optional; deterministic fallback derived when omitted)
+
+Protected treasury endpoints:
+- `POST /api/treasury/v1/ingest`
+- `POST /api/treasury/v1/entries/:entryId/state`
+
+Optional key-based mode:
+- `X-Api-Key` to select key-specific secret from `API_KEYS_JSON`
+- If `X-Api-Key` is omitted, middleware can verify with `HMAC_SECRET`
 
 Canonical string format:
 `METHOD\nPATH\nQUERY\nBODY_SHA256\nTIMESTAMP\nNONCE`

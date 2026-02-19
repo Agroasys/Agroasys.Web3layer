@@ -2,6 +2,8 @@ name: CI Release Gate
 
 on:
   pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
@@ -11,6 +13,7 @@ jobs:
     name: changes
     runs-on: ubuntu-latest
     outputs:
+      full_matrix: ${{ steps.mode.outputs.full_matrix }}
       shared: ${{ steps.filter.outputs.shared }}
       contracts: ${{ steps.filter.outputs.contracts }}
       sdk: ${{ steps.filter.outputs.sdk }}
@@ -23,6 +26,25 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Resolve release gate mode
+        id: mode
+        shell: bash
+        run: |
+          full_matrix=false
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            full_matrix=true
+          fi
+
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            labels='${{ toJson(github.event.pull_request.labels.*.name) }}'
+            if echo "$labels" | grep -q '"release-gate-full"'; then
+              full_matrix=true
+            fi
+          fi
+
+          echo "full_matrix=${full_matrix}" >> "$GITHUB_OUTPUT"
 
       - name: Detect changed paths
         id: filter
@@ -56,7 +78,7 @@ jobs:
     name: ci/contracts
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.contracts == 'true'
+    if: needs.changes.outputs.full_matrix == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.contracts == 'true'
     env:
       WORKSPACE: contracts
       HARDHAT_VAR_PRIVATE_KEY: 0x0123456789012345678901234567890123456789012345678901234567890123
@@ -115,7 +137,7 @@ jobs:
     name: ci/sdk
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.sdk == 'true'
+    if: needs.changes.outputs.full_matrix == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.sdk == 'true'
     env:
       WORKSPACE: sdk
     steps:
@@ -172,7 +194,7 @@ jobs:
     name: ci/oracle
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.oracle == 'true' || needs.changes.outputs.sdk == 'true' || needs.changes.outputs.notifications == 'true'
+    if: needs.changes.outputs.full_matrix == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.oracle == 'true' || needs.changes.outputs.sdk == 'true' || needs.changes.outputs.notifications == 'true'
     env:
       WORKSPACE: oracle
     steps:
@@ -234,7 +256,7 @@ jobs:
     name: ci/indexer
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.indexer == 'true'
+    if: needs.changes.outputs.full_matrix == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.indexer == 'true'
     env:
       WORKSPACE: indexer
     steps:
@@ -291,7 +313,7 @@ jobs:
     name: ci/notifications
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.notifications == 'true'
+    if: needs.changes.outputs.full_matrix == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.notifications == 'true'
     env:
       WORKSPACE: notifications
     steps:
@@ -348,7 +370,7 @@ jobs:
     name: ci/reconciliation
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.reconciliation == 'true' || needs.changes.outputs.sdk == 'true' || needs.changes.outputs.notifications == 'true'
+    if: needs.changes.outputs.full_matrix == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.reconciliation == 'true' || needs.changes.outputs.sdk == 'true' || needs.changes.outputs.notifications == 'true'
     env:
       WORKSPACE: reconciliation
     steps:
@@ -410,7 +432,7 @@ jobs:
     name: ci/ricardian
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.ricardian == 'true'
+    if: needs.changes.outputs.full_matrix == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.ricardian == 'true'
     env:
       WORKSPACE: ricardian
     steps:
@@ -467,7 +489,7 @@ jobs:
     name: ci/treasury
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.treasury == 'true'
+    if: needs.changes.outputs.full_matrix == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.treasury == 'true'
     env:
       WORKSPACE: treasury
     steps:

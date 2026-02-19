@@ -25,9 +25,9 @@ npm run -w reconciliation reconcile:daemon
 Docker local profile:
 
 ```bash
-scripts/docker-services.sh up local
-scripts/docker-services.sh health local
-scripts/docker-services.sh logs local reconciliation
+scripts/docker-services.sh up local-dev
+scripts/docker-services.sh health local-dev
+scripts/docker-services.sh logs local-dev reconciliation
 ```
 
 ## Expected outputs
@@ -40,11 +40,16 @@ scripts/docker-services.sh logs local reconciliation
 - `INDEXER_GRAPHQL_URL is missing`: profile env not loaded.
 - Address validation errors: malformed `ESCROW_ADDRESS` or `USDC_ADDRESS`.
 
+## First 15 Minutes Checklist
+- Execute `docs/incidents/first-15-minutes-checklist.md`.
+- Capture reconciliation logs and identify affected `tradeId`/`requestId` pairs.
+- Confirm whether failure source is RPC, indexer GraphQL, or DB.
+
 ## Rollback / backout
 1. Stop daemon:
 
 ```bash
-scripts/docker-services.sh down local
+scripts/docker-services.sh down local-dev
 ```
 
 2. Revert to previous env profile values.

@@ -16,6 +16,7 @@ export interface TreasuryConfig {
   ingestMaxEvents: number;
   authEnabled: boolean;
   apiKeys: ServiceApiKey[];
+  hmacSecret?: string;
   authMaxSkewSeconds: number;
   authNonceTtlSeconds: number;
 }
@@ -57,9 +58,13 @@ function envNumber(name: string, fallback?: number): number {
 export function loadConfig(): TreasuryConfig {
   const authEnabled = envBool('AUTH_ENABLED', false);
   const apiKeys = parseServiceApiKeys(process.env.API_KEYS_JSON);
+  const hmacSecret = process.env.HMAC_SECRET?.trim();
 
   if (authEnabled) {
-    assert(apiKeys.length > 0, 'API_KEYS_JSON must contain at least one API key when AUTH_ENABLED=true');
+    assert(
+      apiKeys.length > 0 || Boolean(hmacSecret),
+      'AUTH_ENABLED=true requires either API_KEYS_JSON entries or HMAC_SECRET'
+    );
   }
 
   const config: TreasuryConfig = {
@@ -74,6 +79,7 @@ export function loadConfig(): TreasuryConfig {
     ingestMaxEvents: envNumber('TREASURY_INGEST_MAX_EVENTS', 2000),
     authEnabled,
     apiKeys,
+    hmacSecret,
     authMaxSkewSeconds: envNumber('AUTH_MAX_SKEW_SECONDS', 300),
     authNonceTtlSeconds: envNumber('AUTH_NONCE_TTL_SECONDS', 600),
   };
