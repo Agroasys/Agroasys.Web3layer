@@ -28,21 +28,15 @@ export function createRouter(controller: RicardianController, options: Ricardian
     }
   });
 
-  if (options.authMiddleware && options.rateLimitMiddleware) {
-    router.post('/hash', options.authMiddleware, options.rateLimitMiddleware, controller.createHash.bind(controller));
-  } else if (options.authMiddleware) {
-    router.post('/hash', options.authMiddleware, controller.createHash.bind(controller));
-  } else if (options.rateLimitMiddleware) {
-    router.post('/hash', options.rateLimitMiddleware, controller.createHash.bind(controller));
-  } else {
-    router.post('/hash', controller.createHash.bind(controller));
-  }
+  const writeMiddlewares: RequestHandler[] = [options.authMiddleware, options.rateLimitMiddleware].filter(
+    Boolean
+  ) as RequestHandler[];
+  const readMiddlewares: RequestHandler[] = [options.authMiddleware, options.rateLimitMiddleware].filter(
+    Boolean
+  ) as RequestHandler[];
 
-  if (options.rateLimitMiddleware) {
-    router.get('/hash/:hash', options.rateLimitMiddleware, controller.getHash.bind(controller));
-  } else {
-    router.get('/hash/:hash', controller.getHash.bind(controller));
-  }
+  router.post('/hash', ...writeMiddlewares, controller.createHash.bind(controller));
+  router.get('/hash/:hash', ...readMiddlewares, controller.getHash.bind(controller));
 
   return router;
 }

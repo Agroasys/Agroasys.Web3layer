@@ -13,7 +13,7 @@ Health semantics:
 - `/ready`: dependency readiness (database connectivity check)
 
 ## Service Auth (optional)
-When `AUTH_ENABLED=true`, sensitive write endpoints require HMAC headers:
+When `AUTH_ENABLED=true`, all API endpoints except `health` and `ready` require HMAC headers:
 - `x-agroasys-timestamp` (unix seconds)
 - `x-agroasys-signature` (HMAC-SHA256)
 - `x-agroasys-nonce` (optional; deterministic fallback derived when omitted)
@@ -21,6 +21,12 @@ When `AUTH_ENABLED=true`, sensitive write endpoints require HMAC headers:
 Optional key-based mode:
 - `X-Api-Key` to select key-specific secret from `API_KEYS_JSON`
 - If `X-Api-Key` is omitted, middleware can verify with `HMAC_SECRET`
+
+Nonce replay store:
+- `NONCE_STORE=redis|postgres|inmemory`
+- `REDIS_URL` required when `NONCE_STORE=redis`
+- `NONCE_TTL_SECONDS` controls nonce replay window (defaults to `AUTH_NONCE_TTL_SECONDS`)
+- `NODE_ENV=production` rejects `NONCE_STORE=inmemory` at startup
 
 Canonical string format:
 `METHOD\nPATH\nQUERY\nBODY_SHA256\nTIMESTAMP\nNONCE`

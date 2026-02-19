@@ -9,7 +9,7 @@ import { runMigrations } from './database/migrations';
 import { createServiceAuthMiddleware } from './auth/serviceAuth';
 import { createRicardianRateLimiter } from './rateLimit/limiter';
 import { Logger } from './utils/logger';
-import { createInMemoryNonceStore } from './auth/inMemoryNonceStore';
+import { createRicardianNonceStore } from './auth/nonceStore';
 
 async function bootstrap(): Promise<void> {
   await testConnection();
@@ -18,12 +18,12 @@ async function bootstrap(): Promise<void> {
   const app = express();
   const controller = new RicardianController();
   const apiKeysById = new Map(config.apiKeys.map((key) => [key.id, key]));
-  const nonceStore = createInMemoryNonceStore();
+  const nonceStore = createRicardianNonceStore(config);
 
   const authMiddleware = createServiceAuthMiddleware({
     enabled: config.authEnabled,
     maxSkewSeconds: config.authMaxSkewSeconds,
-    nonceTtlSeconds: config.authNonceTtlSeconds,
+    nonceTtlSeconds: config.nonceTtlSeconds,
     sharedSecret: config.hmacSecret,
     lookupApiKey: (apiKey) => apiKeysById.get(apiKey),
     consumeNonce: nonceStore.consume,
@@ -81,6 +81,7 @@ async function bootstrap(): Promise<void> {
     Logger.info('Ricardian service started', {
       port: config.port,
       authEnabled: config.authEnabled,
+      nonceStore: config.nonceStore,
       rateLimitEnabled: config.rateLimitEnabled,
       rateLimitMode: rateLimiter.mode,
     });
@@ -88,6 +89,7 @@ async function bootstrap(): Promise<void> {
 
   const shutdown = async (signal: string): Promise<void> => {
     Logger.info('Shutting down Ricardian service', { signal });
+    await nonceStore.close();
     await rateLimiter.close();
     await closeConnection();
     process.exit(0);

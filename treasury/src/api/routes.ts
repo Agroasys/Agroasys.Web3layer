@@ -25,16 +25,12 @@ export function createRouter(controller: TreasuryController, options: TreasuryRo
     }
   });
 
-  if (options.authMiddleware) {
-    router.post('/ingest', options.authMiddleware, controller.ingest.bind(controller));
-    router.post('/entries/:entryId/state', options.authMiddleware, controller.appendState.bind(controller));
-  } else {
-    router.post('/ingest', controller.ingest.bind(controller));
-    router.post('/entries/:entryId/state', controller.appendState.bind(controller));
-  }
+  const protectedMiddlewares: RequestHandler[] = [options.authMiddleware].filter(Boolean) as RequestHandler[];
 
-  router.get('/entries', controller.listEntries.bind(controller));
-  router.get('/export', controller.exportEntries.bind(controller));
+  router.post('/ingest', ...protectedMiddlewares, controller.ingest.bind(controller));
+  router.get('/entries', ...protectedMiddlewares, controller.listEntries.bind(controller));
+  router.post('/entries/:entryId/state', ...protectedMiddlewares, controller.appendState.bind(controller));
+  router.get('/export', ...protectedMiddlewares, controller.exportEntries.bind(controller));
 
   return router;
 }

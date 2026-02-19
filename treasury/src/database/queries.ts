@@ -1,7 +1,12 @@
 import { pool } from './connection';
 import { LedgerEntry, LedgerEntryWithState, PayoutLifecycleEvent, PayoutState, TreasuryComponent } from '../types';
+import { createPostgresNonceStore } from '../../../shared/auth/nonceStore';
 
 const INGESTION_CURSOR_NAME = 'trade_events';
+const serviceAuthNonceStore = createPostgresNonceStore({
+  tableName: 'treasury_auth_nonces',
+  query: (sql, params) => pool.query(sql, params),
+});
 
 export async function getIngestionOffset(cursorName: string = INGESTION_CURSOR_NAME): Promise<number> {
   const result = await pool.query<{ next_offset: number }>(
@@ -38,26 +43,7 @@ export async function setIngestionOffset(nextOffset: number, cursorName: string 
 }
 
 export async function consumeServiceAuthNonce(apiKey: string, nonce: string, ttlSeconds: number): Promise<boolean> {
-  if (!Number.isInteger(ttlSeconds) || ttlSeconds <= 0) {
-    throw new Error('nonce ttlSeconds must be a positive integer');
-  }
-
-  const result = await pool.query<{ accepted: boolean }>(
-    `WITH pruned_nonce AS (
-      DELETE FROM treasury_auth_nonces
-      WHERE expires_at <= NOW()
-    ),
-    consumed_nonce AS (
-      INSERT INTO treasury_auth_nonces (api_key, nonce, expires_at)
-      VALUES ($1, $2, NOW() + ($3 * INTERVAL '1 second'))
-      ON CONFLICT (api_key, nonce) DO NOTHING
-      RETURNING 1
-    )
-    SELECT EXISTS(SELECT 1 FROM consumed_nonce) AS accepted`,
-    [apiKey, nonce, ttlSeconds]
-  );
-
-  return Boolean(result.rows[0]?.accepted);
+  return serviceAuthNonceStore.consume(apiKey, nonce, ttlSeconds);
 }
 
 export async function upsertLedgerEntryWithInitialState(data: {

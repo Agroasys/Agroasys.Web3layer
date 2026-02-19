@@ -9,7 +9,7 @@ import { runMigrations } from './database/migrations';
 import { Logger } from './utils/logger';
 import { TreasuryIngestionService } from './core/ingestion';
 import { createServiceAuthMiddleware } from './auth/serviceAuth';
-import { createInMemoryNonceStore } from './auth/inMemoryNonceStore';
+import { createTreasuryNonceStore } from './auth/nonceStore';
 
 async function bootstrap(): Promise<void> {
   await testConnection();
@@ -27,12 +27,12 @@ async function bootstrap(): Promise<void> {
   const app = express();
   const controller = new TreasuryController();
   const apiKeysById = new Map(config.apiKeys.map((key) => [key.id, key]));
-  const nonceStore = createInMemoryNonceStore();
+  const nonceStore = createTreasuryNonceStore(config);
 
   const authMiddleware = createServiceAuthMiddleware({
     enabled: config.authEnabled,
     maxSkewSeconds: config.authMaxSkewSeconds,
-    nonceTtlSeconds: config.authNonceTtlSeconds,
+    nonceTtlSeconds: config.nonceTtlSeconds,
     sharedSecret: config.hmacSecret,
     lookupApiKey: (apiKey) => apiKeysById.get(apiKey),
     consumeNonce: nonceStore.consume,
@@ -61,11 +61,13 @@ async function bootstrap(): Promise<void> {
       port: config.port,
       indexerGraphqlUrl: config.indexerGraphqlUrl,
       authEnabled: config.authEnabled,
+      nonceStore: config.nonceStore,
     });
   });
 
   const shutdown = async (signal: string): Promise<void> => {
     Logger.info('Shutting down treasury service', { signal });
+    await nonceStore.close();
     await closeConnection();
     process.exit(0);
   };
