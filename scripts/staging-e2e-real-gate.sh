@@ -57,6 +57,18 @@ retry_cmd() {
   return 1
 }
 
+require_non_negative_integer() {
+  local name="$1"
+  local value="$2"
+
+  if [[ ! "$value" =~ ^[0-9]+$ ]]; then
+    fail "$name must be a non-negative integer (received: $value)"
+    return 1
+  fi
+
+  return 0
+}
+
 run_graphql_query() {
   local query="$1"
   local payload
@@ -64,6 +76,61 @@ run_graphql_query() {
   curl -fsS "${INDEXER_GATEWAY_URL_HOST}" \
     -H 'content-type: application/json' \
     --data "$payload"
+}
+
+run_graphql_query_from_reconciliation() {
+  local query="$1"
+  local payload
+  payload=$(printf '{"query":%s}' "$(printf '%s' "$query" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")
+
+  run_compose exec -T reconciliation node -e "
+    const target = process.env.INDEXER_GRAPHQL_URL;
+    if (!target) {
+      process.exit(1);
+    }
+    fetch(target, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: process.argv[1],
+    }).then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1));
+  " "$payload"
+}
+
+read_indexer_head() {
+  local status_response
+  status_response="$(run_graphql_query '{ squidStatus { height } }' || true)"
+  local head
+  head="$(printf '%s' "$status_response" | extract_json_value 'data.get("data",{}).get("squidStatus",{}).get("height")')"
+
+  if [[ "$head" =~ ^-?[0-9]+$ ]]; then
+    printf '%s\n' "$head"
+    return 0
+  fi
+
+  printf '\n'
+  return 1
+}
+
+wait_for_indexer_head_ready() {
+  local warmup_seconds="$1"
+  local poll_seconds="$2"
+  local minimum_head="$3"
+  local deadline=$((SECONDS + warmup_seconds))
+
+  while (( SECONDS <= deadline )); do
+    local current_head
+    current_head="$(read_indexer_head || true)"
+
+    if [[ "$current_head" =~ ^-?[0-9]+$ ]] && (( current_head >= minimum_head )); then
+      printf '%s\n' "$current_head"
+      return 0
+    fi
+
+    sleep "$poll_seconds"
+  done
+
+  printf '\n'
+  return 1
 }
 
 extract_json_value() {
@@ -81,11 +148,36 @@ CHAIN_ID_VALUE="${STAGING_E2E_REAL_CHAIN_ID:-${RECONCILIATION_CHAIN_ID:-unknown}
 REQUIRE_INDEXED_DATA="${STAGING_E2E_REAL_REQUIRE_INDEXED_DATA:-false}"
 DYNAMIC_START_BLOCK="${STAGING_E2E_REAL_DYNAMIC_START_BLOCK:-true}"
 START_BLOCK_BACKOFF="${STAGING_E2E_REAL_START_BLOCK_BACKOFF:-250}"
+LAG_WARMUP_SECONDS="${STAGING_E2E_REAL_LAG_WARMUP_SECONDS:-180}"
+LAG_POLL_SECONDS="${STAGING_E2E_REAL_LAG_POLL_SECONDS:-5}"
+MAX_LAG="${STAGING_E2E_MAX_INDEXER_LAG_BLOCKS:-500}"
 
 RUN_KEY="phase3-gate-$(date +%s)"
 
 echo "Starting staging-e2e-real validation gate"
 echo "profile=${PROFILE} indexerHostUrl=${INDEXER_GATEWAY_URL_HOST} rpcHostUrl=${RPC_GATEWAY_URL_HOST}"
+
+require_non_negative_integer "STAGING_E2E_REAL_START_BLOCK_BACKOFF" "$START_BLOCK_BACKOFF" || true
+require_non_negative_integer "STAGING_E2E_REAL_LAG_WARMUP_SECONDS" "$LAG_WARMUP_SECONDS" || true
+require_non_negative_integer "STAGING_E2E_REAL_LAG_POLL_SECONDS" "$LAG_POLL_SECONDS" || true
+require_non_negative_integer "STAGING_E2E_MAX_INDEXER_LAG_BLOCKS" "$MAX_LAG" || true
+
+if [[ "$LAG_WARMUP_SECONDS" == "0" ]]; then
+  fail "STAGING_E2E_REAL_LAG_WARMUP_SECONDS must be > 0"
+fi
+
+if [[ "$LAG_POLL_SECONDS" == "0" ]]; then
+  fail "STAGING_E2E_REAL_LAG_POLL_SECONDS must be > 0"
+fi
+
+if [[ "$MAX_LAG" == "0" ]]; then
+  fail "STAGING_E2E_MAX_INDEXER_LAG_BLOCKS must be > 0"
+fi
+
+if [[ "$failures" -gt 0 ]]; then
+  echo "staging-e2e-real gate failed with ${failures} check(s)" >&2
+  exit 1
+fi
 
 if [[ "$DYNAMIC_START_BLOCK" == "true" && -n "$RPC_GATEWAY_URL_HOST" ]]; then
   RPC_START_HEAD_HEX="$(
@@ -108,6 +200,11 @@ if [[ "$DYNAMIC_START_BLOCK" == "true" && -n "$RPC_GATEWAY_URL_HOST" ]]; then
   fi
 fi
 
+if [[ "${STAGING_E2E_REAL_GATE_ASSERT_CONFIG_ONLY:-false}" == "true" ]]; then
+  INDEXER_START_BLOCK="${INDEXER_START_BLOCK:-}" scripts/docker-services.sh config "$PROFILE"
+  exit 0
+fi
+
 INDEXER_START_BLOCK="${INDEXER_START_BLOCK:-}" scripts/docker-services.sh up "$PROFILE"
 if scripts/docker-services.sh health "$PROFILE"; then
   pass "profile health check passed"
@@ -121,6 +218,12 @@ else
   fail "indexer GraphQL readiness check failed"
 fi
 
+if retry_cmd "indexer graphql in-network readiness" 30 2 run_graphql_query_from_reconciliation '{ __typename }' >/dev/null; then
+  pass "indexer GraphQL in-network readiness check passed"
+else
+  fail "indexer GraphQL in-network readiness check failed"
+fi
+
 SCHEMA_RESPONSE="$(run_graphql_query 'query { trades(limit: 1) { tradeId buyer supplier status totalAmountLocked logisticsAmount platformFeesAmount supplierFirstTranche supplierSecondTranche ricardianHash createdAt arrivalTimestamp } }' || true)"
 if printf '%s' "$SCHEMA_RESPONSE" | grep -q '"errors"'; then
   echo "schema parity query response: $SCHEMA_RESPONSE" >&2
@@ -129,17 +232,16 @@ else
   pass "schema parity check passed"
 fi
 
-STATUS_RESPONSE="$(run_graphql_query '{ squidStatus { height } }' || true)"
-INDEXER_HEAD="$(printf '%s' "$STATUS_RESPONSE" | extract_json_value 'data.get("data",{}).get("squidStatus",{}).get("height")')"
-if [[ -z "$INDEXER_HEAD" ]]; then
+INDEXER_HEAD="$(wait_for_indexer_head_ready "$LAG_WARMUP_SECONDS" "$LAG_POLL_SECONDS" 0 || true)"
+if [[ -n "$INDEXER_HEAD" ]]; then
+  pass "indexer head metric available after warmup (height=${INDEXER_HEAD})"
+else
   INDEXER_HEAD="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${INDEXER_DB_NAME}" -Atc "SELECT COALESCE(MAX(block_number), 0) FROM trade_event;" 2>/dev/null || true)"
   if [[ -n "$INDEXER_HEAD" ]]; then
-    pass "indexer head fallback metric available from DB (height=${INDEXER_HEAD})"
+    pass "indexer head fallback metric available from DB after warmup (height=${INDEXER_HEAD})"
   else
-    fail "indexer head metric unavailable"
+    fail "indexer head metric unavailable after ${LAG_WARMUP_SECONDS}s warmup"
   fi
-else
-  pass "indexer head metric available (height=${INDEXER_HEAD})"
 fi
 
 RPC_HEAD_HEX=""
@@ -149,10 +251,11 @@ fi
 
 if [[ -z "$RPC_HEAD_HEX" || -z "$INDEXER_HEAD" ]]; then
   fail "lag/head metrics unavailable"
+elif [[ ! "$INDEXER_HEAD" =~ ^[0-9]+$ ]]; then
+  fail "indexer head metric is not numeric: ${INDEXER_HEAD}"
 else
   RPC_HEAD_DEC=$((RPC_HEAD_HEX))
   LAG=$((RPC_HEAD_DEC - INDEXER_HEAD))
-  MAX_LAG="${STAGING_E2E_MAX_INDEXER_LAG_BLOCKS:-500}"
   echo "lag/head metrics: rpcHead=${RPC_HEAD_DEC}, indexerHead=${INDEXER_HEAD}, lag=${LAG}"
   if [[ "$LAG" -lt 0 ]]; then
     fail "negative lag indicates possible chain mismatch"

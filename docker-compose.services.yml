@@ -113,7 +113,7 @@ services:
       indexer-migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "ps aux | grep -q '[l]ib/main.js'"]
+      test: ["CMD-SHELL", "cat /proc/1/cmdline | tr '\\0' ' ' | grep -q 'lib/main.js'"]
       interval: 15s
       timeout: 5s
       retries: 5

@@ -195,6 +195,11 @@ npm run -w treasury lint && npm run -w treasury test && npm run -w treasury buil
 
 Use these profile commands for deterministic runtime checks:
 
+- `local-dev`: fast iteration profile with lightweight `indexer` responder, plus `postgres`, `redis`, `oracle`, `reconciliation`, `ricardian`, and `treasury`. `health local-dev` waits for all required services.
+- `staging-e2e`: staging profile with real indexer services (`indexer-migrate`, `indexer-pipeline`, `indexer-graphql`) and all application services. `health staging-e2e` must pass before running release checks.
+- `staging-e2e-real`: strict release-gate profile with dynamic start-block support, in-network GraphQL checks, warmup-aware lag verification, and reconciliation once-run validation.
+- `infra`: infrastructure-only profile (`postgres`, `redis`).
+
 ```bash
 scripts/docker-services.sh up local-dev
 scripts/docker-services.sh health local-dev

@@ -26,8 +26,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate docker-services env precedence guard
-        run: scripts/tests/docker-services-env-precedence.test.sh
+      - name: Validate docker-services and gate script guardrails
+        run: |
+          bash -n scripts/docker-services.sh
+          bash -n scripts/staging-e2e-real-gate.sh
+          scripts/tests/docker-services-args.test.sh
+          scripts/tests/docker-services-env-precedence.test.sh
+          scripts/tests/docker-services-env-layering.test.sh
+          scripts/tests/docker-services-health.test.sh
+          scripts/tests/staging-e2e-real-gate-start-block.test.sh
+          scripts/tests/docs-local-dev-profile.test.sh
 
       - name: Detect changed paths
         id: filter

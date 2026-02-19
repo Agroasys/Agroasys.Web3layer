@@ -66,6 +66,11 @@ scripts/docker-services.sh down staging-e2e-real
 - Oracle: `http://127.0.0.1:${ORACLE_PORT:-3001}/api/oracle/health`
 - Reconciliation: `node reconciliation/dist/healthcheck.js` (inside container)
 
+`scripts/docker-services.sh health <profile>` waits for required services to become healthy (bounded timeout), then runs endpoint checks. Tune with:
+- `DOCKER_SERVICES_WAIT_TIMEOUT_SECONDS` (default `120`)
+- `DOCKER_SERVICES_WAIT_POLL_SECONDS` (default `2`)
+- `DOCKER_SERVICES_HEALTH_LOG_TAIL_LINES` (default `80`)
+
 ## Notes
 
 - Inter-container calls always use service DNS names (for example `indexer`, `indexer-graphql`, `postgres`), never `localhost`.

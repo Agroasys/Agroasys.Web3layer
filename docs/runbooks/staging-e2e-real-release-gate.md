@@ -18,6 +18,10 @@ Run a staging-grade release gate against the real indexer pipeline profile (`sta
   - `.env.staging-e2e-real`
 - Reconciliation/oracle RPC and indexer endpoints must target the same chain dataset.
 - Optional dynamic start-block controls: `STAGING_E2E_REAL_DYNAMIC_START_BLOCK=true` and `STAGING_E2E_REAL_START_BLOCK_BACKOFF=250`.
+- Lag gate controls:
+  - `STAGING_E2E_MAX_INDEXER_LAG_BLOCKS` (strict default `500`)
+  - `STAGING_E2E_REAL_LAG_WARMUP_SECONDS` (default `180`)
+  - `STAGING_E2E_REAL_LAG_POLL_SECONDS` (default `5`)
 
 ## Commands
 ```bash
@@ -42,11 +46,13 @@ scripts/docker-services.sh down staging-e2e-real
   - reorg/resync probe result
   - reconciliation run summary
   - drift classification snapshot
+  - warmup-aware lag enforcement (lag threshold enforced after head readiness)
 
 ## Common failure modes
 - `STAGING_E2E_REAL_REQUIRE_INDEXED_DATA=true` with empty contract scope: gate fails until a seeded contract/event stream is available.
 - `negative lag`: RPC and indexer pipeline are on different networks.
 - `indexer head metric unavailable`: `indexer-graphql` not ready or no squid status response.
+- `indexer head metric unavailable after warmup`: startup is too slow for configured warmup window; tune `STAGING_E2E_REAL_LAG_WARMUP_SECONDS` only after confirming pipeline is healthy.
 - `reconciliation once run failed`: invalid RPC/contract addresses or DB connectivity issue.
 - `indexed data requirement enabled but no indexed trades found`: contract/start block scope has no indexed events yet.
 
