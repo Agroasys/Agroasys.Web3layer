@@ -28,18 +28,10 @@ jobs:
         id: auth
         env:
           APP_TOKEN: ${{ steps.app_token.outputs.token }}
-          ROADMAP_PROJECT_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
           GITHUB_TOKEN_FALLBACK: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-
-          # Fail fast on obviously broad personal OAuth tokens.
-          if [[ -n "${ROADMAP_PROJECT_TOKEN:-}" && "${ROADMAP_PROJECT_TOKEN}" == gho_* ]]; then
-            echo "::error::ROADMAP_PROJECT_TOKEN appears to be a broad OAuth token (gho_*)."
-            echo "::error::Replace it with ROADMAP_APP_ID + ROADMAP_APP_PRIVATE_KEY (preferred) or a fine-grained PAT, then delete ROADMAP_PROJECT_TOKEN."
-            exit 1
-          fi
 
           source="github-token"
           token="$GITHUB_TOKEN_FALLBACK"
@@ -47,9 +39,6 @@ jobs:
           if [[ -n "${APP_TOKEN:-}" ]]; then
             source="github-app"
             token="$APP_TOKEN"
-          elif [[ -n "${ROADMAP_PROJECT_TOKEN:-}" ]]; then
-            source="fine-grained-pat"
-            token="$ROADMAP_PROJECT_TOKEN"
           fi
 
           echo "::add-mask::$token"
@@ -104,7 +93,7 @@ jobs:
           if ! pr_response="$(gh api graphql -f query="$pr_query" -F prId="$PR_NODE_ID" 2>"$pr_err")"; then
             echo "::error::Unable to query PR project items."
             if [[ "$TOKEN_SOURCE" == "github-token" ]]; then
-              echo "::error::github.token may not have Organization ProjectV2 visibility. Configure ROADMAP_APP_ID + ROADMAP_APP_PRIVATE_KEY (preferred), or ROADMAP_PROJECT_TOKEN (fine-grained PAT)."
+              echo "::error::github.token may not have Organization ProjectV2 visibility. Configure ROADMAP_APP_ID + ROADMAP_APP_PRIVATE_KEY."
             fi
             sanitize_err "$pr_err"
             exit 1
@@ -165,7 +154,7 @@ jobs:
           if [[ "$project_query_failed" == "true" ]]; then
             echo "::error::Unable to query ProjectV2 contents during membership validation."
             if [[ "$TOKEN_SOURCE" == "github-token" ]]; then
-              echo "::error::github.token cannot read the target org project. Configure ROADMAP_APP_ID + ROADMAP_APP_PRIVATE_KEY (preferred), or ROADMAP_PROJECT_TOKEN (fine-grained PAT)."
+              echo "::error::github.token cannot read the target org project. Configure ROADMAP_APP_ID + ROADMAP_APP_PRIVATE_KEY."
             fi
             sanitize_err "$project_err"
           fi

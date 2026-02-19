@@ -19,58 +19,43 @@ If all checks fail, the workflow fails.
 - Minimal explicit permissions are used.
 - Token values are masked and never echoed.
 
-## Option A (preferred): GitHub App token
-Use a GitHub App installed for the org/repo with least privilege:
+## Authentication model
+Authentication priority is:
+1. GitHub App installation token (`actions/create-github-app-token`) using repo secrets.
+2. `github.token` fallback.
+
+`ROADMAP_PROJECT_TOKEN` is intentionally not used.
+
+## Required setup (GitHub App)
+Create and install a GitHub App (org-owned preferred) with least privilege:
 - Organization Projects: read
-- Repository metadata/content: read (minimum required by GitHub API calls)
+- Minimal repository read access required for API lookups
 
 Set repository secrets:
 - `ROADMAP_APP_ID`
 - `ROADMAP_APP_PRIVATE_KEY`
 - Optional: `ROADMAP_APP_INSTALLATION_ID`
 
-The workflow automatically prefers the App token when those secrets are present.
-
-### App setup checklist
-1. Create a GitHub App (org-owned preferred) with only required read permissions.
-2. Install it on `Agroasys/Agroasys.Web3layer`.
-3. Add `ROADMAP_APP_ID` and `ROADMAP_APP_PRIVATE_KEY` to repo secrets.
-4. Optionally add `ROADMAP_APP_INSTALLATION_ID` if auto-discovery is not sufficient.
-5. Re-run a PR check and confirm `enforce/pr-roadmap-policy` passes.
-
-## Option B (fallback): fine-grained PAT
-If App rollout is blocked, use a fine-grained PAT only:
-- Resource owner: `Agroasys`
-- Repository access: `Agroasys/Agroasys.Web3layer` only
-- Minimum permission to read ProjectV2 membership
-
-Store as repo secret:
-- `ROADMAP_PROJECT_TOKEN`
-
-Important:
-- Do not use broad personal tokens.
-- The workflow fails fast if `ROADMAP_PROJECT_TOKEN` starts with `gho_` (obvious broad OAuth token pattern).
+The workflow automatically prefers the App token when these secrets are present.
 
 ## Required repository variable
 Set:
 - `ROADMAP_PROJECT_ID` = ProjectV2 node ID for `Agroasys.Web3layer Roadmap`
 
 Optional:
-- `ROADMAP_PROJECT_TITLE` (defaults to `Agroasys.Web3layer Roadmap` if unset)
+- `ROADMAP_PROJECT_TITLE` (defaults to `Agroasys.Web3layer Roadmap`)
 
 ## Troubleshooting
 If the check fails:
 1. Confirm PR has a milestone.
 2. Confirm PR is added to the roadmap project.
 3. Verify `ROADMAP_PROJECT_ID` is correct.
-4. If using App auth, confirm secrets are set and App is installed on the repo/org.
-5. If using PAT fallback, confirm it is fine-grained and repo-scoped.
-6. Re-run failed jobs after metadata/auth fix.
+4. Confirm App secrets are present and App is installed for this repo/org.
+5. If running on `github.token` fallback, expect failure when org ProjectV2 visibility is restricted.
+6. Re-run failed jobs after metadata/auth fixes.
 
-## Manual cleanup and maintenance
-Current repo may still contain legacy `ROADMAP_PROJECT_TOKEN`.
+## Manual cleanup
 Maintainer action required:
-1. Configure Option A GitHub App secrets.
-2. Verify policy check passes using App token.
-3. Delete legacy `ROADMAP_PROJECT_TOKEN` secret in GitHub UI.
-4. Rotate any previously used broad personal token outside this repo.
+1. Ensure GitHub App secrets are configured and policy check passes.
+2. Delete legacy `ROADMAP_PROJECT_TOKEN` in GitHub UI (unsupported by policy workflow).
+3. Rotate any previously used broad personal token outside this repo.
