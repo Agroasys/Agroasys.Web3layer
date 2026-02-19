@@ -2,10 +2,16 @@
 - What changed:
 - Why:
 
+## Roadmap Governance
+- [ ] Linked to a repo Milestone
+- [ ] Added to `Agroasys.Web3layer Roadmap` Project v2
+- [ ] Mapped to correct roadmap area/status/priority in Project fields
+
 ## Validation
 - [ ] Lint passed for changed workspaces
 - [ ] Tests passed for changed workspaces
 - [ ] Build passed for changed workspaces
+- [ ] CI checks are green on this PR
 - [ ] Docs updated for behavior/config changes
 - [ ] I have signed off all commits (DCO)
 
@@ -17,7 +23,7 @@
 - [ ] Rollback path documented
 
 ## Runtime checks (if infra touched)
-- [ ] `scripts/docker-services.sh up local`
-- [ ] `scripts/docker-services.sh health local`
+- [ ] `scripts/docker-services.sh up local-dev`
+- [ ] `scripts/docker-services.sh health local-dev`
 - [ ] `scripts/docker-services.sh up staging-e2e`
 - [ ] `scripts/docker-services.sh health staging-e2e`

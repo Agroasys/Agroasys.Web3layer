@@ -1,0 +1,55 @@
+name: PR Roadmap Policy
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited, milestoned, demilestoned]
+
+jobs:
+  enforce-roadmap-policy:
+    name: enforce/pr-roadmap-policy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Enforce milestone + project association
+        env:
+          GH_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
+          PROJECT_ID: ${{ vars.ROADMAP_PROJECT_ID }}
+          PR_NODE_ID: ${{ github.event.pull_request.node_id }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_MILESTONE: ${{ github.event.pull_request.milestone.title }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${PR_MILESTONE:-}" || "${PR_MILESTONE}" == "null" ]]; then
+            echo "::error::Missing PR Milestone. Remediation: gh pr edit ${PR_NUMBER} --repo ${REPO} --milestone \"<Milestone Name>\""
+            exit 1
+          fi
+
+          if [[ -z "${PROJECT_ID:-}" ]]; then
+            echo "::error::Missing repository variable ROADMAP_PROJECT_ID (Project v2 node id)."
+            echo "::error::Set ROADMAP_PROJECT_ID, then add the PR to the project."
+            exit 1
+          fi
+
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::error::Missing secret ROADMAP_PROJECT_TOKEN."
+            echo "::error::Create a PAT with repo + read:project + project scopes and save it as ROADMAP_PROJECT_TOKEN."
+            exit 1
+          fi
+
+          query='query($prId:ID!){ node(id:$prId){ ... on PullRequest { projectItems(first:100){ nodes { project { id title url } } } } } }'
+          response="$(gh api graphql -f query="$query" -F prId="$PR_NODE_ID")"
+
+          if ! jq -e --arg project_id "$PROJECT_ID" '.data.node.projectItems.nodes | map(.project.id) | index($project_id) != null' <<<"$response" >/dev/null; then
+            echo "::error::PR #${PR_NUMBER} is not added to required Project v2."
+            echo "::error::Remediation:"
+            echo "::error::  1) pr_id=\$(gh pr view ${PR_NUMBER} --repo ${REPO} --json id -q .id)"
+            echo "::error::  2) gh api graphql -f query='mutation(\$project:ID!,\$content:ID!){ addProjectV2ItemById(input:{projectId:\$project,contentId:\$content}) { item { id } } }' -F project='${PROJECT_ID}' -F content=\"\$pr_id\""
+            exit 1
+          fi
+
+          echo "Roadmap policy check passed for PR #${PR_NUMBER}"
