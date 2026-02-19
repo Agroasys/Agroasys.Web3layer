@@ -11,7 +11,8 @@ import {
     parseUSDC
 } from './setup';
 
-const describeIntegration = hasRequiredEnv ? describe : describe.skip;
+const runManualE2E = process.env.RUN_E2E === 'true';
+const describeIntegration = runManualE2E && hasRequiredEnv ? describe : describe.skip;
 
 describeIntegration('BuyerSDK', () => {
     let buyerSDK: BuyerSDK;

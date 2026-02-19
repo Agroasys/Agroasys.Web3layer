@@ -32,6 +32,15 @@ export class TreasuryIngestionService {
         fetched += 1;
 
         if (event.eventName === 'FundsReleasedStage1' && event.releasedLogisticsAmount) {
+          if (!event.txHash) {
+            Logger.warn('Skipping logistics ledger entry because txHash is unavailable', {
+              eventId: event.id,
+              tradeId: event.tradeId,
+              extrinsicHash: event.extrinsicHash,
+            });
+            continue;
+          }
+
           const { initialStateCreated } = await upsertLedgerEntryWithInitialState({
             entryKey: buildEntryKey(event.id, 'LOGISTICS'),
             tradeId: event.tradeId,
@@ -50,6 +59,15 @@ export class TreasuryIngestionService {
         }
 
         if (event.eventName === 'PlatformFeesPaidStage1' && event.paidPlatformFees) {
+          if (!event.txHash) {
+            Logger.warn('Skipping platform fee ledger entry because txHash is unavailable', {
+              eventId: event.id,
+              tradeId: event.tradeId,
+              extrinsicHash: event.extrinsicHash,
+            });
+            continue;
+          }
+
           const { initialStateCreated } = await upsertLedgerEntryWithInitialState({
             entryKey: buildEntryKey(event.id, 'PLATFORM_FEE'),
             tradeId: event.tradeId,

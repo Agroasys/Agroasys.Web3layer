@@ -9,7 +9,7 @@ HEALTH_RETRIES="${DOCKER_SERVICES_HEALTH_RETRIES:-15}"
 HEALTH_RETRY_DELAY_SECONDS="${DOCKER_SERVICES_HEALTH_RETRY_DELAY_SECONDS:-2}"
 
 usage() {
-  echo "Usage: scripts/docker-services.sh <build|up|down|logs|ps|health> <local|local-dev|staging-e2e|infra> [service]" >&2
+  echo "Usage: scripts/docker-services.sh <build|up|down|logs|ps|health> <local-dev|staging-e2e|infra> [service]" >&2
 }
 
 if [[ -z "$ACTION" || -z "$PROFILE" ]]; then
@@ -18,9 +18,6 @@ if [[ -z "$ACTION" || -z "$PROFILE" ]]; then
 fi
 
 case "$PROFILE" in
-  local)
-    PROFILE="local-dev"
-    ;;
   local-dev|staging-e2e|infra)
     ;;
   *)
@@ -51,52 +48,54 @@ run_compose() {
   docker compose -f "$COMPOSE_FILE" --profile "$PROFILE" "$@"
 }
 
+list_running_services() {
+  run_compose ps --services --filter status=running
+}
+
 is_running() {
   local service_name="$1"
-  run_compose ps --services --filter status=running | grep -qx "$service_name"
-}
-
-with_retries() {
-  local label="$1"
-  local attempt=1
-
-  shift
-
-  while (( attempt <= HEALTH_RETRIES )); do
-    if "$@"; then
-      return 0
-    fi
-
-    if (( attempt == HEALTH_RETRIES )); then
-      echo "$label failed after ${HEALTH_RETRIES} attempt(s)" >&2
-      return 1
-    fi
-
-    sleep "$HEALTH_RETRY_DELAY_SECONDS"
-    ((attempt += 1))
-  done
-}
-
-check_http_health_once() {
-  local url="$1"
-  curl -fsS "$url" >/dev/null
+  list_running_services | grep -qx "$service_name"
 }
 
 check_http_health() {
   local name="$1"
   local url="$2"
 
-  if with_retries "$name health endpoint" check_http_health_once "$url"; then
-    echo "$name health endpoint: ok"
-    return 0
-  fi
+  for ((attempt = 1; attempt <= HEALTH_RETRIES; attempt++)); do
+    if curl -fsS "$url" >/dev/null; then
+      echo "$name health endpoint: ok"
+      return 0
+    fi
 
-  echo "$name health endpoint failed: $url" >&2
+    if [[ "$attempt" -lt "$HEALTH_RETRIES" ]]; then
+      sleep "$HEALTH_RETRY_DELAY_SECONDS"
+    fi
+  done
+
+  echo "$name health endpoint failed after ${HEALTH_RETRIES} attempts: $url" >&2
+  return 1
+}
+
+check_reconciliation_health() {
+  for ((attempt = 1; attempt <= HEALTH_RETRIES; attempt++)); do
+    if run_compose exec -T reconciliation node reconciliation/dist/healthcheck.js >/dev/null; then
+      echo "reconciliation healthcheck: ok"
+      return 0
+    fi
+
+    if [[ "$attempt" -lt "$HEALTH_RETRIES" ]]; then
+      sleep "$HEALTH_RETRY_DELAY_SECONDS"
+    fi
+  done
+
+  echo "reconciliation healthcheck failed after ${HEALTH_RETRIES} attempts" >&2
   return 1
 }
 
 check_required_services() {
   local required_services=()
+  local missing_services=()
+  local running_services=""
 
   case "$PROFILE" in
     local-dev)
@@ -110,54 +109,73 @@ check_required_services() {
       ;;
   esac
 
+  running_services="$(list_running_services)"
+
   for service_name in "${required_services[@]}"; do
     if ! is_running "$service_name"; then
-      echo "required service is not running: $service_name" >&2
-      echo "profile=$PROFILE compose=$COMPOSE_FILE" >&2
-      echo "expected=${required_services[*]}" >&2
-      echo "running=$(run_compose ps --services --filter status=running | tr '\n' ' ')" >&2
-      return 1
+      missing_services+=("$service_name")
     fi
   done
+
+  if [[ "${#missing_services[@]}" -gt 0 ]]; then
+    echo "health check failed for profile: $PROFILE" >&2
+    echo "compose file: $COMPOSE_FILE" >&2
+    echo "required running services: ${required_services[*]}" >&2
+    if [[ -n "$running_services" ]]; then
+      echo "currently running services: $(echo "$running_services" | tr '\n' ' ')" >&2
+    else
+      echo "currently running services: (none)" >&2
+    fi
+    echo "missing services: ${missing_services[*]}" >&2
+    echo "next action: scripts/docker-services.sh up $PROFILE" >&2
+    if [[ "$PROFILE" == "local-dev" ]]; then
+      echo "tip: if staging services are running, stop them first: scripts/docker-services.sh down staging-e2e" >&2
+    fi
+    return 1
+  fi
 
   return 0
 }
 
-check_indexer_graphql_once() {
-  local graphql_port="$1"
+check_indexer_graphql() {
   local graphql_path="/graphql"
+  local graphql_port="${INDEXER_GRAPHQL_PORT:-4350}"
 
   if is_running "indexer"; then
-    run_compose exec -T indexer node -e "fetch('http://127.0.0.1:${graphql_port}${graphql_path}', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: 'query { __typename }' }) }).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
-    return 0
+    for ((attempt = 1; attempt <= HEALTH_RETRIES; attempt++)); do
+      if run_compose exec -T indexer node -e "fetch('http://127.0.0.1:${graphql_port}${graphql_path}', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: 'query { __typename }' }) }).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"; then
+        echo "indexer graphql endpoint: ok (indexer)"
+        return 0
+      fi
+
+      if [[ "$attempt" -lt "$HEALTH_RETRIES" ]]; then
+        sleep "$HEALTH_RETRY_DELAY_SECONDS"
+      fi
+    done
+
+    echo "indexer graphql endpoint failed after ${HEALTH_RETRIES} attempts (indexer)" >&2
+    return 1
   fi
 
   if is_running "indexer-graphql"; then
-    run_compose exec -T indexer-graphql node -e "fetch('http://127.0.0.1:${graphql_port}${graphql_path}', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: 'query { __typename }' }) }).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
-    return 0
+    for ((attempt = 1; attempt <= HEALTH_RETRIES; attempt++)); do
+      if run_compose exec -T indexer-graphql node -e "fetch('http://127.0.0.1:${graphql_port}${graphql_path}', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: 'query { __typename }' }) }).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"; then
+        echo "indexer graphql endpoint: ok (indexer-graphql)"
+        return 0
+      fi
+
+      if [[ "$attempt" -lt "$HEALTH_RETRIES" ]]; then
+        sleep "$HEALTH_RETRY_DELAY_SECONDS"
+      fi
+    done
+
+    echo "indexer graphql endpoint failed after ${HEALTH_RETRIES} attempts (indexer-graphql)" >&2
+    return 1
   fi
 
+  echo "indexer graphql endpoint check failed for profile $PROFILE: no indexer service running" >&2
+  echo "next action: scripts/docker-services.sh up $PROFILE" >&2
   return 1
-}
-
-check_indexer_graphql() {
-  local graphql_port="${INDEXER_GRAPHQL_PORT:-4350}"
-
-  if with_retries "indexer graphql endpoint" check_indexer_graphql_once "$graphql_port"; then
-    if is_running "indexer"; then
-      echo "indexer graphql endpoint: ok (indexer)"
-    else
-      echo "indexer graphql endpoint: ok (indexer-graphql)"
-    fi
-    return 0
-  fi
-
-  echo "indexer graphql endpoint check failed" >&2
-  return 1
-}
-
-check_reconciliation_health_once() {
-  run_compose exec -T reconciliation node reconciliation/dist/healthcheck.js >/dev/null
 }
 
 case "$ACTION" in
@@ -188,28 +206,18 @@ case "$ACTION" in
     run_compose ps
     check_required_services
 
-    if is_running "ricardian"; then
-      check_http_health "ricardian" "http://127.0.0.1:${RICARDIAN_PORT:-3100}/api/ricardian/v1/health"
-    fi
-
-    if is_running "treasury"; then
-      check_http_health "treasury" "http://127.0.0.1:${TREASURY_PORT:-3200}/api/treasury/v1/health"
-    fi
-
-    if is_running "oracle"; then
-      check_http_health "oracle" "http://127.0.0.1:${ORACLE_PORT:-3001}/api/oracle/health"
-    fi
-
-    if is_running "reconciliation"; then
-      with_retries "reconciliation healthcheck" check_reconciliation_health_once
-      echo "reconciliation healthcheck: ok"
-    fi
-
-    if [[ "$PROFILE" != "infra" ]]; then
-      check_indexer_graphql
-    else
+    if [[ "$PROFILE" == "infra" ]]; then
+      echo "infra profile healthcheck: postgres and redis running"
       echo "indexer graphql endpoint: skipped for infra profile"
+      exit 0
     fi
+
+    check_http_health "ricardian" "http://127.0.0.1:${RICARDIAN_PORT:-3100}/api/ricardian/v1/health"
+    check_http_health "treasury" "http://127.0.0.1:${TREASURY_PORT:-3200}/api/treasury/v1/health"
+    check_http_health "oracle" "http://127.0.0.1:${ORACLE_PORT:-3001}/api/oracle/health"
+
+    check_reconciliation_health
+    check_indexer_graphql
     ;;
   *)
     echo "Unknown action: $ACTION" >&2

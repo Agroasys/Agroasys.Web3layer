@@ -1,19 +1,30 @@
 import { WebhookNotifier } from '@agroasys/notifications';
 import { IndexerClient } from '../blockchain/indexer-client';
+import { SDKClient } from '../blockchain/sdk-client';
 import { getTriggersByStatus, updateTrigger } from '../database/queries';
-import { TriggerStatus } from '../types/trigger';
+import { TriggerStatus, TriggerType } from '../types/trigger';
 import { Logger } from '../utils/logger';
 
 const POLL_INTERVAL_MS = 10000; // 10 secs
 const CONFIRMATION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes: soft timeout (warning)
 const HARD_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes: hard timeout (moves to exhausted)
+const ON_CHAIN_FALLBACK_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutes before on-chain verification fallback
+const ON_CHAIN_FALLBACK_MIN_INTERVAL_MS = 5 * 60 * 1000; // rate-limit fallback checks per tradeId
 const BATCH_SIZE = 100;
+const TRADE_STATUS_LOCKED = 0;
+const TRADE_STATUS_IN_TRANSIT = 1;
+const TRADE_STATUS_ARRIVAL_CONFIRMED = 2;
 
 export class ConfirmationWorker {
     private isRunning = false;
     private intervalId?: NodeJS.Timeout;
+    private lastOnChainCheckByTradeId: Map<string, number> = new Map();
 
-    constructor(private indexerClient: IndexerClient, private notifier?: WebhookNotifier) {}
+    constructor(
+        private indexerClient: IndexerClient,
+        private sdkClient: SDKClient,
+        private notifier?: WebhookNotifier
+    ) {}
 
     start(): void {
         if (this.isRunning) {
@@ -27,6 +38,8 @@ export class ConfirmationWorker {
             batchSize: BATCH_SIZE,
             softTimeoutMinutes: CONFIRMATION_TIMEOUT_MS / 60000,
             hardTimeoutMinutes: HARD_TIMEOUT_MS / 60000,
+            onChainFallbackThresholdMinutes: ON_CHAIN_FALLBACK_THRESHOLD_MS / 60000,
+            onChainFallbackMinIntervalMinutes: ON_CHAIN_FALLBACK_MIN_INTERVAL_MS / 60000,
         });
 
         this.intervalId = setInterval(
@@ -126,6 +139,11 @@ export class ConfirmationWorker {
                 });
             }
 
+            const onChainConfirmed = await this.tryOnChainFallback(trigger, now, ageMs, ageMinutes);
+            if (onChainConfirmed) {
+                return;
+            }
+
             if (ageMs > HARD_TIMEOUT_MS) {
                 Logger.error('Confirmation hard timeout exceeded', {
                     idempotencyKey: trigger.idempotency_key.substring(0, 32),
@@ -207,6 +225,95 @@ export class ConfirmationWorker {
                 actionKey: trigger.action_key,
                 error: error.message,
             });
+        }
+    }
+
+    private shouldRunOnChainCheck(tradeId: string, now: number, ageMs: number): boolean {
+        if (ageMs < ON_CHAIN_FALLBACK_THRESHOLD_MS) {
+            return false;
+        }
+
+        const lastCheckedAt = this.lastOnChainCheckByTradeId.get(tradeId);
+        if (lastCheckedAt !== undefined && now - lastCheckedAt < ON_CHAIN_FALLBACK_MIN_INTERVAL_MS) {
+            return false;
+        }
+
+        this.lastOnChainCheckByTradeId.set(tradeId, now);
+        return true;
+    }
+
+    private isTradeStateAdvanced(triggerType: TriggerType, status: number): boolean {
+        switch (triggerType) {
+            case TriggerType.RELEASE_STAGE_1:
+                return status !== TRADE_STATUS_LOCKED;
+            case TriggerType.CONFIRM_ARRIVAL:
+                return status !== TRADE_STATUS_IN_TRANSIT;
+            case TriggerType.FINALIZE_TRADE:
+                return status !== TRADE_STATUS_ARRIVAL_CONFIRMED;
+            default:
+                return false;
+        }
+    }
+
+    private async tryOnChainFallback(
+        trigger: any,
+        now: number,
+        ageMs: number,
+        ageMinutes: number
+    ): Promise<boolean> {
+        if (!this.shouldRunOnChainCheck(trigger.trade_id, now, ageMs)) {
+            return false;
+        }
+
+        try {
+            const trade = await this.sdkClient.getTrade(trigger.trade_id);
+            const advanced = this.isTradeStateAdvanced(trigger.trigger_type, trade.status);
+
+            if (!advanced) {
+                Logger.info('On-chain fallback check: action still pending', {
+                    idempotencyKey: trigger.idempotency_key.substring(0, 32),
+                    actionKey: trigger.action_key,
+                    triggerType: trigger.trigger_type,
+                    tradeStatus: trade.status,
+                    ageMinutes: ageMinutes.toFixed(1),
+                });
+                return false;
+            }
+
+            Logger.warn('On-chain fallback confirmed action despite missing indexer confirmation', {
+                idempotencyKey: trigger.idempotency_key.substring(0, 32),
+                actionKey: trigger.action_key,
+                triggerType: trigger.trigger_type,
+                txHash: trigger.tx_hash,
+                tradeStatus: trade.status,
+                ageMinutes: ageMinutes.toFixed(1),
+            });
+
+            await updateTrigger(trigger.idempotency_key, {
+                status: TriggerStatus.CONFIRMED,
+                on_chain_verified: true,
+                on_chain_verified_at: new Date(),
+                confirmed_at: new Date(),
+            });
+
+            Logger.audit('TRIGGER_CONFIRMED_ON_CHAIN_FALLBACK', trigger.trade_id, {
+                idempotencyKey: trigger.idempotency_key.substring(0, 32),
+                actionKey: trigger.action_key,
+                triggerType: trigger.trigger_type,
+                txHash: trigger.tx_hash,
+                tradeStatus: trade.status,
+                ageMinutes: ageMinutes.toFixed(1),
+            });
+
+            return true;
+        } catch (error: any) {
+            Logger.warn('On-chain fallback verification failed, keeping indexer polling active', {
+                idempotencyKey: trigger.idempotency_key.substring(0, 32),
+                actionKey: trigger.action_key,
+                triggerType: trigger.trigger_type,
+                error: error?.message || String(error),
+            });
+            return false;
         }
     }
 }

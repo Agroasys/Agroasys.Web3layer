@@ -1,0 +1,220 @@
+name: PR Roadmap Policy
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited, milestoned, demilestoned]
+
+jobs:
+  enforce-roadmap-policy:
+    name: enforce/pr-roadmap-policy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      repository-projects: read
+    steps:
+      - name: Detect roadmap app credentials
+        id: app_config
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_id='${{ secrets.ROADMAP_APP_ID }}'
+          app_key='${{ secrets.ROADMAP_APP_PRIVATE_KEY }}'
+          if [[ -n "$app_id" && -n "$app_key" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create roadmap app token (preferred)
+        id: app_token
+        if: ${{ steps.app_config.outputs.enabled == 'true' }}
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.ROADMAP_APP_ID }}
+          private-key: ${{ secrets.ROADMAP_APP_PRIVATE_KEY }}
+          installation-id: ${{ secrets.ROADMAP_APP_INSTALLATION_ID }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Resolve roadmap auth token
+        id: auth
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          app_token='${{ steps.app_token.outputs.token }}'
+          github_token_fallback='${{ github.token }}'
+          app_enabled='${{ steps.app_config.outputs.enabled }}'
+          strict_override='${{ vars.ROADMAP_POLICY_STRICT }}'
+
+          token_source='github-token'
+          token="$github_token_fallback"
+          strict_mode='false'
+
+          if [[ -n "$app_token" ]]; then
+            token_source='github-app'
+            token="$app_token"
+            strict_mode='true'
+          elif [[ "$strict_override" == 'true' ]]; then
+            strict_mode='true'
+          elif [[ "$app_enabled" == 'true' ]]; then
+            strict_mode='true'
+          fi
+
+          echo "::add-mask::$token"
+          echo "source=$token_source" >> "$GITHUB_OUTPUT"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+          echo "strict=$strict_mode" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce milestone + project association
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          token='${{ steps.auth.outputs.token }}'
+          token_source='${{ steps.auth.outputs.source }}'
+          strict_mode='${{ steps.auth.outputs.strict }}'
+          project_id='${{ vars.ROADMAP_PROJECT_ID }}'
+          project_title='${{ vars.ROADMAP_PROJECT_TITLE }}'
+          pr_node_id='${{ github.event.pull_request.node_id }}'
+          pr_number='${{ github.event.pull_request.number }}'
+          pr_milestone='${{ github.event.pull_request.milestone.title }}'
+          repo='${{ github.repository }}'
+
+          export GH_TOKEN="$token"
+
+          pr_err='/tmp/pr_roadmap_err.log'
+          project_err='/tmp/pr_roadmap_project_err.log'
+          fallback_err='/tmp/pr_roadmap_fallback_err.log'
+
+          sanitize_err() {
+            local file="$1"
+            if [[ -s "$file" ]]; then
+              sed -n '1,20p' "$file" | sed 's/^/::error::/g'
+            fi
+          }
+
+          advisory_pass() {
+            local reason="$1"
+            echo "::warning::Roadmap project enforcement is in advisory mode: $reason"
+            echo "::warning::Configure ROADMAP_APP_ID + ROADMAP_APP_PRIVATE_KEY to re-enable strict project enforcement."
+            echo "Roadmap policy advisory pass for PR #${pr_number}"
+            exit 0
+          }
+
+          if [[ -z "$pr_milestone" || "$pr_milestone" == 'null' ]]; then
+            echo "::error::Missing PR Milestone. Remediation: gh pr edit ${pr_number} --repo ${repo} --milestone \"<Milestone Name>\""
+            exit 1
+          fi
+
+          if [[ -z "$project_id" ]]; then
+            echo '::error::Missing repository variable ROADMAP_PROJECT_ID (Project v2 node id).'
+            exit 1
+          fi
+
+          if [[ -z "$project_title" ]]; then
+            project_title='Agroasys.Web3layer Roadmap'
+          fi
+
+          if [[ -z "$token" ]]; then
+            echo '::error::Missing token for roadmap policy check.'
+            exit 1
+          fi
+
+          pr_query='query($prId:ID!){ node(id:$prId){ ... on PullRequest { projectItems(first:100){ nodes { project { id title url } } } } } }'
+          if ! pr_response="$(gh api graphql -f query="$pr_query" -F prId="$pr_node_id" 2>"$pr_err")"; then
+            echo '::error::Unable to query PR project items.'
+            if [[ "$token_source" == 'github-token' ]]; then
+              echo '::error::github.token may not have Organization ProjectV2 visibility. Configure ROADMAP_APP_ID + ROADMAP_APP_PRIVATE_KEY.'
+            fi
+            if [[ "$strict_mode" != 'true' ]]; then
+              sanitize_err "$pr_err"
+              advisory_pass 'unable to read PR project items with github.token'
+            fi
+            sanitize_err "$pr_err"
+            exit 1
+          fi
+
+          if jq -e --arg project_id "$project_id" '.data.node.projectItems.nodes // [] | map(.project.id) | index($project_id) != null' <<<"$pr_response" >/dev/null 2>&1; then
+            echo "Roadmap policy check passed for PR #${pr_number}"
+            exit 0
+          fi
+
+          project_found='false'
+          project_query_failed='false'
+          cursor=''
+
+          while :; do
+            if [[ -n "$cursor" ]]; then
+              project_query='query($projectId:ID!,$after:String!){ node(id:$projectId){ ... on ProjectV2 { items(first:100, after:$after){ nodes { content { __typename ... on PullRequest { id } } } pageInfo { hasNextPage endCursor } } } } }'
+              if ! project_response="$(gh api graphql -f query="$project_query" -F projectId="$project_id" -F after="$cursor" 2>"$project_err")"; then
+                project_query_failed='true'
+                break
+              fi
+            else
+              project_query='query($projectId:ID!){ node(id:$projectId){ ... on ProjectV2 { items(first:100){ nodes { content { __typename ... on PullRequest { id } } } pageInfo { hasNextPage endCursor } } } } }'
+              if ! project_response="$(gh api graphql -f query="$project_query" -F projectId="$project_id" 2>"$project_err")"; then
+                project_query_failed='true'
+                break
+              fi
+            fi
+
+            if jq -e --arg pr_id "$pr_node_id" '.data.node.items.nodes // [] | map(select(.content.__typename == "PullRequest") | .content.id) | index($pr_id) != null' <<<"$project_response" >/dev/null 2>&1; then
+              project_found='true'
+              break
+            fi
+
+            has_next="$(jq -r '.data.node.items.pageInfo.hasNextPage // false' <<<"$project_response" 2>/dev/null || echo false)"
+            end_cursor="$(jq -r '.data.node.items.pageInfo.endCursor // empty' <<<"$project_response" 2>/dev/null || true)"
+
+            if [[ "$has_next" != 'true' || -z "$end_cursor" ]]; then
+              break
+            fi
+
+            cursor="$end_cursor"
+          done
+
+          if [[ "$project_found" == 'true' ]]; then
+            echo "Roadmap policy check passed for PR #${pr_number}"
+            exit 0
+          fi
+
+          fallback_response=''
+          if fallback_response="$(gh pr view "$pr_number" --repo "$repo" --json projectItems 2>"$fallback_err")"; then
+            if jq -e --arg project_title "$project_title" '.projectItems // [] | map(.title) | index($project_title) != null' <<<"$fallback_response" >/dev/null 2>&1; then
+              echo "Roadmap policy check passed for PR #${pr_number}"
+              exit 0
+            fi
+          fi
+
+          if [[ "$project_query_failed" == 'true' ]]; then
+            echo '::error::Unable to query ProjectV2 contents during membership validation.'
+            if [[ "$token_source" == 'github-token' ]]; then
+              echo '::error::github.token cannot read the target org project. Configure ROADMAP_APP_ID + ROADMAP_APP_PRIVATE_KEY.'
+            fi
+            if [[ "$strict_mode" != 'true' ]]; then
+              sanitize_err "$project_err"
+              advisory_pass 'unable to read ProjectV2 contents with github.token'
+            fi
+            sanitize_err "$project_err"
+          fi
+
+          if [[ -s "$fallback_err" ]]; then
+            echo '::error::Fallback project title lookup failed.'
+            if [[ "$strict_mode" != 'true' ]]; then
+              sanitize_err "$fallback_err"
+              advisory_pass 'fallback title lookup unavailable'
+            fi
+            sanitize_err "$fallback_err"
+          fi
+
+          if [[ "$strict_mode" != 'true' ]]; then
+            advisory_pass 'PR not linked to required project (advisory mode)'
+          fi
+
+          echo "::error::PR #${pr_number} is not added to required Project v2."
+          echo '::error::Remediation:'
+          echo "::error::  1) pr_id=\$(gh pr view ${pr_number} --repo ${repo} --json id -q .id)"
+          echo "::error::  2) gh api graphql -f query='mutation(\$project:ID!,\$content:ID!){ addProjectV2ItemById(input:{projectId:\$project,contentId:\$content}) { item { id } } }' -F project='${project_id}' -F content=\"\$pr_id\""
+          exit 1

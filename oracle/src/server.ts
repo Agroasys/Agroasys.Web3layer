@@ -107,7 +107,7 @@ async function bootstrap() {
             });
         });
 
-        confirmationWorker = new ConfirmationWorker(indexerClient, notifier);
+        confirmationWorker = new ConfirmationWorker(indexerClient, sdkClient, notifier);
         confirmationWorker.start();
 
         app.listen(config.port, () => {

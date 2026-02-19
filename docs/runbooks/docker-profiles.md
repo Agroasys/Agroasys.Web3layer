@@ -1,62 +1,75 @@
 # Docker Profiles Runbook
 
 ## Purpose
-Operate service containers with deterministic commands for build, startup, health checks, and logs.
+Operate service containers with deterministic profile-aware commands for build, startup, health checks, and logs.
 
-## Pre-checks
-- Docker Engine + Compose plugin are installed.
-- Env files exist in `env/`:
-```bash
-cp env/postgres.env.example env/postgres.env
-cp env/ricardian.env.example env/ricardian.env
-cp env/treasury.env.example env/treasury.env
-cp env/reconciliation.env.example env/reconciliation.env
-```
+## Preconditions
+- Docker Engine + Compose plugin installed.
+- Root env files created:
 
-## Exact Commands
-1. Build all services:
 ```bash
-scripts/docker-services.sh build all
-```
-2. Start all services:
-```bash
-scripts/docker-services.sh up all
-```
-3. Health check:
-```bash
-scripts/docker-services.sh health all
-```
-4. List running containers:
-```bash
-scripts/docker-services.sh ps all
-```
-5. Tail logs:
-```bash
-scripts/docker-services.sh logs all
-```
-6. Stop stack:
-```bash
-scripts/docker-services.sh down all
+cp .env.example .env
+cp .env.local.example .env.local
+cp .env.staging-e2e.example .env.staging-e2e
 ```
 
-## Expected Outputs
-- `health all` prints `ricardian ready endpoint: ok`, `treasury ready endpoint: ok`, and `reconciliation healthcheck: ok` when those services are running.
-- `ps all` shows running containers for configured services.
+## Profile commands
 
-## Failure Modes
-- Missing env file values cause startup failure in config validation.
-- `postgres` not healthy blocks dependent services.
-- Reconciliation fails fast if `RPC_URL` or `INDEXER_GRAPHQL_URL` is unreachable.
+### local-dev
 
-## Rollback Steps
-1. Stop stack:
 ```bash
-scripts/docker-services.sh down all
+scripts/docker-services.sh build local-dev
+scripts/docker-services.sh up local-dev
+scripts/docker-services.sh health local-dev
+scripts/docker-services.sh ps local-dev
+scripts/docker-services.sh logs local-dev reconciliation
+scripts/docker-services.sh down local-dev
 ```
-2. Revert to last known-good env values in `env/*.env`.
-3. Restart and re-check health.
 
-## Escalation Cues
-- Persistent service restart loops.
-- Reconciliation healthcheck failures after dependency recovery.
-- Database migrations repeatedly failing at startup.
+### staging-e2e
+
+```bash
+scripts/docker-services.sh build staging-e2e
+scripts/docker-services.sh up staging-e2e
+scripts/docker-services.sh health staging-e2e
+scripts/staging-e2e-gate.sh
+scripts/docker-services.sh ps staging-e2e
+scripts/docker-services.sh logs staging-e2e indexer-pipeline
+scripts/docker-services.sh down staging-e2e
+```
+
+### infra
+
+```bash
+scripts/docker-services.sh up infra
+scripts/docker-services.sh health infra
+scripts/docker-services.sh ps infra
+scripts/docker-services.sh down infra
+```
+
+## Expected outputs
+- `health local-dev` reports `ricardian`, `treasury`, `oracle`, and `reconciliation` health plus indexer GraphQL reachability.
+- `health staging-e2e` reports the same service health with staging indexer components.
+- `health infra` validates only infra services and skips indexer GraphQL checks.
+
+## Common failures and fixes
+- Missing required services:
+  - Run `scripts/docker-services.sh up <profile>` for the same profile.
+  - If mixed profiles are running, stop conflicting stack first:
+    `scripts/docker-services.sh down staging-e2e` or `scripts/docker-services.sh down local-dev`.
+- Reconciliation fails fast:
+  - verify `RECONCILIATION_RPC_URL` and `RECONCILIATION_INDEXER_GRAPHQL_URL` in active env files.
+
+## Rollback
+1. Stop affected profile:
+```bash
+scripts/docker-services.sh down <profile>
+```
+2. Revert last infra/config commit.
+3. Bring profile back up and re-run `health`.
+
+## Escalation
+Escalate when:
+- repeated restart loops continue after env and dependency checks
+- reconciliation healthcheck fails after dependency recovery
+- indexer pipeline does not produce healthy GraphQL endpoint in staging-e2e

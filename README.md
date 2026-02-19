@@ -156,6 +156,7 @@ npm run -w treasury build
 - `docs/runbooks/oracle-redrive.md`
 - `docs/runbooks/emergency-disable-unpause.md`
 - `docs/runbooks/docker-profiles.md`
+- `docs/runbooks/github-roadmap-governance.md`
 
 ## **Contributing**
 

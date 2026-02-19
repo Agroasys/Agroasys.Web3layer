@@ -24,7 +24,8 @@ function makeEvent(data: Partial<IndexerTradeEvent> & Pick<IndexerTradeEvent, 'i
     id: data.id,
     tradeId: data.tradeId,
     eventName: data.eventName,
-    txHash: data.txHash || '0xtx',
+    txHash: data.txHash === undefined ? '0xtx' : data.txHash,
+    extrinsicHash: data.extrinsicHash ?? null,
     blockNumber: data.blockNumber ?? 1,
     timestamp: data.timestamp || new Date('2026-01-01T00:00:00.000Z'),
     releasedLogisticsAmount: data.releasedLogisticsAmount,
@@ -130,5 +131,36 @@ describe('TreasuryIngestionService', () => {
 
     expect(result).toEqual({ fetched: 2, inserted: 1 });
     expect(mockSetIngestionOffset).toHaveBeenCalledWith(2);
+  });
+
+  it('skips entries when txHash is unavailable and does not attempt DB upsert', async () => {
+    const service = new TreasuryIngestionService();
+
+    mockGetIngestionOffset.mockResolvedValue(0);
+    mockSetIngestionOffset.mockResolvedValue(undefined);
+
+    const fetchTreasuryEvents = jest
+      .fn()
+      .mockResolvedValueOnce([
+        makeEvent({
+          id: 'evt-missing-hash',
+          tradeId: 'trade-z',
+          eventName: 'FundsReleasedStage1',
+          txHash: null,
+          extrinsicHash: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+          releasedLogisticsAmount: '90',
+        }),
+      ])
+      .mockResolvedValueOnce([]);
+
+    (service as unknown as { indexerClient: { fetchTreasuryEvents: typeof fetchTreasuryEvents } }).indexerClient = {
+      fetchTreasuryEvents,
+    };
+
+    const result = await service.ingestOnce();
+
+    expect(result).toEqual({ fetched: 1, inserted: 0 });
+    expect(mockUpsertLedgerEntryWithInitialState).not.toHaveBeenCalled();
+    expect(mockSetIngestionOffset).toHaveBeenCalledWith(1);
   });
 });
