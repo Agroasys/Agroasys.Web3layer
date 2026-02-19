@@ -2,9 +2,11 @@ node_modules
 .env
 .env.local
 .env.staging-e2e
+.env.staging-e2e-real
 env/*.env
 !env/*.env.example
 !.env.example
 !.env.local.example
 !.env.staging-e2e.example
+!.env.staging-e2e-real.example
 .DS_Store

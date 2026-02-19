@@ -22,7 +22,7 @@ Run daemon:
 npm run -w reconciliation reconcile:daemon
 ```
 
-Docker local profile:
+Docker local-dev profile:
 
 ```bash
 scripts/docker-services.sh up local-dev

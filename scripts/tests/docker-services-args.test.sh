@@ -15,5 +15,6 @@ assert_fails "$SCRIPT"
 assert_fails "$SCRIPT" build
 assert_fails "$SCRIPT" build unsupported-profile
 assert_fails "$SCRIPT" unknown-action local-dev
+assert_fails "$SCRIPT" health staging-e2e-real invalid-service
 
 echo "docker-services arg parser smoke: pass"

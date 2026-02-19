@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
-    profiles: ["local-dev", "staging-e2e", "infra"]
+    profiles: ["local-dev", "staging-e2e", "staging-e2e-real", "infra"]
     environment:
       POSTGRES_USER: "${POSTGRES_USER}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
@@ -19,7 +19,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    profiles: ["local-dev", "staging-e2e", "infra"]
+    profiles: ["local-dev", "staging-e2e", "staging-e2e-real", "infra"]
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
@@ -75,7 +75,7 @@ services:
       retries: 5
 
   indexer-migrate:
-    profiles: ["staging-e2e"]
+    profiles: ["staging-e2e", "staging-e2e-real"]
     build:
       context: .
       dockerfile: indexer/Dockerfile
@@ -91,7 +91,7 @@ services:
     command: ["npx", "squid-typeorm-migration", "apply"]
 
   indexer-pipeline:
-    profiles: ["staging-e2e"]
+    profiles: ["staging-e2e", "staging-e2e-real"]
     build:
       context: .
       dockerfile: indexer/Dockerfile
@@ -113,13 +113,13 @@ services:
       indexer-migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "ps aux | grep -q '[l]ib/main.js'"]
+      test: ["CMD-SHELL", "cat /proc/1/cmdline | tr '\\0' ' ' | grep -q 'lib/main.js'"]
       interval: 15s
       timeout: 5s
       retries: 5
 
   indexer-graphql:
-    profiles: ["staging-e2e"]
+    profiles: ["staging-e2e", "staging-e2e-real"]
     build:
       context: .
       dockerfile: indexer/Dockerfile
@@ -157,7 +157,7 @@ services:
       retries: 8
 
   ricardian:
-    profiles: ["local-dev", "staging-e2e"]
+    profiles: ["local-dev", "staging-e2e", "staging-e2e-real"]
     build:
       context: .
       dockerfile: ricardian/Dockerfile
@@ -187,7 +187,7 @@ services:
       - "${RICARDIAN_PORT:-3100}:${RICARDIAN_PORT:-3100}"
 
   treasury:
-    profiles: ["local-dev", "staging-e2e"]
+    profiles: ["local-dev", "staging-e2e", "staging-e2e-real"]
     build:
       context: .
       dockerfile: treasury/Dockerfile
@@ -222,7 +222,7 @@ services:
       - "${TREASURY_PORT:-3200}:${TREASURY_PORT:-3200}"
 
   oracle:
-    profiles: ["local-dev", "staging-e2e"]
+    profiles: ["local-dev", "staging-e2e", "staging-e2e-real"]
     build:
       context: .
       dockerfile: oracle/Dockerfile
@@ -273,7 +273,7 @@ services:
       retries: 8
 
   reconciliation:
-    profiles: ["local-dev", "staging-e2e"]
+    profiles: ["local-dev", "staging-e2e", "staging-e2e-real"]
     build:
       context: .
       dockerfile: reconciliation/Dockerfile
@@ -292,6 +292,8 @@ services:
       ESCROW_ADDRESS: "${RECONCILIATION_ESCROW_ADDRESS}"
       USDC_ADDRESS: "${RECONCILIATION_USDC_ADDRESS}"
       INDEXER_GRAPHQL_URL: "${RECONCILIATION_INDEXER_GRAPHQL_URL}"
+      RECONCILIATION_REQUIRE_CONTAINER_SAFE_INDEXER_URL: "${RECONCILIATION_REQUIRE_CONTAINER_SAFE_INDEXER_URL:-false}"
+      NETWORK_NAME: "${STAGING_E2E_REAL_NETWORK_NAME:-}"
       NOTIFICATIONS_ENABLED: "${RECONCILIATION_NOTIFICATIONS_ENABLED}"
       NOTIFICATIONS_WEBHOOK_URL: "${RECONCILIATION_NOTIFICATIONS_WEBHOOK_URL}"
       NOTIFICATIONS_COOLDOWN_MS: "${RECONCILIATION_NOTIFICATIONS_COOLDOWN_MS}"

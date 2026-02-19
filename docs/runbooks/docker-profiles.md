@@ -1,75 +1,58 @@
 # Docker Profiles Runbook
 
 ## Purpose
-Operate service containers with deterministic profile-aware commands for build, startup, health checks, and logs.
+Run deterministic build/start/health/log actions for each supported compose profile.
+
+## Profiles
+- `local-dev`: lightweight mock indexer responder (`indexer`) for fast iteration.
+- `staging-e2e`: existing staging profile.
+- `staging-e2e-real`: release-gate profile using real indexer pipeline (`indexer-migrate`, `indexer-pipeline`, `indexer-graphql`).
+- `infra`: shared infra only (`postgres`, `redis`).
 
 ## Preconditions
-- Docker Engine + Compose plugin installed.
-- Root env files created:
-
 ```bash
 cp .env.example .env
 cp .env.local.example .env.local
 cp .env.staging-e2e.example .env.staging-e2e
+cp .env.staging-e2e-real.example .env.staging-e2e-real
 ```
 
-## Profile commands
-
-### local-dev
-
+## Commands
 ```bash
 scripts/docker-services.sh build local-dev
 scripts/docker-services.sh up local-dev
 scripts/docker-services.sh health local-dev
-scripts/docker-services.sh ps local-dev
-scripts/docker-services.sh logs local-dev reconciliation
-scripts/docker-services.sh down local-dev
-```
 
-### staging-e2e
-
-```bash
 scripts/docker-services.sh build staging-e2e
 scripts/docker-services.sh up staging-e2e
 scripts/docker-services.sh health staging-e2e
-scripts/staging-e2e-gate.sh
-scripts/docker-services.sh ps staging-e2e
-scripts/docker-services.sh logs staging-e2e indexer-pipeline
-scripts/docker-services.sh down staging-e2e
-```
 
-### infra
+scripts/docker-services.sh build staging-e2e-real
+scripts/docker-services.sh up staging-e2e-real
+scripts/docker-services.sh health staging-e2e-real
+scripts/staging-e2e-real-gate.sh
 
-```bash
 scripts/docker-services.sh up infra
 scripts/docker-services.sh health infra
-scripts/docker-services.sh ps infra
-scripts/docker-services.sh down infra
+
+scripts/docker-services.sh logs staging-e2e-real reconciliation
+scripts/docker-services.sh down staging-e2e-real
 ```
 
 ## Expected outputs
-- `health local-dev` reports `ricardian`, `treasury`, `oracle`, and `reconciliation` health plus indexer GraphQL reachability.
-- `health staging-e2e` reports the same service health with staging indexer components.
-- `health infra` validates only infra services and skips indexer GraphQL checks.
+- `health <profile>` verifies required services for that profile.
+- Non-infra profiles verify indexer GraphQL readiness.
+- Reconciliation healthcheck passes when DB is reachable.
 
-## Common failures and fixes
-- Missing required services:
-  - Run `scripts/docker-services.sh up <profile>` for the same profile.
-  - If mixed profiles are running, stop conflicting stack first:
-    `scripts/docker-services.sh down staging-e2e` or `scripts/docker-services.sh down local-dev`.
-- Reconciliation fails fast:
-  - verify `RECONCILIATION_RPC_URL` and `RECONCILIATION_INDEXER_GRAPHQL_URL` in active env files.
+## Failure modes
+- `required service is not running`: profile mismatch or startup failure.
+- `indexer graphql endpoint failed`: indexer service not ready.
+- `reconciliation healthcheck` failure: DB/auth/config mismatch.
 
 ## Rollback
-1. Stop affected profile:
+1. Stop profile:
 ```bash
 scripts/docker-services.sh down <profile>
 ```
-2. Revert last infra/config commit.
-3. Bring profile back up and re-run `health`.
-
-## Escalation
-Escalate when:
-- repeated restart loops continue after env and dependency checks
-- reconciliation healthcheck fails after dependency recovery
-- indexer pipeline does not produce healthy GraphQL endpoint in staging-e2e
+2. Restore last known-good env values.
+3. Re-run profile startup and health commands.

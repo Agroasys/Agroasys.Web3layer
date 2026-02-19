@@ -198,16 +198,24 @@ npm run -w treasury lint && npm run -w treasury test && npm run -w treasury buil
 
 Use these profile commands for deterministic runtime checks:
 
+- `local-dev`: fast iteration profile with lightweight `indexer` responder, plus `postgres`, `redis`, `oracle`, `reconciliation`, `ricardian`, and `treasury`. `health local-dev` waits for all required services.
+- `staging-e2e`: staging profile with real indexer services (`indexer-migrate`, `indexer-pipeline`, `indexer-graphql`) and all application services. `health staging-e2e` must pass before running release checks.
+- `staging-e2e-real`: strict release-gate profile with dynamic start-block support, in-network GraphQL checks, warmup-aware lag verification, and reconciliation once-run validation.
+- `infra`: infrastructure-only profile (`postgres`, `redis`).
+
 ```bash
 scripts/docker-services.sh up local-dev
 scripts/docker-services.sh health local-dev
 
 scripts/docker-services.sh up staging-e2e
 scripts/docker-services.sh health staging-e2e
-scripts/staging-e2e-gate.sh
+
+scripts/docker-services.sh up staging-e2e-real
+scripts/docker-services.sh health staging-e2e-real
+scripts/staging-e2e-real-gate.sh
 ```
 
-See `docs/docker-services.md` and `docs/runbooks/staging-e2e-release-gate.md` for triage and rollback instructions.
+See `docs/docker-services.md`, `docs/runbooks/staging-e2e-release-gate.md`, and `docs/runbooks/staging-e2e-real-release-gate.md` for triage and rollback instructions.
 
 ## Commit Convention
 

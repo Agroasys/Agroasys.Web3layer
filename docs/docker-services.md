@@ -5,45 +5,39 @@ This runbook covers containerized orchestration for these services:
 - `ricardian`
 - `treasury`
 - `reconciliation`
-- profile-specific indexer services
+- indexer services used by each profile
 
 `notifications` remains a library workspace (`@agroasys/notifications`), not a standalone runtime container.
 
 ## Profiles
 
 ### `local-dev`
-Fast feedback mode with lightweight indexer responder (`indexer`).
+Fast feedback mode with a lightweight in-memory indexer GraphQL responder.
 
 ### `staging-e2e`
-Release-gate mode with indexer pipeline components:
+Existing staging profile.
+
+### `staging-e2e-real`
+Staging-grade release-gate profile with real indexer pipeline components:
 - `indexer-migrate`
 - `indexer-pipeline`
 - `indexer-graphql`
 
-### `infra`
-Infra-only mode:
-- `postgres`
-- `redis`
+## Prerequisites
+- Docker Engine with Compose plugin (`docker compose`)
+- Root env files created from examples
+- Reachable `RPC_URL` if reconciliation/oracle on-chain checks are enabled
 
-## Environment Loading
-`scripts/docker-services.sh` loads env files in this order:
-1. `.env` (always)
-2. profile override:
-   - `.env.local` for `local-dev`
-   - `.env.staging-e2e` for `staging-e2e`
-   - `.env.infra` for `infra` (optional)
-
-Setup from examples:
+## Environment Setup
 
 ```bash
 cp .env.example .env
 cp .env.local.example .env.local
 cp .env.staging-e2e.example .env.staging-e2e
+cp .env.staging-e2e-real.example .env.staging-e2e-real
 ```
 
-## Commands
-
-Local development:
+## Local Dev
 
 ```bash
 scripts/docker-services.sh build local-dev
@@ -53,36 +47,32 @@ scripts/docker-services.sh logs local-dev reconciliation
 scripts/docker-services.sh down local-dev
 ```
 
-Staging E2E:
+## Staging E2E Real
 
 ```bash
-scripts/docker-services.sh build staging-e2e
-scripts/docker-services.sh up staging-e2e
-scripts/docker-services.sh health staging-e2e
-scripts/staging-e2e-gate.sh
-scripts/docker-services.sh logs staging-e2e reconciliation
-scripts/docker-services.sh logs staging-e2e indexer-pipeline
-scripts/docker-services.sh down staging-e2e
+scripts/docker-services.sh build staging-e2e-real
+scripts/docker-services.sh up staging-e2e-real
+scripts/docker-services.sh health staging-e2e-real
+scripts/staging-e2e-real-gate.sh
+scripts/docker-services.sh logs staging-e2e-real reconciliation
+scripts/docker-services.sh logs staging-e2e-real indexer-pipeline
+scripts/docker-services.sh down staging-e2e-real
 ```
 
-Infra only:
+## Health Endpoints
 
-```bash
-scripts/docker-services.sh up infra
-scripts/docker-services.sh health infra
-scripts/docker-services.sh down infra
-```
+- Ricardian: `http://127.0.0.1:${RICARDIAN_PORT:-3100}/api/ricardian/v1/health`
+- Treasury: `http://127.0.0.1:${TREASURY_PORT:-3200}/api/treasury/v1/health`
+- Oracle: `http://127.0.0.1:${ORACLE_PORT:-3001}/api/oracle/health`
+- Reconciliation: `node reconciliation/dist/healthcheck.js` (inside container)
 
-## Health behavior
-- Health checks validate the requested profile service set only.
-- If services are missing, output includes:
-  - compose file
-  - expected running services
-  - currently running services
-  - next action command
-- `infra` profile intentionally skips indexer GraphQL checks.
+`scripts/docker-services.sh health <profile>` waits for required services to become healthy (bounded timeout), then runs endpoint checks. Tune with:
+- `DOCKER_SERVICES_WAIT_TIMEOUT_SECONDS` (default `120`)
+- `DOCKER_SERVICES_WAIT_POLL_SECONDS` (default `2`)
+- `DOCKER_SERVICES_HEALTH_LOG_TAIL_LINES` (default `80`)
 
 ## Notes
-- Inter-container calls use service DNS names (`postgres`, `indexer`, `indexer-graphql`), never `localhost`.
+
+- Inter-container calls always use service DNS names (for example `indexer`, `indexer-graphql`, `postgres`), never `localhost`.
 - Reconciliation startup remains fail-fast when `RPC_URL` is missing/unreachable.
-- `staging-e2e` gate fails on ENS resolver errors, indexer fetch failures, schema mismatches, and lag threshold breaches.
+- `staging-e2e-real` gate fails on ENS resolver errors, indexer fetch failures, schema mismatches, and indexer lag threshold breaches.

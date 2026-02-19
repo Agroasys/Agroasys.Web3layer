@@ -3,6 +3,8 @@
 ## Purpose
 Run deterministic staging checks before merge/release.
 
+For staging-grade validation with the explicit real indexer profile, use `docs/runbooks/staging-e2e-real-release-gate.md`.
+
 ## Preconditions
 - `.env` and `.env.staging-e2e` populated.
 - Contract/indexer addresses target the same chain.
@@ -13,6 +15,7 @@ Run deterministic staging checks before merge/release.
 scripts/docker-services.sh down staging-e2e
 scripts/docker-services.sh up staging-e2e
 scripts/docker-services.sh health staging-e2e
+scripts/validate-env.sh staging-e2e
 scripts/docker-services.sh logs staging-e2e reconciliation
 scripts/docker-services.sh logs staging-e2e indexer-graphql
 scripts/staging-e2e-gate.sh
