@@ -24,6 +24,7 @@ Every PR must:
 3. Keep CI green and avoid ABI/economics/token-flow changes unless explicitly approved.
 
 The workflow `.github/workflows/pr-roadmap-policy.yml` enforces (1) and (2).
+During temporary rollout without GitHub App auth, project-link enforcement is advisory (warnings only); milestone enforcement remains blocking.
 
 ## Maintainer Steps For Each PR
 1. Assign milestone:

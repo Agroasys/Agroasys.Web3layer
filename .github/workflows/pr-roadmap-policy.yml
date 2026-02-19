@@ -45,18 +45,27 @@ jobs:
 
           app_token='${{ steps.app_token.outputs.token }}'
           github_token_fallback='${{ github.token }}'
+          app_enabled='${{ steps.app_config.outputs.enabled }}'
+          strict_override='${{ vars.ROADMAP_POLICY_STRICT }}'
 
           token_source='github-token'
           token="$github_token_fallback"
+          strict_mode='false'
 
           if [[ -n "$app_token" ]]; then
             token_source='github-app'
             token="$app_token"
+            strict_mode='true'
+          elif [[ "$strict_override" == 'true' ]]; then
+            strict_mode='true'
+          elif [[ "$app_enabled" == 'true' ]]; then
+            strict_mode='true'
           fi
 
           echo "::add-mask::$token"
           echo "source=$token_source" >> "$GITHUB_OUTPUT"
           echo "token=$token" >> "$GITHUB_OUTPUT"
+          echo "strict=$strict_mode" >> "$GITHUB_OUTPUT"
 
       - name: Enforce milestone + project association
         shell: bash
@@ -65,6 +74,7 @@ jobs:
 
           token='${{ steps.auth.outputs.token }}'
           token_source='${{ steps.auth.outputs.source }}'
+          strict_mode='${{ steps.auth.outputs.strict }}'
           project_id='${{ vars.ROADMAP_PROJECT_ID }}'
           project_title='${{ vars.ROADMAP_PROJECT_TITLE }}'
           pr_node_id='${{ github.event.pull_request.node_id }}'
@@ -83,6 +93,14 @@ jobs:
             if [[ -s "$file" ]]; then
               sed -n '1,20p' "$file" | sed 's/^/::error::/g'
             fi
+          }
+
+          advisory_pass() {
+            local reason="$1"
+            echo "::warning::Roadmap project enforcement is in advisory mode: $reason"
+            echo "::warning::Configure ROADMAP_APP_ID + ROADMAP_APP_PRIVATE_KEY to re-enable strict project enforcement."
+            echo "Roadmap policy advisory pass for PR #${pr_number}"
+            exit 0
           }
 
           if [[ -z "$pr_milestone" || "$pr_milestone" == 'null' ]]; then
@@ -109,6 +127,10 @@ jobs:
             echo '::error::Unable to query PR project items.'
             if [[ "$token_source" == 'github-token' ]]; then
               echo '::error::github.token may not have Organization ProjectV2 visibility. Configure ROADMAP_APP_ID + ROADMAP_APP_PRIVATE_KEY.'
+            fi
+            if [[ "$strict_mode" != 'true' ]]; then
+              sanitize_err "$pr_err"
+              advisory_pass 'unable to read PR project items with github.token'
             fi
             sanitize_err "$pr_err"
             exit 1
@@ -171,12 +193,24 @@ jobs:
             if [[ "$token_source" == 'github-token' ]]; then
               echo '::error::github.token cannot read the target org project. Configure ROADMAP_APP_ID + ROADMAP_APP_PRIVATE_KEY.'
             fi
+            if [[ "$strict_mode" != 'true' ]]; then
+              sanitize_err "$project_err"
+              advisory_pass 'unable to read ProjectV2 contents with github.token'
+            fi
             sanitize_err "$project_err"
           fi
 
           if [[ -s "$fallback_err" ]]; then
             echo '::error::Fallback project title lookup failed.'
+            if [[ "$strict_mode" != 'true' ]]; then
+              sanitize_err "$fallback_err"
+              advisory_pass 'fallback title lookup unavailable'
+            fi
             sanitize_err "$fallback_err"
+          fi
+
+          if [[ "$strict_mode" != 'true' ]]; then
+            advisory_pass 'PR not linked to required project (advisory mode)'
           fi
 
           echo "::error::PR #${pr_number} is not added to required Project v2."

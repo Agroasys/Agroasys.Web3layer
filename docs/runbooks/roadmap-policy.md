@@ -12,6 +12,15 @@ Validation order is strict:
 
 If all checks fail, the workflow fails.
 
+## Temporary rollout mode (current)
+- Milestone check is always enforced (blocking).
+- Project-link check runs in advisory mode when GitHub App auth is not configured.
+- Advisory mode reports warnings but does not block PR merge.
+- Strict mode is automatically enabled once GitHub App credentials are configured.
+
+Optional override:
+- Set repository variable `ROADMAP_POLICY_STRICT=true` to force strict blocking mode immediately.
+
 ## Security model
 - Event: `pull_request` only.
 - `pull_request_target` is forbidden because it runs with elevated repo permissions against untrusted fork code.
@@ -51,7 +60,7 @@ If the check fails:
 2. Confirm PR is added to the roadmap project.
 3. Verify `ROADMAP_PROJECT_ID` is correct.
 4. Confirm App secrets are present and App is installed for this repo/org.
-5. If running on `github.token` fallback, expect failure when org ProjectV2 visibility is restricted.
+5. If running on `github.token` fallback, org ProjectV2 visibility may be restricted (advisory mode until App auth is configured).
 6. Re-run failed jobs after metadata/auth fixes.
 
 ## Manual cleanup
