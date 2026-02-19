@@ -26,6 +26,16 @@ Every PR must:
 The workflow `.github/workflows/pr-roadmap-policy.yml` enforces (1) and (2).
 During temporary rollout without GitHub App auth, project-link enforcement is advisory (warnings only); milestone enforcement remains blocking.
 
+## Weighted Progress (Authoritative)
+- Authoritative milestone delivery status is the weighted rollup, not the native GitHub closed/open ratio.
+- Source of truth for component mapping: `docs/runbooks/architecture-coverage-matrix.md`.
+- Automation workflow: `.github/workflows/roadmap-weighted-progress-sync.yml`.
+- Sync behavior:
+  1. Recompute weighted `% Complete` for Milestones A/B/C from deliverable issues.
+  2. Update milestone gate issues `#70/#71/#72` status label + `% Complete`.
+  3. Update milestone descriptions with the weighted status.
+  4. Update Project v2 gate item fields (`Status`, `% Complete`) when project access is available.
+
 ## Maintainer Steps For Each PR
 1. Assign milestone:
 ```bash
@@ -45,3 +55,14 @@ gh api graphql \
 - Repository variable: `ROADMAP_PROJECT_ID` (Project v2 node id).
 - Workflow permission: `.github/workflows/pr-roadmap-policy.yml` must keep `repository-projects: read`.
 - Roadmap policy auth/runbook: `docs/runbooks/roadmap-policy.md`.
+
+For weighted progress sync (optional overrides; defaults are built in for current project):
+- `ROADMAP_PERCENT_FIELD_ID`
+- `ROADMAP_STATUS_FIELD_ID`
+- `ROADMAP_STATUS_OPTION_BACKLOG`
+- `ROADMAP_STATUS_OPTION_IN_PROGRESS`
+- `ROADMAP_STATUS_OPTION_DONE`
+
+Auth for project field writes:
+- Preferred: `ROADMAP_APP_ID` + `ROADMAP_APP_PRIVATE_KEY` (+ optional `ROADMAP_APP_INSTALLATION_ID`).
+- Fallback: `github.token` (may be unable to write org ProjectV2 fields depending on org visibility/policy).
