@@ -53,11 +53,13 @@ load_env_file() {
     source "$file"
     set +a
 
-    local idx=0
-    for key in "${preserved_keys[@]}"; do
-      export "$key=${preserved_values[$idx]}"
-      idx=$((idx + 1))
-    done
+    if [[ ${#preserved_keys[@]} -gt 0 ]]; then
+      local idx=0
+      for key in "${preserved_keys[@]}"; do
+        export "$key=${preserved_values[$idx]}"
+        idx=$((idx + 1))
+      done
+    fi
   fi
 }
 
