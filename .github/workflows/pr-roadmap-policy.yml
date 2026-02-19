@@ -55,6 +55,13 @@ jobs:
           fi
 
           if ! jq -e --arg project_id "$PROJECT_ID" '.data.node.projectItems.nodes | map(.project.id) | index($project_id) != null' <<<"$response" >/dev/null; then
+            project_query='query($projectId:ID!){ node(id:$projectId){ ... on ProjectV2 { items(first:100){ nodes { content { __typename ... on PullRequest { id } } } } } } }'
+            project_response="$(gh api graphql -f query="$project_query" -F projectId="$PROJECT_ID" 2>/tmp/pr_roadmap_project_err.log || true)"
+            if [[ -n "$project_response" ]] && jq -e --arg pr_id "$PR_NODE_ID" '.data.node.items.nodes | map(select(.content.__typename == "PullRequest") | .content.id) | index($pr_id) != null' <<<"$project_response" >/dev/null; then
+              echo "Roadmap policy check passed for PR #${PR_NUMBER} (matched by project contents)"
+              exit 0
+            fi
+
             fallback_response="$(gh pr view "$PR_NUMBER" --repo "$REPO" --json projectItems 2>/tmp/pr_roadmap_fallback_err.log || true)"
             if [[ -n "$fallback_response" ]] && jq -e --arg project_title "$PROJECT_TITLE" '.projectItems | map(.title) | index($project_title) != null' <<<"$fallback_response" >/dev/null; then
               echo "Roadmap policy check passed for PR #${PR_NUMBER} (matched by project title)"
