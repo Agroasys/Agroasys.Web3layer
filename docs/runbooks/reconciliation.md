@@ -25,9 +25,9 @@ npm run -w reconciliation reconcile:daemon
 Docker local profile:
 
 ```bash
-scripts/docker-services.sh up local
-scripts/docker-services.sh health local
-scripts/docker-services.sh logs local reconciliation
+scripts/docker-services.sh up local-dev
+scripts/docker-services.sh health local-dev
+scripts/docker-services.sh logs local-dev reconciliation
 ```
 
 ## Expected outputs
@@ -44,7 +44,7 @@ scripts/docker-services.sh logs local reconciliation
 1. Stop daemon:
 
 ```bash
-scripts/docker-services.sh down local
+scripts/docker-services.sh down local-dev
 ```
 
 2. Revert to previous env profile values.
