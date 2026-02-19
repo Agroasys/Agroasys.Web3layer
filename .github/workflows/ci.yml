@@ -52,6 +52,16 @@ jobs:
             treasury:
               - 'treasury/**'
 
+  docs-profile-guard:
+    name: ci/docs-profile-guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check deprecated profile names in docs
+        run: scripts/tests/docs-profile-name-guard.sh
+
   contracts:
     name: ci/contracts
     runs-on: ubuntu-latest
@@ -525,6 +535,7 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     needs:
+      - docs-profile-guard
       - contracts
       - sdk
       - oracle
@@ -541,6 +552,7 @@ jobs:
           report="ci-reports/release-gate.txt"
 
           declare -A results
+          results["ci/docs-profile-guard"]="${{ needs.docs-profile-guard.result }}"
           results["ci/contracts"]="${{ needs.contracts.result }}"
           results["ci/sdk"]="${{ needs.sdk.result }}"
           results["ci/oracle"]="${{ needs.oracle.result }}"
