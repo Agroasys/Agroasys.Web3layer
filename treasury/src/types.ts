@@ -39,7 +39,8 @@ export interface IndexerTradeEvent {
   id: string;
   tradeId: string;
   eventName: string;
-  txHash: string;
+  txHash: string | null;
+  extrinsicHash: string | null;
   blockNumber: number;
   timestamp: Date;
   releasedLogisticsAmount?: string | null;

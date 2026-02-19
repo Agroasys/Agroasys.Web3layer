@@ -5,7 +5,8 @@ interface GraphQlResponse {
     tradeEvents?: Array<{
       id: string;
       eventName: string;
-      txHash: string;
+      txHash: string | null;
+      extrinsicHash?: string | null;
       blockNumber: number;
       timestamp: string;
       releasedLogisticsAmount?: string | null;
@@ -33,6 +34,7 @@ export class IndexerClient {
           id
           eventName
           txHash
+          extrinsicHash
           blockNumber
           timestamp
           releasedLogisticsAmount
@@ -71,7 +73,8 @@ export class IndexerClient {
       id: event.id,
       tradeId: event.trade.tradeId,
       eventName: event.eventName,
-      txHash: event.txHash,
+      txHash: event.txHash ?? null,
+      extrinsicHash: event.extrinsicHash ?? null,
       blockNumber: Number(event.blockNumber),
       timestamp: new Date(event.timestamp),
       releasedLogisticsAmount: event.releasedLogisticsAmount || null,

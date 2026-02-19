@@ -5,7 +5,8 @@ import { AdminSDK } from '../src/modules/adminSDK';
 import { DisputeStatus } from '../src/types/dispute';
 import { TEST_CONFIG, assertRequiredEnv, getAdminSigner, hasRequiredEnv } from './setup';
 
-const describeIntegration = hasRequiredEnv ? describe : describe.skip;
+const runManualE2E = process.env.RUN_E2E === 'true';
+const describeIntegration = runManualE2E && hasRequiredEnv ? describe : describe.skip;
 
 describeIntegration('AdminSDK', () => {
     let adminSDK: AdminSDK;
