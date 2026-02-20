@@ -3,10 +3,12 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY treasury/package.json treasury/package.json
+COPY shared-auth/package.json shared-auth/package.json
 
 RUN npm ci
 
 COPY treasury treasury
+COPY shared-auth shared-auth
 
 RUN npm run -w treasury build
 
@@ -16,12 +18,14 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY treasury/package.json treasury/package.json
+COPY shared-auth/package.json shared-auth/package.json
 
-RUN npm ci --omit=dev --workspace treasury --include-workspace-root=false \
+RUN npm ci --omit=dev --workspace treasury --workspace @agroasys/shared-auth --include-workspace-root=false \
   && npm cache clean --force
 
 COPY --from=builder /app/treasury/dist /app/treasury/dist
 COPY --from=builder /app/treasury/src/database/schema.sql /app/treasury/src/database/schema.sql
+COPY --from=builder /app/shared-auth /app/shared-auth
 
 RUN addgroup -S agro && adduser -S agro -G agro \
   && chown -R agro:agro /app

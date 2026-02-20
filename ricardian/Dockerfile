@@ -3,10 +3,12 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY ricardian/package.json ricardian/package.json
+COPY shared-auth/package.json shared-auth/package.json
 
 RUN npm ci
 
 COPY ricardian ricardian
+COPY shared-auth shared-auth
 
 RUN npm run -w ricardian build
 
@@ -16,12 +18,14 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY ricardian/package.json ricardian/package.json
+COPY shared-auth/package.json shared-auth/package.json
 
-RUN npm ci --omit=dev --workspace ricardian --include-workspace-root=false \
+RUN npm ci --omit=dev --workspace ricardian --workspace @agroasys/shared-auth --include-workspace-root=false \
   && npm cache clean --force
 
 COPY --from=builder /app/ricardian/dist /app/ricardian/dist
 COPY --from=builder /app/ricardian/src/database/schema.sql /app/ricardian/src/database/schema.sql
+COPY --from=builder /app/shared-auth /app/shared-auth
 
 RUN addgroup -S agro && adduser -S agro -G agro \
   && chown -R agro:agro /app
