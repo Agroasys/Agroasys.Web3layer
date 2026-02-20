@@ -23,6 +23,10 @@
     "@nomicfoundation/hardhat-ignition": "0.15.16",
     "@nomicfoundation/hardhat-ignition-ethers": "0.15.17",
     "glob": "11.1.0",
-    "minimatch": "10.2.1"
+    "minimatch": "10.2.1",
+    "lodash": "4.17.23",
+    "@nomicfoundation/ignition-core": {
+      "lodash": "4.17.23"
+    }
   }
 }
