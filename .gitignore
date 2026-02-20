@@ -9,4 +9,5 @@ env/*.env
 !.env.local.example
 !.env.staging-e2e.example
 !.env.staging-e2e-real.example
+reports/licenses
 .DS_Store

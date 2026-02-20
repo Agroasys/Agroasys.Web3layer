@@ -18,7 +18,8 @@
     "treasury"
   ],
   "scripts": {
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "npm run lint --workspaces --if-present",
+    "licenses:report": "node scripts/generate-license-report.mjs"
   },
   "overrides": {
     "hardhat": "2.28.6",
