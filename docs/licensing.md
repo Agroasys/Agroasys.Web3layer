@@ -34,3 +34,11 @@ See `TRADEMARKS.md`.
 
 ## Third-Party Dependencies
 Third-party dependency notices are summarized in `THIRD_PARTY_NOTICES.md`.
+
+For structured dependency license review artifacts, run:
+
+```bash
+npm run licenses:report
+```
+
+See `docs/runbooks/dependency-license-review.md` for interpretation guidance.
