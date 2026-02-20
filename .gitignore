@@ -11,3 +11,5 @@ env/*.env
 !.env.staging-e2e-real.example
 reports/licenses
 .DS_Store
+
+reports/licenses

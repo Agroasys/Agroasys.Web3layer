@@ -38,6 +38,11 @@ scripts/docker-services.sh logs staging-e2e-real indexer-graphql
 scripts/docker-services.sh down staging-e2e-real
 ```
 
+## CI scope note
+The manual `staging-e2e-real` flow above is a staging validation runbook.
+GitHub Actions release-gate currently enforces workspace lint/typecheck/test/build checks and does not execute this full Docker profile sequence.
+Source of truth for CI behavior: `.github/workflows/release-gate.yml`.
+
 ## Expected output
 - `health staging-e2e-real` reports required services running and healthy.
 - `scripts/staging-e2e-real-gate.sh` reports:

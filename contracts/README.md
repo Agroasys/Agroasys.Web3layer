@@ -469,11 +469,11 @@ Use the SDK modules for operational execution paths instead:
 - `sdk/src/modules/adminSDK.ts`
 - `sdk/src/modules/oracleSDK.ts`
 
-Run SDK smoke tests from `sdk/`:
+Run SDK smoke tests from repository root (workspace `sdk`):
 ```bash
-npm run test:buyer
-npm run test:admin
-npm run test:oracle
+npm -w sdk run test:buyer
+npm -w sdk run test:admin
+npm -w sdk run test:oracle
 ```
 
 ## License
