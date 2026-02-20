@@ -27,6 +27,8 @@ export interface TriggerResponse {
 }
 
 export class TriggerManager {
+    private readonly maxBackoffMs = 30000;
+
     constructor(
         private sdkClient: SDKClient,
         private maxAttempts: number = 5,
@@ -343,11 +345,12 @@ export class TriggerManager {
                 }
 
                 if (attempt < this.maxAttempts && !oracleError.isTerminal) {
-                    const backoffMs = calculateBackoff(attempt, this.baseDelayMs);
+                    const backoffMs = calculateBackoff(attempt, this.baseDelayMs, this.maxBackoffMs);
                     Logger.info('Retrying after backoff', {
                         idempotencyKey: trigger.idempotency_key.substring(0, 32),
                         actionKey,
                         backoffMs,
+                        maxBackoffMs: this.maxBackoffMs,
                         nextAttempt: attempt + 1,
                     });
                     await new Promise(resolve => setTimeout(resolve, backoffMs));
@@ -359,7 +362,7 @@ export class TriggerManager {
             }
         }
 
-        throw new Error('Unexpected retry loop exit');
+        throw new Error(`Retry loop exited without terminal status for action ${actionKey} after ${this.maxAttempts} attempts`);
     }
 
     private async notifyTerminalStatus(

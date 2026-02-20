@@ -25,6 +25,7 @@ export interface OracleConfig {
     // retry
     retryAttempts: number;
     retryDelay: number;
+    hmacNonceTtlSeconds: number;
 
     // notifications
     notificationsEnabled: boolean;

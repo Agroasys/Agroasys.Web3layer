@@ -97,6 +97,25 @@ export async function getExhaustedTriggersForRedrive(limit: number = 50): Promis
     return result.rows;
 }
 
+export async function consumeHmacNonce(apiKey: string, nonce: string, ttlSeconds: number): Promise<boolean> {
+    const result = await pool.query<{ accepted: boolean }>(
+        `WITH pruned_nonce AS (
+            DELETE FROM oracle_hmac_nonces
+            WHERE expires_at <= NOW()
+        ),
+        consumed_nonce AS (
+            INSERT INTO oracle_hmac_nonces (api_key, nonce, expires_at)
+            VALUES ($1, $2, NOW() + ($3 * INTERVAL '1 second'))
+            ON CONFLICT (api_key, nonce) DO NOTHING
+            RETURNING 1
+        )
+        SELECT EXISTS(SELECT 1 FROM consumed_nonce) AS accepted`,
+        [apiKey, nonce, ttlSeconds]
+    );
+
+    return Boolean(result.rows[0]?.accepted);
+}
+
 const ALLOWED_UPDATE_COLUMNS = new Set([
     'status',
     'attempt_count',

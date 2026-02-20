@@ -49,6 +49,17 @@ CREATE INDEX IF NOT EXISTS idx_exhausted_needs_redrive
 ON oracle_triggers(status, updated_at) 
 WHERE status = 'EXHAUSTED_NEEDS_REDRIVE';
 
+CREATE TABLE IF NOT EXISTS oracle_hmac_nonces (
+    api_key VARCHAR(128) NOT NULL,
+    nonce VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    PRIMARY KEY (api_key, nonce)
+);
+
+CREATE INDEX IF NOT EXISTS idx_oracle_hmac_nonces_expires_at
+ON oracle_hmac_nonces(expires_at);
+
 DO $$ 
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_status') THEN
