@@ -36,10 +36,25 @@ export function loadConfig(): OracleConfig {
     try {
         const notificationsEnabled = validateEnvBool('NOTIFICATIONS_ENABLED', false);
         const notificationsWebhookUrl = process.env.NOTIFICATIONS_WEBHOOK_URL;
+        const indexerGraphqlTimeoutMinMs = validateEnvNumber('INDEXER_GQL_TIMEOUT_MIN_MS', 1000);
+        const indexerGraphqlTimeoutMaxMs = validateEnvNumber('INDEXER_GQL_TIMEOUT_MAX_MS', 60000);
+        const indexerGraphqlRequestTimeoutMs = validateEnvNumber('INDEXER_GQL_TIMEOUT_MS', 10000);
 
         if (notificationsEnabled) {
             assert(notificationsWebhookUrl, 'NOTIFICATIONS_WEBHOOK_URL is required when NOTIFICATIONS_ENABLED=true');
         }
+
+        assert(indexerGraphqlTimeoutMinMs >= 1000, 'INDEXER_GQL_TIMEOUT_MIN_MS must be >= 1000');
+        assert(indexerGraphqlTimeoutMaxMs <= 60000, 'INDEXER_GQL_TIMEOUT_MAX_MS must be <= 60000');
+        assert(
+            indexerGraphqlTimeoutMinMs <= indexerGraphqlTimeoutMaxMs,
+            'INDEXER_GQL_TIMEOUT_MIN_MS must be <= INDEXER_GQL_TIMEOUT_MAX_MS',
+        );
+        assert(
+            indexerGraphqlRequestTimeoutMs >= indexerGraphqlTimeoutMinMs &&
+            indexerGraphqlRequestTimeoutMs <= indexerGraphqlTimeoutMaxMs,
+            `INDEXER_GQL_TIMEOUT_MS must be between ${indexerGraphqlTimeoutMinMs} and ${indexerGraphqlTimeoutMaxMs}`,
+        );
 
         const config: OracleConfig = {
             // server
@@ -63,6 +78,7 @@ export function loadConfig(): OracleConfig {
             
             // indexer graphql api
             indexerGraphqlUrl: validateEnv('INDEXER_GRAPHQL_URL'),
+            indexerGraphqlRequestTimeoutMs,
             
             // retry
             retryAttempts: validateEnvNumber('RETRY_ATTEMPTS'),

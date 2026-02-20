@@ -560,6 +560,7 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     needs:
+      - changes
       - docs-profile-guard
       - contracts
       - sdk
@@ -577,6 +578,7 @@ jobs:
           report="ci-reports/release-gate.txt"
 
           declare -A results
+          results["ci/changes"]="${{ needs.changes.result }}"
           results["ci/docs-profile-guard"]="${{ needs.docs-profile-guard.result }}"
           results["ci/contracts"]="${{ needs.contracts.result }}"
           results["ci/sdk"]="${{ needs.sdk.result }}"
@@ -591,7 +593,11 @@ jobs:
           for check in "${!results[@]}"; do
             status="${results[$check]}"
             echo "$check => $status" | tee -a "$report"
-            if [[ "$status" != "success" && "$status" != "skipped" ]]; then
+            if [[ "$check" == "ci/changes" ]]; then
+              if [[ "$status" != "success" ]]; then
+                failed=1
+              fi
+            elif [[ "$status" != "success" && "$status" != "skipped" ]]; then
               failed=1
             fi
           done
