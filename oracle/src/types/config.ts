@@ -20,6 +20,7 @@ export interface OracleConfig {
     
     // indexer graphql api
     indexerGraphqlUrl: string;
+    indexerGraphqlRequestTimeoutMs: number;
     
     // retry
     retryAttempts: number;

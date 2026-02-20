@@ -1,4 +1,6 @@
 import { Trade, TradeStatus } from '@agroasys/sdk';
+import { config } from '../config';
+import { FetchTimeoutError, IndexerNetworkError, fetchWithTimeout } from '../utils/fetchWithTimeout';
 import { Logger } from '../utils/logger';
 
 export interface IndexerTrade {
@@ -59,7 +61,7 @@ export class IndexerClient {
                 }
             `;
 
-            const response = await fetch(this.graphqlUrl, {
+            const response = await fetchWithTimeout(this.graphqlUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -68,7 +70,7 @@ export class IndexerClient {
                     query,
                     variables: { tradeId },
                 }),
-            });
+            }, config.indexerGraphqlRequestTimeoutMs);
 
             if (!response.ok) {
                 throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
@@ -110,8 +112,15 @@ export class IndexerClient {
                 createdAt: new Date(trade.createdAt),
                 arrivalTimestamp: trade.arrivalTimestamp ? new Date(trade.arrivalTimestamp) : null,
             };
-        } catch (error: any) {
-            Logger.error('Failed to query indexer', { tradeId, error: error.message });
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+
+            Logger.error('Failed to query indexer', {
+                tradeId,
+                graphqlUrl: this.graphqlUrl,
+                errorType: this.classifyErrorType(error),
+                error: errorMessage,
+            });
             return null;
         }
     }
@@ -159,7 +168,7 @@ export class IndexerClient {
                 }
             `;
 
-            const response = await fetch(this.graphqlUrl, {
+            const response = await fetchWithTimeout(this.graphqlUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -168,7 +177,7 @@ export class IndexerClient {
                     query,
                     variables: { txHash },
                 }),
-            });
+            }, config.indexerGraphqlRequestTimeoutMs);
 
             if (!response.ok) {
                 throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
@@ -207,14 +216,37 @@ export class IndexerClient {
                 blockNumber: event.blockNumber,
                 timestamp: new Date(event.timestamp),
             };
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             Logger.error('Failed to find confirmation event', { 
                 txHash, 
                 tradeId, 
-                error: error.message 
+                graphqlUrl: this.graphqlUrl,
+                errorType: this.classifyErrorType(error),
+                error: errorMessage,
             });
             return null;
         }
+    }
+
+    private classifyErrorType(error: unknown): 'timeout' | 'network' | 'http' | 'graphql' | 'unknown' {
+        if (error instanceof FetchTimeoutError) {
+            return 'timeout';
+        }
+
+        if (error instanceof IndexerNetworkError) {
+            return 'network';
+        }
+
+        if (error instanceof Error && error.message.startsWith('GraphQL request failed:')) {
+            return 'http';
+        }
+
+        if (error instanceof Error && error.message.startsWith('GraphQL errors:')) {
+            return 'graphql';
+        }
+
+        return 'unknown';
     }
 
     async close(): Promise<void> {

@@ -2,18 +2,24 @@
   "private": true,
   "name": "Agroasys.Web3layer",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20 <23",
+    "npm": ">=10 <12"
+  },
   "workspaces": [
     "contracts",
     "indexer",
     "oracle",
     "sdk",
+    "shared-auth",
     "reconciliation",
     "notifications",
     "ricardian",
     "treasury"
   ],
   "scripts": {
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "npm run lint --workspaces --if-present",
+    "licenses:report": "node scripts/generate-license-report.mjs"
   },
   "overrides": {
     "hardhat": "2.28.6",

@@ -1,6 +1,6 @@
 import { pool } from './connection';
 import { RicardianHashRow } from '../types';
-import { createPostgresNonceStore } from '../../../shared/auth/nonceStore';
+import { createPostgresNonceStore } from '@agroasys/shared-auth';
 
 const serviceAuthNonceStore = createPostgresNonceStore({
   tableName: 'ricardian_auth_nonces',

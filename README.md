@@ -61,7 +61,7 @@ The protocol is built on a modular stack designed for high throughput and cross-
 
 - **Smart Contracts**: Solidity (via Solang/Revive compilers targeting RISC-V PolkaVM).
 
-- **Scripting & Logic**: TypeScript (Node.js v18+ runtime).
+- **Scripting & Logic**: TypeScript (Node.js v20.x runtime, matching CI).
 
 - **Infrastructure**: Docker & Docker Compose (Containerization).
 
@@ -75,7 +75,7 @@ The protocol is built on a modular stack designed for high throughput and cross-
 
 - **Development Framework**: Hardhat (primary testing environment) / Foundry (fuzzing).
 
-- **Oracle Runtime**: Node.js (Isolated Environment for key management and webhook ingress).
+- **Oracle Runtime**: Node.js 20.x (Isolated Environment for key management and webhook ingress).
 
 ## **Repository Structure**
 
@@ -103,6 +103,8 @@ agroasys-web3/
 Run the same checks locally that GitHub Actions runs:
 
 ```bash
+nvm use
+# expected: Node.js v20.x
 npm ci
 npm run -w sdk lint
 npm run -w sdk typecheck --if-present
