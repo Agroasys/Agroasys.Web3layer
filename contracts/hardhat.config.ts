@@ -5,6 +5,19 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import { vars } from 'hardhat/config';
 
+function optionalVar(name: string): string | undefined {
+  try {
+    const v = vars.get(name);
+    return v && v.trim() ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const pk1 = optionalVar("PRIVATE_KEY");
+const pk2 = optionalVar("PRIVATE_KEY2");
+const polkadotAccounts = [pk1, pk2].filter(Boolean) as string[];
+
 const config: HardhatUserConfig = {
   solidity: {
     version:"0.8.28",
@@ -26,16 +39,7 @@ const config: HardhatUserConfig = {
     polkadotTestnet: {
       url: 'https://services.polkadothub-rpc.com/testnet',
       chainId: 420420417,
-      accounts: (() => {
-        const accounts = [vars.get('PRIVATE_KEY')];
-        try {
-          const secondKey = vars.get('PRIVATE_KEY2');
-          if (secondKey) accounts.push(secondKey);
-        } catch {
-          // PRIVATE_KEY2 is optional
-        }
-        return accounts;
-      })(),
+      accounts: polkadotAccounts,
     },
   },
 };
