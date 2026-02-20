@@ -1,4 +1,4 @@
-import { createInMemoryNonceStore, createRedisNonceStore, type NonceStore } from '../../../shared/auth/nonceStore';
+import { createInMemoryNonceStore, createRedisNonceStore, type NonceStore } from '@agroasys/shared-auth';
 import { TreasuryConfig } from '../config';
 import { consumeServiceAuthNonce } from '../database/queries';
 import { Logger } from '../utils/logger';

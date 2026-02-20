@@ -1,6 +1,6 @@
 import { pool } from './connection';
 import { LedgerEntry, LedgerEntryWithState, PayoutLifecycleEvent, PayoutState, TreasuryComponent } from '../types';
-import { createPostgresNonceStore } from '../../../shared/auth/nonceStore';
+import { createPostgresNonceStore } from '@agroasys/shared-auth';
 
 const INGESTION_CURSOR_NAME = 'trade_events';
 const serviceAuthNonceStore = createPostgresNonceStore({

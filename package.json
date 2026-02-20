@@ -11,6 +11,7 @@
     "indexer",
     "oracle",
     "sdk",
+    "shared-auth",
     "reconciliation",
     "notifications",
     "ricardian",

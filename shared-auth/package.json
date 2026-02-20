@@ -1,0 +1,16 @@
+{
+  "name": "@agroasys/shared-auth",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "nonceStore.js",
+    "nonceStore.d.ts",
+    "serviceAuth.js",
+    "serviceAuth.d.ts"
+  ],
+  "license": "Apache-2.0"
+}

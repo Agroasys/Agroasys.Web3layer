@@ -1,4 +1,4 @@
-import { createPostgresNonceStore } from '../../shared/auth/nonceStore';
+import { createPostgresNonceStore } from '@agroasys/shared-auth';
 
 interface StoreState {
   nowMs: number;
