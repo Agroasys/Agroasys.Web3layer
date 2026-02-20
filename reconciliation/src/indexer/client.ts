@@ -1,4 +1,6 @@
 import type { IndexedTradeRecord } from '../types';
+import { config } from '../config';
+import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 import { Logger } from '../utils/logger';
 
 interface GraphQlResponse {
@@ -44,13 +46,13 @@ export class IndexerClient {
       }
     `;
 
-    const response = await fetch(this.graphqlUrl, {
+    const response = await fetchWithTimeout(this.graphqlUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ query, variables: { limit, offset } }),
-    });
+    }, config.indexerGraphqlRequestTimeoutMs);
 
     if (!response.ok) {
       throw new Error(`Indexer request failed: ${response.status} ${response.statusText}`);

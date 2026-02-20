@@ -14,6 +14,7 @@ export interface TreasuryConfig {
   dbUser: string;
   dbPassword: string;
   indexerGraphqlUrl: string;
+  indexerGraphqlRequestTimeoutMs: number;
   ingestBatchSize: number;
   ingestMaxEvents: number;
   authEnabled: boolean;
@@ -89,6 +90,9 @@ export function loadConfig(): TreasuryConfig {
   const nonceTtlSeconds = process.env.NONCE_TTL_SECONDS
     ? envNumber('NONCE_TTL_SECONDS')
     : authNonceTtlSeconds;
+  const indexerGraphqlTimeoutMinMs = envNumber('INDEXER_GQL_TIMEOUT_MIN_MS', 1000);
+  const indexerGraphqlTimeoutMaxMs = envNumber('INDEXER_GQL_TIMEOUT_MAX_MS', 60000);
+  const indexerGraphqlRequestTimeoutMs = envNumber('INDEXER_GQL_TIMEOUT_MS', 10000);
 
   if (authEnabled) {
     assert(
@@ -105,6 +109,18 @@ export function loadConfig(): TreasuryConfig {
     assert(nonceRedisUrl, 'REDIS_URL is required when NONCE_STORE=redis');
   }
 
+  assert(indexerGraphqlTimeoutMinMs >= 1000, 'INDEXER_GQL_TIMEOUT_MIN_MS must be >= 1000');
+  assert(indexerGraphqlTimeoutMaxMs <= 60000, 'INDEXER_GQL_TIMEOUT_MAX_MS must be <= 60000');
+  assert(
+    indexerGraphqlTimeoutMinMs <= indexerGraphqlTimeoutMaxMs,
+    'INDEXER_GQL_TIMEOUT_MIN_MS must be <= INDEXER_GQL_TIMEOUT_MAX_MS'
+  );
+  assert(
+    indexerGraphqlRequestTimeoutMs >= indexerGraphqlTimeoutMinMs &&
+      indexerGraphqlRequestTimeoutMs <= indexerGraphqlTimeoutMaxMs,
+    `INDEXER_GQL_TIMEOUT_MS must be between ${indexerGraphqlTimeoutMinMs} and ${indexerGraphqlTimeoutMaxMs}`
+  );
+
   const config: TreasuryConfig = {
     port: envNumber('PORT'),
     dbHost: env('DB_HOST'),
@@ -113,6 +129,7 @@ export function loadConfig(): TreasuryConfig {
     dbUser: env('DB_USER'),
     dbPassword: env('DB_PASSWORD'),
     indexerGraphqlUrl: env('INDEXER_GRAPHQL_URL'),
+    indexerGraphqlRequestTimeoutMs,
     ingestBatchSize: envNumber('TREASURY_INGEST_BATCH_SIZE', 100),
     ingestMaxEvents: envNumber('TREASURY_INGEST_MAX_EVENTS', 2000),
     authEnabled,

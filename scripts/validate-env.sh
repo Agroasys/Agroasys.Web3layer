@@ -57,7 +57,8 @@ if [[ -f "$PROFILE_FILE" ]]; then
   load_env_file "$PROFILE_FILE"
 fi
 
-required_keys=(
+required_groups=(
+  # shared compose/database inputs
   POSTGRES_USER
   POSTGRES_PASSWORD
   RICARDIAN_DB_NAME
@@ -67,40 +68,79 @@ required_keys=(
   INDEXER_DB_NAME
 )
 
-if [[ "$PROFILE" == "staging-e2e" || "$PROFILE" == "staging-e2e-real" ]]; then
-  required_keys+=(
-    INDEXER_GATEWAY_URL
-    INDEXER_RPC_ENDPOINT
-    INDEXER_START_BLOCK
-    INDEXER_GRAPHQL_PORT
-    INDEXER_CONTRACT_ADDRESS
-    ORACLE_API_KEY
-    ORACLE_HMAC_SECRET
+if [[ "$PROFILE" == "local-dev" || "$PROFILE" == "staging-e2e" || "$PROFILE" == "staging-e2e-real" ]]; then
+  required_groups+=(
+    # service ports used by local/staging compose profiles
+    RICARDIAN_PORT
+    TREASURY_PORT
+    ORACLE_PORT
+
+    # oracle config aliases:
+    # left side = profile key used in compose; right side = direct runtime key used in oracle/src/config.ts
+    ORACLE_API_KEY\|API_KEY
+    ORACLE_HMAC_SECRET\|HMAC_SECRET
     ORACLE_PRIVATE_KEY
-    ORACLE_RPC_URL
-    ORACLE_CHAIN_ID
-    ORACLE_ESCROW_ADDRESS
-    ORACLE_USDC_ADDRESS
-    RECONCILIATION_RPC_URL
-    RECONCILIATION_CHAIN_ID
-    RECONCILIATION_ESCROW_ADDRESS
-    RECONCILIATION_USDC_ADDRESS
-    RECONCILIATION_INDEXER_GRAPHQL_URL
-    TREASURY_INDEXER_GRAPHQL_URL
-    ORACLE_INDEXER_GRAPHQL_URL
+    ORACLE_RPC_URL\|RPC_URL
+    ORACLE_CHAIN_ID\|CHAIN_ID
+    ORACLE_ESCROW_ADDRESS\|ESCROW_ADDRESS
+    ORACLE_USDC_ADDRESS\|USDC_ADDRESS
+    ORACLE_INDEXER_GRAPHQL_URL\|INDEXER_GRAPHQL_URL
+    ORACLE_RETRY_ATTEMPTS\|RETRY_ATTEMPTS
+    ORACLE_RETRY_DELAY\|RETRY_DELAY
+
+    # reconciliation config aliases (reconciliation/src/config.ts)
+    RECONCILIATION_RPC_URL\|RPC_URL
+    RECONCILIATION_CHAIN_ID\|CHAIN_ID
+    RECONCILIATION_ESCROW_ADDRESS\|ESCROW_ADDRESS
+    RECONCILIATION_USDC_ADDRESS\|USDC_ADDRESS
+    RECONCILIATION_INDEXER_GRAPHQL_URL\|INDEXER_GRAPHQL_URL
+
+    # treasury config aliases (treasury/src/config.ts)
+    TREASURY_INDEXER_GRAPHQL_URL\|INDEXER_GRAPHQL_URL
   )
 fi
 
-missing_keys=()
-for key in "${required_keys[@]}"; do
-  if [[ -z "${!key:-}" ]]; then
-    missing_keys+=("$key")
+if [[ "$PROFILE" == "staging-e2e" || "$PROFILE" == "staging-e2e-real" ]]; then
+  required_groups+=(
+    # indexer pipeline aliases (indexer/src/config.ts)
+    INDEXER_GATEWAY_URL\|GATEWAY_URL
+    INDEXER_RPC_ENDPOINT\|RPC_ENDPOINT
+    INDEXER_START_BLOCK\|START_BLOCK
+    INDEXER_RATE_LIMIT\|RATE_LIMIT
+    INDEXER_GRAPHQL_PORT\|GRAPHQL_PORT
+    INDEXER_CONTRACT_ADDRESS\|CONTRACT_ADDRESS
+  )
+fi
+
+if [[ "$PROFILE" == "staging-e2e-real" ]]; then
+  required_groups+=(
+    # real staging gate context
+    STAGING_E2E_REAL_NETWORK_NAME
+    STAGING_E2E_REAL_CHAIN_ID
+  )
+fi
+
+missing_groups=()
+for group in "${required_groups[@]}"; do
+  IFS='|' read -r -a keys <<< "$group"
+  found=0
+  for key in "${keys[@]}"; do
+    if [[ -n "${!key:-}" ]]; then
+      found=1
+      break
+    fi
+  done
+
+  if [[ "$found" -eq 0 ]]; then
+    missing_groups+=("$group")
   fi
 done
 
-if [[ "${#missing_keys[@]}" -gt 0 ]]; then
+if [[ "${#missing_groups[@]}" -gt 0 ]]; then
   echo "Missing required env keys for profile '$PROFILE':" >&2
-  printf '  - %s\n' "${missing_keys[@]}" >&2
+  for group in "${missing_groups[@]}"; do
+    echo "  - ${group//|/ or }" >&2
+  done
   exit 1
 fi
 
