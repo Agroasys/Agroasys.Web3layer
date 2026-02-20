@@ -19,6 +19,13 @@ export function generateRequestHash(timestamp: string, body: string, secret: str
     return crypto.createHmac('sha256', secret).update(payload).digest('hex');
 }
 
+export function deriveRequestNonce(timestamp: string, body: string, signature: string): string {
+    return crypto
+        .createHash('sha256')
+        .update([timestamp, body, signature].join(':'))
+        .digest('hex');
+}
+
 export function verifyRequestSignature(
     timestamp: string,
     body: string,
@@ -62,21 +69,30 @@ export function verifyRequestSignature(
 }
 
 export function generateJitter(maxJitterMs: number = 1000): number {
+    if (maxJitterMs <= 0) {
+        return 0;
+    }
+
     return Math.floor(Math.random() * maxJitterMs);
 }
 
 export function calculateBackoff(
     attempt: number,
     baseDelay: number,
+    maxDelayMs: number = 30000,
     maxJitterMs: number = 1000
 ): number {
     const exponentialDelay = baseDelay * Math.pow(2, attempt - 1);
-    const jitter = generateJitter(maxJitterMs);
-    const totalDelay = exponentialDelay + jitter;
+    const cappedExponentialDelay = Math.min(exponentialDelay, maxDelayMs);
+    const availableJitterWindow = Math.max(0, maxDelayMs - cappedExponentialDelay);
+    const jitter = generateJitter(Math.min(maxJitterMs, availableJitterWindow + 1));
+    const totalDelay = cappedExponentialDelay + jitter;
     
     Logger.info('Calculated backoff', {
         attempt,
         exponentialDelay,
+        cappedExponentialDelay,
+        maxDelayMs,
         jitter,
         totalDelay
     });

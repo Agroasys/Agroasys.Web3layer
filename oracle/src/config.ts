@@ -39,6 +39,9 @@ export function loadConfig(): OracleConfig {
         const indexerGraphqlTimeoutMinMs = validateEnvNumber('INDEXER_GQL_TIMEOUT_MIN_MS', 1000);
         const indexerGraphqlTimeoutMaxMs = validateEnvNumber('INDEXER_GQL_TIMEOUT_MAX_MS', 60000);
         const indexerGraphqlRequestTimeoutMs = validateEnvNumber('INDEXER_GQL_TIMEOUT_MS', 10000);
+        const retryAttempts = validateEnvNumber('RETRY_ATTEMPTS', 3);
+        const retryDelay = validateEnvNumber('RETRY_DELAY', 1000);
+        const hmacNonceTtlSeconds = validateEnvNumber('HMAC_NONCE_TTL_SECONDS', 600);
 
         if (notificationsEnabled) {
             assert(notificationsWebhookUrl, 'NOTIFICATIONS_WEBHOOK_URL is required when NOTIFICATIONS_ENABLED=true');
@@ -81,8 +84,9 @@ export function loadConfig(): OracleConfig {
             indexerGraphqlRequestTimeoutMs,
             
             // retry
-            retryAttempts: validateEnvNumber('RETRY_ATTEMPTS'),
-            retryDelay: validateEnvNumber('RETRY_DELAY'),
+            retryAttempts,
+            retryDelay,
+            hmacNonceTtlSeconds,
 
             // notifications
             notificationsEnabled,
@@ -91,6 +95,9 @@ export function loadConfig(): OracleConfig {
             notificationsRequestTimeoutMs: validateEnvNumber('NOTIFICATIONS_REQUEST_TIMEOUT_MS', 5000),
         };
 
+        assert(config.retryAttempts >= 0 && config.retryAttempts <= 10, 'RETRY_ATTEMPTS must be between 0 and 10');
+        assert(config.retryDelay >= 100 && config.retryDelay <= 30000, 'RETRY_DELAY must be between 100 and 30000');
+        assert(config.hmacNonceTtlSeconds >= 60 && config.hmacNonceTtlSeconds <= 3600, 'HMAC_NONCE_TTL_SECONDS must be between 60 and 3600');
         assert(config.notificationsCooldownMs >= 0, 'NOTIFICATIONS_COOLDOWN_MS must be >= 0');
         assert(config.notificationsRequestTimeoutMs >= 1000, 'NOTIFICATIONS_REQUEST_TIMEOUT_MS must be >= 1000');
         
