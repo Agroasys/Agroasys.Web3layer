@@ -8,7 +8,9 @@
     "index.js",
     "index.d.ts",
     "nonceStore.js",
-    "nonceStore.d.ts"
+    "nonceStore.d.ts",
+    "serviceAuth.js",
+    "serviceAuth.d.ts"
   ],
   "license": "Apache-2.0"
 }
