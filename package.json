@@ -19,7 +19,8 @@
   ],
   "scripts": {
     "lint": "npm run lint --workspaces --if-present",
-    "licenses:report": "node scripts/generate-license-report.mjs"
+    "licenses:report": "node scripts/generate-license-report.mjs",
+    "security:deps": "node scripts/security-deps-report.mjs"
   },
   "overrides": {
     "hardhat": "2.28.6",
