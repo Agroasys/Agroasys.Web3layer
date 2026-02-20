@@ -1,4 +1,6 @@
 import { IndexerTradeEvent } from '../types';
+import { config } from '../config';
+import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 
 interface GraphQlResponse {
   data?: {
@@ -46,7 +48,7 @@ export class IndexerClient {
       }
     `;
 
-    const response = await fetch(this.graphqlUrl, {
+    const response = await fetchWithTimeout(this.graphqlUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -55,7 +57,7 @@ export class IndexerClient {
         query,
         variables: { limit, offset },
       }),
-    });
+    }, config.indexerGraphqlRequestTimeoutMs);
 
     if (!response.ok) {
       throw new Error(`Indexer GraphQL request failed: ${response.status} ${response.statusText}`);

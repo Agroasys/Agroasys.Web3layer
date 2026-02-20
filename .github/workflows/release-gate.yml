@@ -8,6 +8,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   changes:
     name: changes
@@ -25,7 +28,7 @@ jobs:
       treasury: ${{ steps.filter.outputs.treasury }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Resolve release gate mode
         id: mode
@@ -48,7 +51,7 @@ jobs:
 
       - name: Detect changed paths
         id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36
         with:
           filters: |
             shared:
@@ -79,7 +82,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Check deprecated profile names in docs
         run: scripts/tests/docs-profile-name-guard.sh
@@ -95,10 +98,10 @@ jobs:
       HARDHAT_VAR_PRIVATE_KEY2: '0x1111111111111111111111111111111111111111111111111111111111111111'
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
           node-version: '20'
           cache: npm
@@ -141,7 +144,7 @@ jobs:
 
       - name: Upload workspace report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: ci-report-${{ env.WORKSPACE }}
           path: ci-reports/${{ env.WORKSPACE }}.txt
@@ -155,10 +158,10 @@ jobs:
       WORKSPACE: sdk
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
           node-version: '20'
           cache: npm
@@ -198,7 +201,7 @@ jobs:
 
       - name: Upload workspace report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: ci-report-${{ env.WORKSPACE }}
           path: ci-reports/${{ env.WORKSPACE }}.txt
@@ -212,10 +215,10 @@ jobs:
       WORKSPACE: oracle
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
           node-version: '20'
           cache: npm
@@ -260,7 +263,7 @@ jobs:
 
       - name: Upload workspace report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: ci-report-${{ env.WORKSPACE }}
           path: ci-reports/${{ env.WORKSPACE }}.txt
@@ -274,10 +277,10 @@ jobs:
       WORKSPACE: indexer
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
           node-version: '20'
           cache: npm
@@ -317,7 +320,7 @@ jobs:
 
       - name: Upload workspace report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: ci-report-${{ env.WORKSPACE }}
           path: ci-reports/${{ env.WORKSPACE }}.txt
@@ -331,10 +334,10 @@ jobs:
       WORKSPACE: notifications
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
           node-version: '20'
           cache: npm
@@ -374,7 +377,7 @@ jobs:
 
       - name: Upload workspace report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: ci-report-${{ env.WORKSPACE }}
           path: ci-reports/${{ env.WORKSPACE }}.txt
@@ -388,10 +391,10 @@ jobs:
       WORKSPACE: reconciliation
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
           node-version: '20'
           cache: npm
@@ -436,7 +439,7 @@ jobs:
 
       - name: Upload workspace report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: ci-report-${{ env.WORKSPACE }}
           path: ci-reports/${{ env.WORKSPACE }}.txt
@@ -450,10 +453,10 @@ jobs:
       WORKSPACE: ricardian
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
           node-version: '20'
           cache: npm
@@ -493,7 +496,7 @@ jobs:
 
       - name: Upload workspace report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: ci-report-${{ env.WORKSPACE }}
           path: ci-reports/${{ env.WORKSPACE }}.txt
@@ -507,10 +510,10 @@ jobs:
       WORKSPACE: treasury
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
           node-version: '20'
           cache: npm
@@ -550,7 +553,7 @@ jobs:
 
       - name: Upload workspace report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: ci-report-${{ env.WORKSPACE }}
           path: ci-reports/${{ env.WORKSPACE }}.txt
@@ -560,6 +563,7 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     needs:
+      - changes
       - docs-profile-guard
       - contracts
       - sdk
@@ -577,6 +581,7 @@ jobs:
           report="ci-reports/release-gate.txt"
 
           declare -A results
+          results["ci/changes"]="${{ needs.changes.result }}"
           results["ci/docs-profile-guard"]="${{ needs.docs-profile-guard.result }}"
           results["ci/contracts"]="${{ needs.contracts.result }}"
           results["ci/sdk"]="${{ needs.sdk.result }}"
@@ -591,7 +596,11 @@ jobs:
           for check in "${!results[@]}"; do
             status="${results[$check]}"
             echo "$check => $status" | tee -a "$report"
-            if [[ "$status" != "success" && "$status" != "skipped" ]]; then
+            if [[ "$check" == "ci/changes" ]]; then
+              if [[ "$status" != "success" ]]; then
+                failed=1
+              fi
+            elif [[ "$status" != "success" && "$status" != "skipped" ]]; then
               failed=1
             fi
           done
@@ -611,7 +620,7 @@ jobs:
 
       - name: Upload release gate report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: ci-report-release-gate
           path: ci-reports/release-gate.txt
