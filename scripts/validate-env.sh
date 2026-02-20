@@ -58,6 +58,7 @@ if [[ -f "$PROFILE_FILE" ]]; then
 fi
 
 required_keys=(
+  # shared compose/database inputs
   POSTGRES_USER
   POSTGRES_PASSWORD
   RICARDIAN_DB_NAME
@@ -67,13 +68,14 @@ required_keys=(
   INDEXER_DB_NAME
 )
 
-if [[ "$PROFILE" == "staging-e2e" || "$PROFILE" == "staging-e2e-real" ]]; then
+if [[ "$PROFILE" != "infra" ]]; then
   required_keys+=(
-    INDEXER_GATEWAY_URL
-    INDEXER_RPC_ENDPOINT
-    INDEXER_START_BLOCK
-    INDEXER_GRAPHQL_PORT
-    INDEXER_CONTRACT_ADDRESS
+    # service ports
+    RICARDIAN_PORT
+    TREASURY_PORT
+    ORACLE_PORT
+
+    # oracle runtime config (oracle/src/config.ts)
     ORACLE_API_KEY
     ORACLE_HMAC_SECRET
     ORACLE_PRIVATE_KEY
@@ -81,13 +83,39 @@ if [[ "$PROFILE" == "staging-e2e" || "$PROFILE" == "staging-e2e-real" ]]; then
     ORACLE_CHAIN_ID
     ORACLE_ESCROW_ADDRESS
     ORACLE_USDC_ADDRESS
+    ORACLE_INDEXER_GRAPHQL_URL
+    ORACLE_RETRY_ATTEMPTS
+    ORACLE_RETRY_DELAY
+
+    # reconciliation runtime config (reconciliation/src/config.ts)
     RECONCILIATION_RPC_URL
     RECONCILIATION_CHAIN_ID
     RECONCILIATION_ESCROW_ADDRESS
     RECONCILIATION_USDC_ADDRESS
     RECONCILIATION_INDEXER_GRAPHQL_URL
+
+    # treasury runtime config (treasury/src/config.ts)
     TREASURY_INDEXER_GRAPHQL_URL
-    ORACLE_INDEXER_GRAPHQL_URL
+  )
+fi
+
+if [[ "$PROFILE" == "staging-e2e" || "$PROFILE" == "staging-e2e-real" ]]; then
+  required_keys+=(
+    # indexer pipeline config (indexer/src/config.ts)
+    INDEXER_GATEWAY_URL
+    INDEXER_RPC_ENDPOINT
+    INDEXER_START_BLOCK
+    INDEXER_RATE_LIMIT
+    INDEXER_GRAPHQL_PORT
+    INDEXER_CONTRACT_ADDRESS
+  )
+fi
+
+if [[ "$PROFILE" == "staging-e2e-real" ]]; then
+  required_keys+=(
+    # real staging gate context
+    STAGING_E2E_REAL_NETWORK_NAME
+    STAGING_E2E_REAL_CHAIN_ID
   )
 fi
 
