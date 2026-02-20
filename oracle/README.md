@@ -111,6 +111,8 @@ All requests require HMAC signature verification and API key.
 
 ## Endpoints
 
+All Oracle routes are mounted under `/api/oracle`, so the full URL for each entry below looks like `POST /api/oracle/release-stage1` when the service is exposed via Docker compose or `/api/oracle/health` when probing the health endpoint.
+
 * POST /release-stage1
 * POST /confirm-arrival
 * POST /finalize-trade
@@ -146,6 +148,20 @@ Correlation keys are emitted when available:
 - `actionKey`
 - `requestId`
 - `txHash`
+
+## Environment
+
+Copy `oracle/.env.example` to `.env` and fill in the values for each section below before starting the service:
+
+| Variable | Purpose |
+| --- | --- |
+| `PORT` | HTTP listener |
+| `API_KEY`, `HMAC_SECRET` | HMAC authentication secrets |
+| `RPC_URL`, `CHAIN_ID`, `ESCROW_ADDRESS`, `USDC_ADDRESS`, `ORACLE_PRIVATE_KEY` | Chain connection + oracle signing |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Postgres configuration |
+| `INDEXER_GRAPHQL_URL` | Read-only backend indexer endpoint |
+| `RETRY_ATTEMPTS`, `RETRY_DELAY` | Retry configuration for failed blockchain calls |
+| `NOTIFICATIONS_*` | Optional notification webhooks & cooldowns listed in `.env.example` |
 
 ## License
 Licensed under Apache-2.0.
