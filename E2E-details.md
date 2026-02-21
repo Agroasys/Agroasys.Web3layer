@@ -1,216 +1,778 @@
-# E2E Tests:
+# E2E Test Matrix — AgroasysEscrow
 
+## Deployed Contracts
 
-## Contract infos
+| Contract      | Address                                      |
+|---------------|----------------------------------------------|
+| AgroasysEscrow | `` |
+| MockUSDC       | `` |
+| Indexer start block | `` |
 
-- escrow address: 0x8425B6C434469801B04544B8c9cbBAaeEE931fF9
-- usdc address: 0xEea5766E43D0c7032463134Afc121e63C9f9C260
-- indexer start block: 5361048
+---
 
+## Test values
 
-## Trade infos
+| Role       | Address                                      |
+|------------|----------------------------------------------|
+| buyer      | `` |
+| supplier   | `` |
+| treasury   | `` |
+| admin1     | `` |
+| admin2     | `` |
+| admin3     | `` |
+| oracle     | ` |
 
-- buyer address: 0xc7fFC27f58117f13BEE926dF9821C7da5826ce23
-- supplier: 0x4aF052cB4B3eC7b58322548021bF254Cc4c80b2c
-- treasury address: 0x20e7E6fC0905E17De2D28E926Ad56324a6844a1D
-- admin1 address: 0x20e7E6fC0905E17De2D28E926Ad56324a6844a1D
-- admin2 address: 0x229C75F0cD13D6ab7621403Bd951a9e43ba53b1e
-- admin3 address: 0x4aF052cB4B3eC7b58322548021bF254Cc4c80b2c
+---
 
+## Trade Parameters (default for all trades)
 
-## Trade 1: user-flow without dispute (24h)
+| Field                  | Value         |
+|------------------------|---------------|
+| totalAmount            | `10_000`  |
+| logisticsAmount        | `1_000`   |
+| platformFeesAmount     | `500`     |
+| supplierFirstTranche   | `4_000`   |
+| supplierSecondTranche  | `4_500`   |
 
-### 1 Trade creation (from buyer sdk)
-- Trade created:
-  - totalAmount: 10_000
-  - logisticsAmount: 1_000
-  - platformFeesAmount: 500
-  - supplierFirstTranche: 4_000
-  - supplierSecondTranche: 4_500
 
 
-- tx hash: 0x4481481c521db0663b8304cef41109f6b918224b2c0e6c4735995e97f4a6a00c
-- block number: 5361420
-- trade id: 0
+---
 
-event emitted: TradeLocked
+## Test Scenario Overview
 
+| # | Scenario                                          | Status |
+|---|---------------------------------------------------|--------|
+| T1 | Happy path: no dispute (finalize after 24h)      |  TODO  |
+| T2 | Dispute: RESOLVE (supplier gets 2nd tranche)     |  TODO  |
+| T3 | Dispute: REFUND (buyer gets 2nd tranche)         |  TODO  |
+| T4 | Cancel LOCKED trade after 7-day timeout          | TODO |
+| T5 | Refund IN_TRANSIT after 14-day timeout           | TODO |
+| G1 | Governance: Add admin (24h timelock)            | TODO |
+| G2 | Governance: Change oracle (24h timelock)        | TODO |
+| E1 | Emergency: pause / unpause (multi-sig, no delay)| TODO |
+| E2 | Emergency: disableOracle + oracle update | TODO |
 
-### 2 Release Funds Stage1 (from oracle module via api request)
+---
 
+## T1 — Happy path: no dispute (finalize after 24h window)
 
-- tx hash: 0x7135b55d4a39863b39ec33174fe94791dd3f628a04961341f89db902f9fa8c91
-- block number: 5361597
-- trade id: 0
+> Status: TODO
 
-- event emitted: FundsReleasedStage1, PlatformFeesPaidStage1
+### T1.1 — createTrade (buyer SDK)
 
+| Field             | Value |
+|-------------------|----------------------|
+| Date              |                 |
+| Caller            | buyer                |
+| signature deadline | now + 1h            |
+| tx hash           |                 |
+| block number      |                 |
+| trade id        |                 |
 
-### 3 Confirm arrival (from oracle module via api request)
+**Pre-conditions:**
+- buyer USDC balance ≥ 10_000
+- contract not paused
 
 
-- tx hash: 0x5d9316650641e80cec381e97a9c55d6b54006f75e8c48ee8f8669f2d5b206fdb
-- block number: 5361650
-- trade id: 0
+**Expected events:**
+- `TradeLocked(tradeId, buyer, supplier, 10_000, 1_000, 500, 4_000, 4_500, ricardianHash)`
 
-- event emitted: ArrivalConfirmed
+**Post-conditions to verify:**
+- Status is `LOCKED`
+- Total Locked is `10_000`
+- escrow USDC balance increased by `10_000`
+- buyer USDC balance decreased by `10_000`
 
 
-### 4 Finalize trade (from oracle module via api request)
+---
 
+### T1.2 — releaseFundsStage1 (oracle)
 
-- tx hash: 
-- block number: 
-- trade id: 0
+| Field        | Value |
+|--------------|----------------------|
+| Date         |                 |
+| Caller       | oracle               |
+| trade id     |                 |
+| tx hash      |                 |
+| block number |                 |
 
-- event emitted: 
+**Pre-conditions:**
+- Status is `LOCKED`
+- `oracleActive == true`
+- contract not paused
 
+**Expected events:**
+- `FundsReleasedStage1(tradeId, supplier, 4_000, treasury, 1_000)`
+- `PlatformFeesPaidStage1(tradeId, treasury, 500)`
 
-## Trade 2: user-flow with dispute -> resolve resolution (no delay)
+**Post-conditions to verify:**
+- Status is `IN_TRANSIT`
+- supplier USDC balance increased by `4_000`
+- treasury USDC balance increased by `1_000 + 500 = 1_500`
+- escrow USDC balance decreased by `5_500` (now holds `4_500`)
 
-### 1 Trade creation (from buyer sdk)
-- Trade created:
-  - totalAmount: 10_000
-  - logisticsAmount: 1_000
-  - platformFeesAmount: 500
-  - supplierFirstTranche: 4_000
-  - supplierSecondTranche: 4_500
+---
 
+### T1.3 — confirmArrival (oracle)
 
-- tx hash: 0x9b5f4c4bafe05e155b0ccf0afb5fccf9cbf6ce026127a036cea245a0e563c826
-- block number: 5361927
-- trade id: 1
+| Field        | Value |
+|--------------|----------------------|
+| Date         |      |
+| Caller       | oracle               |
+| trade id     |      |
+| tx hash      |      |
+| block number |      |
 
-event emitted: TradeLocked
+**Pre-conditions:**
+- Status is `IN_TRANSIT`
+- `oracleActive == true`
+- contract not paused
 
+**Expected events:**
+- `ArrivalConfirmed(tradeId, arrivalTimestamp)`
 
-### 2 Release Funds Stage1 (from oracle module via api request)
+**Post-conditions to verify:**
+- Status is `ARRIVAL_CONFIRMED`
+- `trades[tradeId].arrivalTimestamp` ≈ block.timestamp
+- `inTransitSince[tradeId] == 0`
+- Dispute window opens: buyer can call `openDispute` until `arrivalTimestamp + 24h`
 
+---
 
-- tx hash: 0x1b831a9e027400dc48e633a105c582054a5fdb057406e42d943b2ff6fcc60997
-- block number: 5361971
-- trade id: 1
+### T1.4 — finalizeAfterDisputeWindow (called after 24h)
 
-- event emitted: FundsReleasedStage1, PlatformFeesPaidStage1
+| Field              | Value |
+|--------------------|----------------------|
+| Date               | (≥ arrivalTimestamp + 24h) |
+| Caller             | oracle |
+| trade id           |      |
+| tx hash            |      |
+| block number       |      |
 
+**Pre-conditions:**
+- Status is `ARRIVAL_CONFIRMED`
+- `block.timestamp > trades[tradeId].arrivalTimestamp + 24h`
+- contract not paused
 
-### 3 Confirm arrival (from oracle module via api request)
+**Expected events:**
+- `FinalTrancheReleased(tradeId, supplier, 4_500)`
 
+**Post-conditions to verify:**
+- Status is `CLOSED`
+- supplier USDC balance increased by `4_500`
+- escrow USDC balance == `0` for this trade
+- calling again reverts with `"must be ARRIVAL_CONFIRMED"`
 
-- tx hash: 0x47a20b8b5a495c02f8f9d9f3d8440e82e620e5f7c15abbabe346c21b6d6d431b
-- block number: 5362125
-- trade id: 1
+---
 
-- event emitted: ArrivalConfirmed
+## T2 — Dispute → RESOLVE (supplier keeps 2nd tranche)
 
+> Status: TODO
 
-### 4 Open dispute (from buyer sdk)
+### T2.1 — createTrade (buyer SDK)
 
+| Field             | Value |
+|-------------------|----------------------|
+| Date              |      |
+| Caller            | buyer                |
+| tx hash           |      |
+| block number      |      |
+| trade id returned |      |
 
-- tx hash: 0xa63d2ec7178276487b3572c7ea5611df2b17580494c9009e8ae4ff1fe3c0cf64
-- block number: 5362199
-- trade id: 1
+**Same pre/post conditions as T1.1 but with incremented nonce.**
+
+---
+
+### T2.2 — releaseFundsStage1 (oracle)
+
+
+| Field        | Value |
+|--------------|----------------------|
+| Date         |      |
+| tx hash      |      |
+| block number |      |
+
+---
+
+### T2.3 — confirmArrival (oracle)
+
+
+| Field        | Value |
+|--------------|----------------------|
+| Date         |      |
+| tx hash      |      |
+| block number |      |
 
-- event emitted: DisputeOpenedByBuyer
+---
+
+### T2.4 — openDispute (buyer SDK, within 24h window)
+
+| Field        | Value |
+|--------------|----------------------|
+| Date         | (≤ arrivalTimestamp + 24h) |
+| Caller       | buyer                |
+| trade id     |      |
+| tx hash      |      |
+| block number |      |
 
-### 4 Propose solution (from admin sdk)
+**Pre-conditions:**
+- Status is `ARRIVAL_CONFIRMED`
+- `block.timestamp <= arrivalTimestamp + DISPUTE_WINDOW`
+- `msg.sender == trades[tradeId].buyerAddress`
+- contract not paused
 
+**Expected events:**
+- `DisputeOpenedByBuyer(tradeId)`
 
-- tx hash: 
-- block number: 
-- trade id: 1
+**Post-conditions to verify:**
+- Status is `FROZEN`
+- Escrow still holds `4_500` (locked until admin resolution)
+- Calling again reverts with `"must be ARRIVAL_CONFIRMED"`
 
-- event emitted: 
+---
 
+### T2.5 — proposeDisputeSolution (admin1, RESOLVE)
 
-### 4 Approve/execute dispute (from admin sdk)
+| Field        | Value |
+|--------------|----------------------|
+| Date         |      |
+| Caller       | admin1               |
+| trade id     |      |
+| disputeStatus | `RESOLVE`           |
+| proposal id  |      |
+| tx hash      |      |
+| block number |      |
 
+**Pre-conditions:**
+- Status is `FROZEN`
+- `isAdmin[caller] == true`
+- No active proposal for this trade
+- contract not paused
 
-- tx hash: 
-- block number: 
-- trade id: 1
+**Expected events:**
+- `DisputeSolutionProposed(proposalId, tradeId, RESOLVE, admin1)`
 
-- event emitted: 
+**Post-conditions to verify:**
+- `disputeProposals[proposalId].approvalCount == 1`
+- `tradeHasActiveDisputeProposal[tradeId] == true`
+- `tradeActiveDisputeProposalId[tradeId] == proposalId`
+- `disputeProposalExpiresAt[proposalId]` ≈ block.timestamp + 7 days
+- admin1 cannot propose again (reverts `"active proposal exists"`)
 
-## Trade 3: user-flow with dispute -> refund resolution (no delay)
+---
 
-### 1 Trade creation (from buyer sdk)
-- Trade created:
-  - totalAmount: 10_000
-  - logisticsAmount: 1_000
-  - platformFeesAmount: 500
-  - supplierFirstTranche: 4_000
-  - supplierSecondTranche: 4_500
+### T2.6 — approveDisputeSolution (admin2 → auto-execute)
 
+| Field        | Value |
+|--------------|----------------------|
+| Date         |      |
+| Caller       | admin2               |
+| proposal id  |      |
+| tx hash      |      |
+| block number |      |
 
-- tx hash: 
-- block number: 
-- trade id: 1
+**Pre-conditions:**
+- `disputeProposals[proposalId].executed == false`
+- proposal not expired
+- `isAdmin[caller] == true`
+- admin2 has not already approved
+- contract not paused
 
-event emitted: TradeLocked
+**Expected events (on 2nd approval reaching requiredApprovals):**
+- `DisputeApproved(proposalId, admin2, 2, requiredApprovals)`
+- `DisputePayout(tradeId, proposalId, supplier, 4_500, RESOLVE)`
+- `DisputeFinalized(proposalId, tradeId, RESOLVE)`
 
+**Post-conditions to verify:**
+- Status is `CLOSED`
+- `disputeProposals[proposalId].executed == true`
+- `tradeHasActiveDisputeProposal[tradeId] == false`
+- supplier USDC balance increased by `4_500`
+- escrow USDC balance == `0` for this trade
+- Calling approve again reverts with `"already executed"`
 
-### 2 Release Funds Stage1 (from oracle module via api request)
+---
 
+## T3 — Dispute → REFUND (buyer gets 2nd tranche back)
 
-- tx hash: 
-- block number: 
-- trade id: 1
+> Status: TODO
 
-- event emitted: FundsReleasedStage1, PlatformFeesPaidStage1
+### T3.1 — createTrade (buyer SDK)
 
+| Field             | Value |
+|-------------------|----------------------|
+| Date              |      |
+| Caller            | buyer                |
+| tx hash           |      |
+| block number      |      |
+| trade id returned |      |
 
-### 3 Confirm arrival (from oracle module via api request)
+---
 
+### T3.2 — releaseFundsStage1 + T3.3 confirmArrival + T3.4 openDispute
 
-- tx hash: 
-- block number: 
-- trade id: 1
 
-- event emitted: ArrivalConfirmed
+| Step          | Date   | tx hash | block number |
+|---------------|--------|---------|--------------|
+| Stage1        |      |      |      |
+| confirmArrival|      |      |      |
+| openDispute   |      |      |      |
 
+---
 
-### 4 Open dispute (from buyer sdk)
+### T3.5 — proposeDisputeSolution (admin1, REFUND)
 
+| Field        | Value |
+|--------------|----------------------|
+| Date         |      |
+| Caller       | admin1               |
+| disputeStatus | `REFUND`            |
+| proposal id  |      |
+| tx hash      |      |
+| block number |      |
 
-- tx hash: 
-- block number: 
-- trade id: 0
+**Expected events:**
+- `DisputeSolutionProposed(proposalId, tradeId, REFUND, admin1)`
 
-- event emitted: 
+---
 
-### 4 Propose solution (from admin sdk)
+### T3.6 — approveDisputeSolution (admin2 → auto-execute)
 
+| Field        | Value |
+|--------------|----------------------|
+| Date         |      |
+| Caller       | admin2               |
+| proposal id  |      |
+| tx hash      |      |
+| block number |      |
 
-- tx hash: 
-- block number: 
-- trade id: 0
+**Expected events:**
+- `DisputeApproved(proposalId, admin2, 2, requiredApprovals)`
+- `DisputePayout(tradeId, proposalId, buyer, 4_500, REFUND)`
+- `DisputeFinalized(proposalId, tradeId, REFUND)`
 
-- event emitted: 
+**Post-conditions to verify:**
+- Status is `CLOSED`
+- buyer USDC balance increased by `4_500`
+- escrow USDC balance == `0` for this trade
+- Note: logistics + platform fees already taken at Stage 1 — not refundable here
 
+---
 
-### 4 Approve/execute dispute (from admin sdk)
+## T4 — Cancel LOCKED trade after 7-day LOCK_TIMEOUT
 
+> Status: TODO
+> Requires waiting 7 days after createTrade without calling releaseFundsStage1.
 
-- tx hash: 
-- block number: 
-- trade id: 0
+### T4.1 — createTrade (buyer SDK)
 
-- event emitted: 
+| Field             | Value |
+|-------------------|----------------------|
+| Date              |      |
+| Caller            | buyer                |
+| tx hash           |      |
+| block number      |      |
+| trade id returned |      |
+| createdAt         |      |
 
+**Cancel becomes available after:** `createdAt + 7 days`
 
-## Trade 4: cancel after timeout (7 days)
+---
 
+### T4.2 — cancelLockedTradeAfterTimeout (buyer, after 7 days)
 
+| Field        | Value |
+|--------------|----------------------|
+| Date         | (≥ createdAt + 7 days) |
+| Caller       | buyer                |
+| trade id     |      |
+| tx hash      |      |
+| block number |      |
 
-## Trade 5: refund in transit after timeout (14 days)
+**Pre-conditions:**
+- Status is `LOCKED`
+- `block.timestamp > trades[tradeId].createdAt + LOCK_TIMEOUT (7 days)`
+- `msg.sender == trades[tradeId].buyerAddress`
+- `whenNotPaused` NOT required (escape hatch — no pause check)
 
+**Expected events:**
+- `TradeCancelledAfterLockTimeout(tradeId, buyer, 10_000)`
 
+**Post-conditions to verify:**
+- Status is `CLOSED`
+- buyer USDC balance increased by `10_000` (full refund)
+- escrow USDC balance == `0` for this trade
+- Calling again reverts with `"status must be LOCKED"`
 
-## add admin/change oracle (24h)
+**Negative test (call before timeout):**
+- Must revert with `"lock timeout not elapsed"`
 
+---
 
+## T5 — Refund IN_TRANSIT after 14-day IN_TRANSIT_TIMEOUT
 
-## pause/disableOracle/unpause (no delay)
+> Status: TODO
+> Requires waiting 14 days after releaseFundsStage1 without calling confirmArrival.
 
+### T5.1 — createTrade + releaseFundsStage1
+
+| Step          | Date   | tx hash | block number | trade id |
+|---------------|--------|---------|--------------|----------|
+| createTrade   |      |      |      |      |
+| Stage1        |      |      |      |      |
+
+After Stage1: note `inTransitSince[tradeId]` = block.timestamp of Stage1 tx.
+Refund available after: `inTransitSince + 14 days`
+
+---
+
+### T5.2 — refundInTransitAfterTimeout (buyer, after 14 days)
+
+| Field        | Value |
+|--------------|----------------------|
+| Date         | (≥ inTransitSince + 14 days) |
+| Caller       | buyer                |
+| trade id     |      |
+| tx hash      |      |
+| block number |      |
+
+**Pre-conditions:**
+- Status is `IN_TRANSIT`
+- `block.timestamp > inTransitSince[tradeId] + IN_TRANSIT_TIMEOUT (14 days)`
+- `msg.sender == trades[tradeId].buyerAddress`
+- no pause check (escape hatch)
+
+**Expected events:**
+- `InTransitTimeoutRefunded(tradeId, buyer, 4_500)` ← only `supplierSecondTranche` refunded
+
+**Post-conditions to verify:**
+- Status is `CLOSED`
+- `inTransitSince[tradeId] == 0`
+- buyer USDC balance increased by `4_500` (supplierSecondTranche only)
+- Note: `supplierFirstTranche + logistics + platformFees` were already disbursed in Stage1 and are NOT refunded
+
+**Negative test (call before timeout):**
+- Must revert with `"in-transit timeout not elapsed"`
+
+---
+
+## G1 — Governance: Add Admin (24h timelock)
+
+> Status: TODO
+> Requires ≥ `governanceApprovals()` (max of `requiredApprovals`, `2`) distinct admin approvals.
+
+### G1.1 — proposeAddAdmin (admin1)
+
+| Field          | Value |
+|----------------|----------------------|
+| Date           |      |
+| Caller         | admin1               |
+| newAdmin       |      |
+| proposal id    |      |
+| eta (timelock) | (now + 24h) |
+| tx hash        |      |
+| block number   |      |
+
+**Pre-conditions:**
+- `isAdmin[newAdmin] == false`
+- `admins.length >= governanceApprovals()`
+- caller is admin
+
+**Expected events:**
+- `AdminAddProposed(proposalId, admin1, newAdmin, eta)`
+- `AdminAddApproved(proposalId, admin1, 1, governanceApprovals())`
+
+---
+
+### G1.2 — approveAddAdmin (admin2)
+
+| Field        | Value |
+|--------------|----------------------|
+| Date         |      |
+| Caller       | admin2               |
+| proposal id  |      |
+| tx hash      |      |
+| block number |      |
+
+**Expected events:**
+- `AdminAddApproved(proposalId, admin2, 2, governanceApprovals())`
+
+**Post-conditions:**
+- `adminAddProposals[proposalId].approvalCount == 2`
+- Cannot execute yet (timelock not elapsed)
+- Calling `executeAddAdmin` before `eta` reverts with `"timelock not elapsed"`
+
+---
+
+### G1.3 — executeAddAdmin (any admin, after 24h)
+
+| Field        | Value |
+|--------------|----------------------|
+| Date         | (≥ eta)       |
+| Caller       | admin1 (or any admin)|
+| proposal id  |      |
+| tx hash      |      |
+| block number |      |
+
+**Pre-conditions:**
+- `block.timestamp >= adminAddProposals[proposalId].eta`
+- proposal not expired (`createdAt + 7 days`)
+- `isAdmin[newAdmin] == false` (re-checked)
+
+**Expected events:**
+- `AdminAdded(newAdmin)`
+
+**Post-conditions to verify:**
+- `isAdmin[newAdmin] == true`
+- `admins` array contains newAdmin
+- Calling again reverts with `"already executed"`
+
+---
+
+## G2 — Governance: Change Oracle (24h timelock, normal path)
+
+> Status: TODO
+
+### G2.1 — proposeOracleUpdate (admin1)
+
+| Field          | Value |
+|----------------|----------------------|
+| Date           |      |
+| Caller         | admin1               |
+| newOracle      |      |
+| proposal id    |      |
+| eta (timelock) | (≈ now + 24h) |
+| emergencyFastTrack | `false`          |
+| tx hash        |      |
+| block number   |      |
+
+**Pre-conditions:**
+- `oracleActive == true`
+- `newOracle != oracleAddress`
+- `admins.length >= governanceApprovals()`
+
+**Expected events:**
+- `OracleUpdateProposed(proposalId, admin1, newOracle, eta, false)`
+- `OracleUpdateApproved(proposalId, admin1, 1, governanceApprovals())`
+
+---
+
+### G2.2 — approveOracleUpdate (admin2)
+
+| Field        | Value |
+|--------------|----------------------|
+| Date         |      |
+| tx hash      |      |
+| block number |      |
+
+**Expected events:**
+- `OracleUpdateApproved(proposalId, admin2, 2, governanceApprovals())`
+
+---
+
+### G2.3 — executeOracleUpdate (any admin, after 24h)
+
+| Field        | Value |
+|--------------|----------------------|
+| Date         | (≥ eta)       |
+| tx hash      |      |
+| block number |      |
+
+**Expected events:**
+- `OracleUpdated(oldOracle, newOracle)`
+
+**Post-conditions to verify:**
+- `oracleAddress == newOracle`
+- `oracleActive == true`
+- Old oracle address can no longer call oracle-only functions
+
+---
+
+## E1 — Emergency: pause / unpause (multi-sig, no delay)
+
+> Status: TODO
+
+### E1.1 — pause (admin1)
+
+| Field        | Value |
+|--------------|----------------------|
+| Date         |      |
+| Caller       | admin1               |
+| tx hash      |      |
+| block number |      |
+
+**Pre-conditions:**
+- `paused == false`
+
+**Expected events:**
+- `Paused(admin1)`
+
+**Post-conditions to verify:**
+- `paused == true`
+- `createTrade` reverts with `"paused"`
+- `releaseFundsStage1` reverts with `"paused"`
+- `confirmArrival` reverts with `"paused"`
+- `openDispute` reverts with `"paused"`
+- Escape hatches (`cancelLockedTradeAfterTimeout`, `refundInTransitAfterTimeout`) still work (no `whenNotPaused`)
+- Calling `pause` again reverts with `"already paused"`
+
+---
+
+### E1.2 — proposeUnpause (admin1)
+
+| Field        | Value |
+|--------------|----------------------|
+| Date         |      |
+| Caller       | admin1               |
+| tx hash      |      |
+| block number |      |
+
+**Pre-conditions:**
+- `paused == true`
+- `oracleActive == true`
+
+**Expected events:**
+- `UnpauseProposed(admin1)`
+- `UnpauseApproved(admin1, 1, governanceApprovals())`
+
+---
+
+### E1.3 — approveUnpause (admin2 → auto-execute)
+
+| Field        | Value |
+|--------------|----------------------|
+| Date         |      |
+| Caller       | admin2               |
+| tx hash      |      |
+| block number |      |
+
+**Expected events:**
+- `UnpauseApproved(admin2, 2, governanceApprovals())`
+- `Unpaused(admin2)`
+
+**Post-conditions to verify:**
+- `paused == false`
+- `hasActiveUnpauseProposal == false`
+- Normal protocol operations resume
+
+---
+
+## E2 — Emergency: disableOracle + fast-track oracle update
+
+> Status: TODO
+> Use when oracle is compromised. `disableOracleEmergency` pauses the protocol immediately.
+> Fast-track oracle update skips the 24h timelock (eta = block.timestamp).
+
+### E2.1 — disableOracleEmergency (admin1)
+
+| Field        | Value |
+|--------------|----------------------|
+| Date         |      |
+| Caller       | admin1               |
+| tx hash      |      |
+| block number |      |
+
+**Pre-conditions:**
+- `oracleActive == true`
+
+**Expected events:**
+- `OracleDisabledEmergency(admin1, previousOracle)`
+- `Paused(admin1)`
+
+**Post-conditions to verify:**
+- `oracleActive == false`
+- `paused == true`
+- `releaseFundsStage1` reverts with `"oracle disabled"`
+- `confirmArrival` reverts with `"oracle disabled"`
+- `proposeUnpause` reverts with `"oracle disabled"` 
+
+---
+
+### E2.2 — proposeOracleUpdate (admin1, fast-track)
+
+| Field              | Value |
+|--------------------|----------------------|
+| Date               |      |
+| Caller             | admin1               |
+| newOracle          |      |
+| proposal id        |      |
+| eta                | `== block.timestamp` (no delay) |
+| emergencyFastTrack | `true`               |
+| tx hash            |      |
+| block number       |      |
+
+**Pre-conditions:**
+- `oracleActive == false` (triggers fast-track path)
+- `newOracle != oracleAddress`
+
+**Expected events:**
+- `OracleUpdateProposed(proposalId, admin1, newOracle, eta, true)`
+
+---
+
+### E2.3 — approveOracleUpdate (admin2)
+
+| Field        | Value |
+|--------------|----------------------|
+| Date         |      |
+| Caller       | admin2               |
+| tx hash      |      |
+| block number |      |
+
+---
+
+### E2.4 — executeOracleUpdate (admin, immediately after approval)
+
+| Field        | Value |
+|--------------|----------------------|
+| Date         |      |
+| tx hash      |      |
+| block number |      |
+
+**Expected events:**
+- `OracleUpdated(oldOracle, newOracle)`
+
+**Post-conditions to verify:**
+- `oracleAddress == newOracle`
+- `oracleActive == true`
+
+---
+
+### E2.5 — proposeUnpause + approveUnpause (now that oracle is active again)
+
+
+| Step           | Date   | tx hash | block number |
+|----------------|--------|---------|--------------|
+| proposeUnpause |      |      |      |
+| approveUnpause |      |      |      |
+
+**Post-conditions to verify:**
+- `paused == false`
+- `oracleActive == true`
+- Protocol fully restored
+
+---
+
+## Negative / Revert Tests Checklist
+
+| Test                                          | Expected Revert Msg              | Verified |
+|-----------------------------------------------|----------------------------------|----------|
+| createTrade with breakdown mismatch           | `"breakdown mismatch"`           |        |
+| createTrade with wrong/expired signature      | `"bad signature"` / `"signature expired"` |  |
+| createTrade with wrong nonce                  | `"bad nonce"`                    |        |
+| releaseFundsStage1 when not LOCKED            | `"status must be LOCKED"`        |        |
+| releaseFundsStage1 by non-oracle              | `"only oracle"`                  |        |
+| releaseFundsStage1 when oracleActive=false    | `"oracle disabled"`              |        |
+| confirmArrival when not IN_TRANSIT            | `"status must be IN_TRANSIT"`    |        |
+| openDispute after window closed               | `"window closed"`                |        |
+| openDispute by non-buyer                      | `"only buyer"`                   |        |
+| finalizeAfterDisputeWindow before 24h         | `"window not elapsed"`           |        |
+| cancelLockedTradeAfterTimeout before 7 days   | `"lock timeout not elapsed"`     |        |
+| refundInTransitAfterTimeout before 14 days    | `"in-transit timeout not elapsed"` |      |
+| proposeDisputeSolution with active proposal   | `"active proposal exists"`       |        |
+| approveDisputeSolution twice by same admin    | `"already approved"`             |        |
+| executeOracleUpdate before timelock           | `"timelock not elapsed"`         |        |
+| proposeUnpause when oracleActive=false        | `"oracle disabled"`              |        |
+| pause when already paused                     | `"already paused"`               |        |
+| disableOracleEmergency when already disabled  | `"oracle disabled"`              |        |
 
