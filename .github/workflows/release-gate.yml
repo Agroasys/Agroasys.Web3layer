@@ -87,6 +87,111 @@ jobs:
       - name: Check deprecated profile names in docs
         run: scripts/tests/docs-profile-name-guard.sh
 
+  env-profile-regression:
+    name: ci/env-profile-regression
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Run env/profile regression scripts
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-reports
+          report="ci-reports/env-profile-regression.txt"
+          fail=0
+
+          run_check() {
+            local label="$1"
+            shift
+            echo "[$label] command: $*" | tee -a "$report"
+            if "$@" 2>&1 | tee -a "$report"; then
+              echo "[$label] PASS" | tee -a "$report"
+            else
+              echo "[$label] FAIL" | tee -a "$report"
+              fail=1
+            fi
+            echo "" >> "$report"
+          }
+
+          run_check docker-services-args scripts/tests/docker-services-args.test.sh
+          run_check docker-services-health scripts/tests/docker-services-health.test.sh
+          run_check docker-services-env-precedence scripts/tests/docker-services-env-precedence.test.sh
+          run_check docker-services-env-layering scripts/tests/docker-services-env-layering.test.sh
+          run_check staging-e2e-real-gate-start-block scripts/tests/staging-e2e-real-gate-start-block.test.sh
+
+          if [[ "$fail" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload env/profile regression report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: ci-report-env-profile-regression
+          path: ci-reports/env-profile-regression.txt
+
+  staging-e2e-real-gate:
+    name: ci/staging-e2e-real-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Prepare CI gate env files
+        run: |
+          cp .env.example .env
+          cp .env.staging-e2e-real.example .env.staging-e2e-real
+          cat <<'EOF' >> .env.staging-e2e-real
+          STAGING_E2E_REAL_DYNAMIC_START_BLOCK=false
+          STAGING_E2E_REAL_GATE_RPC_URL=
+          EOF
+
+      - name: Run staging gate path (CI-safe config mode)
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-reports
+          raw_log="ci-reports/staging-e2e-real-gate.raw.txt"
+          report="ci-reports/staging-e2e-real-gate.txt"
+          fail=0
+
+          run_check() {
+            local label="$1"
+            shift
+            echo "[$label] command: $*" >> "$raw_log"
+            if "$@" >> "$raw_log" 2>&1; then
+              echo "[$label] PASS" >> "$raw_log"
+            else
+              echo "[$label] FAIL" >> "$raw_log"
+              fail=1
+            fi
+            echo "" >> "$raw_log"
+          }
+
+          run_check validate-env scripts/validate-env.sh staging-e2e-real
+          run_check staging-gate bash -lc "STAGING_E2E_REAL_GATE_ASSERT_CONFIG_ONLY=true scripts/staging-e2e-real-gate.sh"
+
+          sed -E \
+            -e 's/((API_KEY|HMAC_SECRET|PRIVATE_KEY|PASSWORD|SECRET|TOKEN|MNEMONIC)([[:space:]]*[:=][[:space:]]*))[^[:space:]"]+/\1***REDACTED***/gI' \
+            -e 's/(authorization:[[:space:]]*Bearer[[:space:]]+)[^[:space:]]+/\1***REDACTED***/gI' \
+            "$raw_log" > "$report"
+          rm -f "$raw_log"
+
+          cat "$report"
+
+          if [[ "$fail" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload staging gate report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: ci-report-staging-e2e-real-gate
+          path: ci-reports/staging-e2e-real-gate.txt
+
   contracts:
     name: ci/contracts
     runs-on: ubuntu-latest
@@ -565,6 +670,8 @@ jobs:
     needs:
       - changes
       - docs-profile-guard
+      - env-profile-regression
+      - staging-e2e-real-gate
       - contracts
       - sdk
       - oracle
@@ -583,6 +690,8 @@ jobs:
           declare -A results
           results["ci/changes"]="${{ needs.changes.result }}"
           results["ci/docs-profile-guard"]="${{ needs.docs-profile-guard.result }}"
+          results["ci/env-profile-regression"]="${{ needs.env-profile-regression.result }}"
+          results["ci/staging-e2e-real-gate"]="${{ needs.staging-e2e-real-gate.result }}"
           results["ci/contracts"]="${{ needs.contracts.result }}"
           results["ci/sdk"]="${{ needs.sdk.result }}"
           results["ci/oracle"]="${{ needs.oracle.result }}"
