@@ -159,6 +159,7 @@ npm run -w treasury build
 - `docs/runbooks/oracle-redrive.md`
 - `docs/runbooks/emergency-disable-unpause.md`
 - `docs/runbooks/docker-profiles.md`
+- `docs/runbooks/production-readiness-checklist.md`
 - `docs/runbooks/github-roadmap-governance.md`
 
 ## **Contributing**
@@ -219,6 +220,7 @@ scripts/staging-e2e-real-gate.sh
 ```
 
 See `docs/docker-services.md`, `docs/runbooks/staging-e2e-release-gate.md`, and `docs/runbooks/staging-e2e-real-release-gate.md` for triage and rollback instructions.
+Production readiness criteria are tracked in `docs/runbooks/production-readiness-checklist.md`.
 
 ## Commit Convention
 

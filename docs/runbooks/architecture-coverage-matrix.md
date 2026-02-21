@@ -12,6 +12,9 @@ Status legend:
 - `Blocked`: depends on missing in-repo surface or external dependency.
 - `Backlog`: not started.
 
+Production readiness checklist:
+- `docs/runbooks/production-readiness-checklist.md`
+
 ## Component Mapping
 
 | Component | Milestone Target | Status | % Complete | Roadmap Issue(s) | Evidence | Remaining Gap |
@@ -22,7 +25,7 @@ Status legend:
 | Reconciliation drift remediation | A/B | In Progress | 60 | #45 | `reconciliation/src/core/classifier.ts`, `reconciliation/src/core/reconciler.ts`, `reconciliation/src/tests/classifier-address-validation.test.ts`, `scripts/staging-e2e-gate.sh` | Deterministic retry/redrive state machine documentation + tests still incomplete |
 | SDK typed modules + ABI parity | A | Done | 100 | #46, #50 | `sdk/src/modules/`, `sdk/tests/abiAlignment.test.ts`, `sdk/README.md`, PR #12, PR #15, CI run 22197616358 (`ci/sdk` success) | Unified checkout frontend integration remains blocked in #50 |
 | Release gates + profile health determinism | A/B | In Progress | 75 | #47, #55 | `scripts/docker-services.sh`, `scripts/staging-e2e-gate.sh`, `scripts/tests/docker-services-args.test.sh`, PR #28, PR #39, PR #41 (open) | Staging-real gate promotion and full CI enforcement are not complete |
-| Core docs + runbooks + developer guidance | A | In Progress | 60 | #49, #65 | `README.md`, `docs/docker-services.md`, `docs/runbooks/staging-e2e-release-gate.md`, PR #31, PR #34 | Production-readiness checklist remains open in #65 |
+| Core docs + runbooks + developer guidance | A | In Progress | 80 | #49, #65 | `README.md`, `docs/docker-services.md`, `docs/runbooks/staging-e2e-release-gate.md`, `docs/runbooks/production-readiness-checklist.md`, PR #31, PR #34 | Keep checklist and runbook links updated as release controls evolve |
 | Dashboard + unified checkout + settlement tracker | B | Blocked | 25 | #50 | SDK support exists (`sdk/src/modules/`, `sdk/README.md`), Web3Auth dependency present | No in-repo dashboard surface; end-to-end checkout UX not implemented here |
 | Web3Auth signing/session architecture | B | In Progress | 50 | #50 | `sdk/README.md` Web3Auth section, `@web3auth/modal` in `sdk/package.json`, PR #15 | Full frontend/session lifecycle and operational runbook still missing |
 | Oracle trigger + approval + retry controls | B/C | In Progress | 70 | #51, #56, #61 | `oracle/src/core/trigger-manager.ts`, `oracle/src/worker/confirmation-worker.ts`, `oracle/src/api/routes.ts`, `docs/runbooks/oracle-redrive.md`, PR #14 | Pilot manual-approval mode and complete SOP hardening still open |
