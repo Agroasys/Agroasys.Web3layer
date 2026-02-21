@@ -158,6 +158,7 @@ npm run -w treasury build
 - `docs/runbooks/ricardian-hash-repro.md`
 - `docs/runbooks/oracle-redrive.md`
 - `docs/runbooks/emergency-disable-unpause.md`
+- `docs/runbooks/notifications.md`
 - `docs/runbooks/docker-profiles.md`
 - `docs/runbooks/production-readiness-checklist.md`
 - `docs/runbooks/github-roadmap-governance.md`
