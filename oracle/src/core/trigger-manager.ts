@@ -72,7 +72,7 @@ export class TriggerManager {
             return await this.handleRedrive(latestTrigger, request);
         }
 
-        const existingRequestIdKey = generateIdempotencyKey(actionKey, request.requestId);
+        const existingRequestIdKey = generateIdempotencyKey(actionKey);
         const existingRequest = await getTriggerByIdempotencyKey(existingRequestIdKey);
         
         if (existingRequest) {
@@ -121,7 +121,7 @@ export class TriggerManager {
             });
 
             const newRequestId = generateRequestId();
-            const newIdempotencyKey = generateIdempotencyKey(exhaustedTrigger.action_key, newRequestId);
+            const newIdempotencyKey = generateIdempotencyKey(exhaustedTrigger.action_key);
 
             const newTrigger = await createTrigger({
                 actionKey: exhaustedTrigger.action_key,
@@ -229,12 +229,11 @@ export class TriggerManager {
         request: TriggerRequest,
         actionKey: string
     ): Promise<Trigger> {
-        const newRequestId = request.isRedrive ? generateRequestId() : request.requestId;
-        const idempotencyKey = generateIdempotencyKey(actionKey, newRequestId);
+        const idempotencyKey = generateIdempotencyKey(actionKey);
 
         const data: CreateTriggerData = {
             actionKey,
-            requestId: newRequestId,
+            requestId: request.requestId,
             idempotencyKey,
             tradeId: request.tradeId,
             triggerType: request.triggerType,

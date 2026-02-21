@@ -9,8 +9,8 @@ export function generateRequestId(): string {
     return crypto.randomBytes(16).toString('hex');
 }
 
-export function generateIdempotencyKey(actionKey: string, requestId: string): string {
-    return `${actionKey}:${requestId}`;
+export function generateIdempotencyKey(actionKey: string): string {
+    return `${actionKey}:${generateRequestId()}`;
 }
 
 
