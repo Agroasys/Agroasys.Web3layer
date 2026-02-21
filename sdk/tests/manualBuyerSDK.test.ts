@@ -47,7 +47,7 @@ describeIntegration('BuyerSDK', () => {
         console.log(`USDC allowance: ${allowance}`);
     });
 
-    test.skip('should create a trade', async () => {
+    test('should create a trade', async () => {
         const tradeParams = {
             supplier: '0x4aF052cB4B3eC7b58322548021bF254Cc4c80b2c',
             totalAmount: parseUSDC('10000'),
@@ -63,7 +63,7 @@ describeIntegration('BuyerSDK', () => {
         console.log(`Trade created: ${result.txHash}`);
     });
 
-    test('should open dispute', async () => {
+    test.skip('should open dispute', async () => {
         const tradeId = 1n; // replace
         
         const result = await buyerSDK.openDispute(tradeId, buyerSigner);
