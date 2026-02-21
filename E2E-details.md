@@ -1,5 +1,7 @@
 # E2E Test Matrix — AgroasysEscrow
 
+> All amounts expressed in human-readable USDC (not raw 6-decimal units)
+
 ## Deployed Contracts
 
 | Contract      | Address                                      |
