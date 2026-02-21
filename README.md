@@ -155,6 +155,7 @@ npm run -w treasury build
 ## **Operational Runbooks**
 
 - `docs/runbooks/reconciliation.md`
+- `docs/runbooks/ricardian-hash-repro.md`
 - `docs/runbooks/oracle-redrive.md`
 - `docs/runbooks/emergency-disable-unpause.md`
 - `docs/runbooks/docker-profiles.md`
