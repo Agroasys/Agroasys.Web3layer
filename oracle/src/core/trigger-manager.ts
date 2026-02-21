@@ -72,26 +72,38 @@ export class TriggerManager {
             return await this.handleRedrive(latestTrigger, request);
         }
 
-        const existingRequestIdKey = generateIdempotencyKey(actionKey, request.requestId);
+        const existingRequestIdKey = generateIdempotencyKey(actionKey);
         const existingRequest = await getTriggerByIdempotencyKey(existingRequestIdKey);
         
         if (existingRequest) {
             return this.handleExistingTrigger(existingRequest, actionKey);
         }
 
-        const trade = await this.sdkClient.getTrade(request.tradeId);
-        StateValidator.validateTradeState(trade, request.triggerType);
+        try {
+            const trade = await this.sdkClient.getTrade(request.tradeId);
+            StateValidator.validateTradeState(trade, request.triggerType);
 
-        Logger.info('Trade state validated, creating new trigger', {
-            tradeId: request.tradeId,
-            triggerType: request.triggerType,
-            tradeStatus: trade.status,
-            actionKey,
-        });
+            Logger.info('Trade state validated, creating new trigger', {
+                tradeId: request.tradeId,
+                triggerType: request.triggerType,
+                tradeStatus: trade.status,
+                actionKey,
+            });
 
-        const trigger = await this.createNewTrigger(request, actionKey);
-
-        return await this.executeWithRetry(trigger, actionKey);
+            const trigger = await this.createNewTrigger(request, actionKey);
+            return await this.executeWithRetry(trigger, actionKey);
+        } catch (error: any) {
+            if (
+                error?.code === 'CALL_EXCEPTION' ||
+                error?.message?.includes('trade not found') ||
+                error?.message?.includes('execution reverted')
+            ) {
+                throw new ValidationError(
+                    `Trade ${request.tradeId} does not exist on-chain: ${error?.reason || error?.message}`
+                );
+            }
+            throw error;
+        }
     }
 
     private isActionAlreadyCompleted(trigger: Trigger): boolean {
@@ -121,7 +133,7 @@ export class TriggerManager {
             });
 
             const newRequestId = generateRequestId();
-            const newIdempotencyKey = generateIdempotencyKey(exhaustedTrigger.action_key, newRequestId);
+            const newIdempotencyKey = generateIdempotencyKey(exhaustedTrigger.action_key);
 
             const newTrigger = await createTrigger({
                 actionKey: exhaustedTrigger.action_key,
@@ -229,12 +241,11 @@ export class TriggerManager {
         request: TriggerRequest,
         actionKey: string
     ): Promise<Trigger> {
-        const newRequestId = request.isRedrive ? generateRequestId() : request.requestId;
-        const idempotencyKey = generateIdempotencyKey(actionKey, newRequestId);
+        const idempotencyKey = generateIdempotencyKey(actionKey);
 
         const data: CreateTriggerData = {
             actionKey,
-            requestId: newRequestId,
+            requestId: request.requestId,
             idempotencyKey,
             tradeId: request.tradeId,
             triggerType: request.triggerType,
