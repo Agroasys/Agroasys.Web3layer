@@ -307,6 +307,22 @@ services:
       indexer-graphql:
         condition: service_healthy
         required: false
+  hardhat:
+    profiles: ["local-dev"]
+    build:
+      context: ./contracts
+      dockerfile: Dockerfile
+    ports:
+      - "8545:8545"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -q --spider http://localhost:8545 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - default
+
 
 volumes:
   postgres-data:
