@@ -42,7 +42,18 @@ export class SDKClient {
 
     async getTrade(tradeId: string): Promise<Trade> {
         Logger.info('Querying on-chain trade state', { tradeId });
-        return await this.sdk.getTrade(tradeId);
+        const trade = await this.sdk.getTrade(tradeId);
+
+        if (
+            !trade ||
+            trade.tradeId === '0' ||
+            trade.buyer === '0x0000000000000000000000000000000000000000'
+        ) {
+            const { ValidationError } = await import('../utils/errors');
+            throw new ValidationError(`Trade ${tradeId} does not exist on-chain`);
+        }
+
+        return trade;
     }
 
     private mapIndexerTradeToSDK(indexerTrade: IndexerTrade): Trade {

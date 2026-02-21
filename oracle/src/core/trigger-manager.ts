@@ -79,19 +79,31 @@ export class TriggerManager {
             return this.handleExistingTrigger(existingRequest, actionKey);
         }
 
-        const trade = await this.sdkClient.getTrade(request.tradeId);
-        StateValidator.validateTradeState(trade, request.triggerType);
+        try {
+            const trade = await this.sdkClient.getTrade(request.tradeId);
+            StateValidator.validateTradeState(trade, request.triggerType);
 
-        Logger.info('Trade state validated, creating new trigger', {
-            tradeId: request.tradeId,
-            triggerType: request.triggerType,
-            tradeStatus: trade.status,
-            actionKey,
-        });
+            Logger.info('Trade state validated, creating new trigger', {
+                tradeId: request.tradeId,
+                triggerType: request.triggerType,
+                tradeStatus: trade.status,
+                actionKey,
+            });
 
-        const trigger = await this.createNewTrigger(request, actionKey);
-
-        return await this.executeWithRetry(trigger, actionKey);
+            const trigger = await this.createNewTrigger(request, actionKey);
+            return await this.executeWithRetry(trigger, actionKey);
+        } catch (error: any) {
+            if (
+                error?.code === 'CALL_EXCEPTION' ||
+                error?.message?.includes('trade not found') ||
+                error?.message?.includes('execution reverted')
+            ) {
+                throw new ValidationError(
+                    `Trade ${request.tradeId} does not exist on-chain: ${error?.reason || error?.message}`
+                );
+            }
+            throw error;
+        }
     }
 
     private isActionAlreadyCompleted(trigger: Trigger): boolean {
