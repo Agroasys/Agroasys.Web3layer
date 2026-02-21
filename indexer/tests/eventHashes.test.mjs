@@ -61,3 +61,32 @@ test('guardrail rejects assigning extrinsic hash into txHash', () => {
     /Invariant violation/,
   );
 });
+
+test('resolveEventHashes returns null txHash when EVM payload is absent', () => {
+  const extrinsic = {
+    hash: '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+    call: {
+      name: 'Balances.transfer',
+    },
+  };
+
+  const hashes = resolveEventHashes(extrinsic);
+
+  assert.equal(hashes.txHash, null, 'txHash must be null');
+  assert.notEqual(hashes.txHash, '');
+});
+
+
+test('resolveEventHashes returns null extrinsicHash when extrinsic has no hash field', () => {
+  const hashes = resolveEventHashes({ call: { name: 'Balances.transfer' } });
+
+  assert.equal(hashes.txHash, null);
+  assert.equal(hashes.extrinsicHash, null, 'extrinsicHash must be null when hash field is missing');
+});
+
+test('resolveEventHashes returns null txHash and null extrinsicHash when extrinsic is undefined', () => {
+  const hashes = resolveEventHashes(undefined);
+
+  assert.equal(hashes.txHash, null);
+  assert.equal(hashes.extrinsicHash, null);
+});
