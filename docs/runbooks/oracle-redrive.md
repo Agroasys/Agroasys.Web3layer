@@ -112,3 +112,4 @@ When escalating, include: `tradeId`, `actionKey`, `requestId`, `txHash`, current
 - Incident checklist: `docs/incidents/first-15-minutes-checklist.md`
 - Staging gate runbook: `docs/runbooks/staging-e2e-real-release-gate.md`
 - Staging gate diagnostics (non-real profile): `docs/runbooks/staging-e2e-release-gate.md`
+- Hybrid lifecycle walkthrough: `docs/runbooks/hybrid-split-walkthrough.md`

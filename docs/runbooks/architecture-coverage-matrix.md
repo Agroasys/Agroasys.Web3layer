@@ -1,6 +1,6 @@
 # Architecture Coverage Matrix
 
-Snapshot date: 2026-02-19
+Snapshot date: 2026-02-22
 
 Scope:
 - Source of truth is repository code, merged/open PRs, and roadmap issues.
@@ -34,7 +34,7 @@ Production readiness checklist:
 | AssetHub assets + USDC fee conversion validation | A | Backlog | 0 | #63 | Conceptual references in `README.md` only | No automated validation flow across local-dev/staging for fee-in-USDC path |
 | PolkaVM deployment verification + smoke checks | A | Backlog | 0 | #64 | CI exists but no deployment-verification artifact workflow | No deterministic deploy verification bundle and smoke automation |
 | Mainnet pilot execution evidence | B | Backlog | 0 | #66 | None in repo yet | No transaction evidence package or pilot proof artifacts |
-| Hybrid split walkthrough + treasury-to-fiat SOP | B | Backlog | 0 | #67 | None in repo yet | Missing operator-facing walkthrough and SOP artifacts |
+| Hybrid split walkthrough + treasury-to-fiat SOP | B | Done | 100 | #67 | `docs/runbooks/hybrid-split-walkthrough.md`, `docs/runbooks/treasury-to-fiat-sop.md`, `README.md` runbook links | None for issue-#67 scope |
 | Pilot environment + legal evidence + KPI/demo/case study package | C | Backlog | 0 | #57, #58, #59, #60, #68, #69 | Milestone-C issues created and tracked | Deliverables not yet authored in repo |
 | Infrastructure controls (CI/CD, roadmap governance, release controls) | A/B/C | In Progress | 70 | #70, #71, #72, #73 | `.github/workflows/ci.yml`, `.github/workflows/pr-roadmap-policy.yml`, `docs/runbooks/github-roadmap-governance.md`, PR #62, PR #76 | Coverage matrix + gate linkage is now established but milestones not yet fully satisfied |
 | Notifications service behavior + operational controls | A/B | In Progress | 50 | #77 | `notifications/src/`, `notifications/tests/`, PR #20 | Needs dedicated roadmap completion criteria and runbook hardening |
