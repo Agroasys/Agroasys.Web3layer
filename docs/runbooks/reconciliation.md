@@ -2,6 +2,7 @@
 
 ## Purpose
 Operate reconciliation safely in local/staging and diagnose drift failures.
+For lifecycle checkpoints across lock, stage-1, and final settlement, see `docs/runbooks/hybrid-split-walkthrough.md`.
 
 ## Preconditions
 - Postgres is reachable.

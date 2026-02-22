@@ -112,12 +112,4 @@ When escalating, include: `tradeId`, `actionKey`, `requestId`, `txHash`, current
 - Incident checklist: `docs/incidents/first-15-minutes-checklist.md`
 - Staging gate runbook: `docs/runbooks/staging-e2e-real-release-gate.md`
 - Staging gate diagnostics (non-real profile): `docs/runbooks/staging-e2e-release-gate.md`
-
-
-## Manual Approval Mode (Pilot)
-
-### Overview
-When `ORACLE_MANUAL_APPROVAL_ENABLED=true`, every newly submitted trigger pauses at
-`PENDING_APPROVAL` status and waits for explicit human sign-off before any
-blockchain transaction is attempted. Redrives bypass the gate (operator intent
-is already recorded).
+- Hybrid lifecycle walkthrough: `docs/runbooks/hybrid-split-walkthrough.md`
