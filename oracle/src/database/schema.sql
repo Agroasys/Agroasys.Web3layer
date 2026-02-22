@@ -24,6 +24,12 @@ CREATE TABLE IF NOT EXISTS oracle_triggers (
     
     on_chain_verified BOOLEAN DEFAULT false, -- flag to track if on-chain status was checked before re-drive
     on_chain_verified_at TIMESTAMP,
+
+    approved_by VARCHAR(255), -- manual approval fields
+    approved_at TIMESTAMP,
+    rejected_by VARCHAR(255),
+    rejected_at TIMESTAMP,
+    rejection_reason TEXT,
     
     created_at TIMESTAMP DEFAULT NOW(),
     submitted_at TIMESTAMP,
@@ -34,7 +40,7 @@ CREATE TABLE IF NOT EXISTS oracle_triggers (
 CREATE INDEX IF NOT EXISTS idx_action_key ON oracle_triggers(action_key);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_active_action_key_unique
 ON oracle_triggers(action_key)
-WHERE status IN ('PENDING', 'EXECUTING', 'SUBMITTED');
+WHERE status IN ('PENDING', 'EXECUTING', 'SUBMITTED', 'PENDING_APPROVAL');
 
 CREATE INDEX IF NOT EXISTS idx_trade_id ON oracle_triggers(trade_id);
 CREATE INDEX IF NOT EXISTS idx_status ON oracle_triggers(status);
@@ -64,7 +70,7 @@ DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_status') THEN
         ALTER TABLE oracle_triggers ADD CONSTRAINT check_status 
-        CHECK (status IN ('PENDING', 'EXECUTING', 'SUBMITTED', 'CONFIRMED', 'FAILED', 'EXHAUSTED_NEEDS_REDRIVE', 'TERMINAL_FAILURE'));
+        CHECK (status IN ('PENDING', 'EXECUTING', 'SUBMITTED', 'CONFIRMED', 'FAILED', 'EXHAUSTED_NEEDS_REDRIVE', 'TERMINAL_FAILURE','PENDING_APPROVAL','REJECTED'));
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'check_trigger_type') THEN

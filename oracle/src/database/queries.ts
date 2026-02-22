@@ -130,6 +130,11 @@ const ALLOWED_UPDATE_COLUMNS = new Set([
     'confirmed_at',
     'on_chain_verified',
     'on_chain_verified_at',
+    'approved_by',
+    'approved_at',
+    'rejected_by',
+    'rejected_at',
+    'rejection_reason',
 ]);
 
 export async function updateTrigger(idempotencyKey: string, updates: UpdateTriggerData): Promise<void> {
@@ -173,4 +178,37 @@ export async function updateTrigger(idempotencyKey: string, updates: UpdateTrigg
         idempotencyKey: idempotencyKey.substring(0, 16), 
         fields: Object.keys(updates).filter(k => ALLOWED_UPDATE_COLUMNS.has(k))
     });
+}
+
+
+export async function approveTrigger(idempotencyKey: string,actor: string): Promise<Trigger | null> {
+    const result = await pool.query(
+        `UPDATE oracle_triggers
+         SET status = $1,
+             approved_by = $2,
+             approved_at = NOW(),
+             updated_at = NOW()
+         WHERE idempotency_key = $3
+           AND status = $4
+         RETURNING *`,
+        [TriggerStatus.PENDING, actor, idempotencyKey, TriggerStatus.PENDING_APPROVAL]
+    );
+    return result.rows[0] || null;
+}
+
+
+export async function rejectTrigger(idempotencyKey: string,actor: string,reason?: string): Promise<Trigger | null> {
+    const result = await pool.query(
+        `UPDATE oracle_triggers
+         SET status = $1,
+             rejected_by = $2,
+             rejected_at = NOW(),
+             rejection_reason = $3,
+             updated_at = NOW()
+         WHERE idempotency_key = $4
+           AND status = $5
+         RETURNING *`,
+        [TriggerStatus.REJECTED, actor, reason ?? null, idempotencyKey, TriggerStatus.PENDING_APPROVAL]
+    );
+    return result.rows[0] || null;
 }

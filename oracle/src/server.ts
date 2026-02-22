@@ -74,7 +74,8 @@ async function bootstrap() {
             sdkClient,
             config.retryAttempts,
             config.retryDelay,
-            notifier
+            notifier,
+            config.manualApprovalEnabled,
         );
 
         const controller = new OracleController(triggerManager);

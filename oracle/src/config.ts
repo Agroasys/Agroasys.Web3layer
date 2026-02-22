@@ -42,7 +42,7 @@ export function loadConfig(): OracleConfig {
         const retryAttempts = validateEnvNumber('RETRY_ATTEMPTS', 3);
         const retryDelay = validateEnvNumber('RETRY_DELAY', 1000);
         const hmacNonceTtlSeconds = validateEnvNumber('HMAC_NONCE_TTL_SECONDS', 600);
-        const manualApprovalEnabled = validateEnvBool('MANUAL_APPROVAL_ENABLED', false);
+        const manualApprovalEnabled = validateEnvBool('ORACLE_MANUAL_APPROVAL_ENABLED', false);
 
         if (notificationsEnabled) {
             assert(notificationsWebhookUrl, 'NOTIFICATIONS_WEBHOOK_URL is required when NOTIFICATIONS_ENABLED=true');

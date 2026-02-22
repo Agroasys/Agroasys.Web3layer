@@ -4,6 +4,7 @@ import {ReleaseStage1Request,ConfirmArrivalRequest,FinalizeTradeRequest,OracleRe
 import { TriggerManager } from '../core/trigger-manager';
 import { TriggerType } from '../types/trigger';
 import { ValidationError } from '../utils/errors';
+import {ApprovalRequest, RejectRequest} from '../types/api';
 
 export class OracleController {
     constructor(private triggerManager: TriggerManager) {}
@@ -197,6 +198,90 @@ export class OracleController {
             res.status(statusCode).json({
                 success: false,
                 error: error.name || 'ContractError',
+                message: error.message,
+                timestamp: new Date().toISOString(),
+            });
+        }
+    }
+
+    async approveTrigger(
+        req: Request<{}, {}, ApprovalRequest>,
+        res: Response<OracleResponse | ErrorResponse>
+    ): Promise<void> {
+        try {
+            const { idempotencyKey, actor } = req.body;
+
+            if (!idempotencyKey || !actor) {
+                res.status(400).json({
+                    success: false,
+                    error: 'ValidationError',
+                    message: 'idempotencyKey and actor are required',
+                    timestamp: new Date().toISOString(),
+                });
+                return;
+            }
+
+            const result = await this.triggerManager.resumeAfterApproval(idempotencyKey, actor);
+
+            res.status(200).json({
+                success: true,
+                idempotencyKey: result.idempotencyKey,
+                actionKey: result.actionKey,
+                status: result.status,
+                txHash: result.txHash,
+                blockNumber: result.blockNumber,
+                message: result.message,
+                timestamp: new Date().toISOString(),
+            });
+        } catch (error: any) {
+            Logger.error('Controller error in approveTrigger', error);
+            const statusCode = error instanceof ValidationError ? 400 : 500;
+            res.status(statusCode).json({
+                success: false,
+                error: error.name || 'InternalError',
+                message: error.message,
+                timestamp: new Date().toISOString(),
+            });
+        }
+    }
+
+    async rejectTrigger(
+        req: Request<{}, {}, RejectRequest>,
+        res: Response<OracleResponse | ErrorResponse>
+    ): Promise<void> {
+        try {
+            const { idempotencyKey, actor, reason } = req.body;
+
+            if (!idempotencyKey || !actor) {
+                res.status(400).json({
+                    success: false,
+                    error: 'ValidationError',
+                    message: 'idempotencyKey and actor are required',
+                    timestamp: new Date().toISOString(),
+                });
+                return;
+            }
+
+            const result = await this.triggerManager.rejectPendingTrigger(
+                idempotencyKey,
+                actor,
+                reason
+            );
+
+            res.status(200).json({
+                success: true,
+                idempotencyKey: result.idempotencyKey,
+                actionKey: result.actionKey,
+                status: result.status,
+                message: result.message,
+                timestamp: new Date().toISOString(),
+            });
+        } catch (error: any) {
+            Logger.error('Controller error in rejectTrigger', error);
+            const statusCode = error instanceof ValidationError ? 400 : 500;
+            res.status(statusCode).json({
+                success: false,
+                error: error.name || 'InternalError',
                 message: error.message,
                 timestamp: new Date().toISOString(),
             });

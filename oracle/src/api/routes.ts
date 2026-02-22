@@ -71,5 +71,19 @@ export function createRouter(controller: OracleController, readinessCheck?: () =
         asyncHandler((req, res) => controller.redriveTrigger(req, res))
     );
 
+    router.post(
+        '/approve',
+        authMiddleware,
+        hmacMiddleware,
+        asyncHandler((req, res) => controller.approveTrigger(req, res))
+    );
+
+    router.post(
+        '/reject',
+        authMiddleware,
+        hmacMiddleware,
+        asyncHandler((req, res) => controller.rejectTrigger(req, res))
+    );
+
     return router;
 }
