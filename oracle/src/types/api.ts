@@ -30,3 +30,15 @@ export interface FinalizeTradeRequest {
     tradeId: string;
     requestId: string;
 }
+
+
+export interface ApprovalRequest {
+    idempotencyKey: string;
+    actor: string;
+}
+
+export interface RejectRequest {
+    idempotencyKey: string;
+    actor: string;
+    reason?: string;
+}

@@ -5,7 +5,9 @@ export enum TriggerStatus {
     CONFIRMED = 'CONFIRMED',
     FAILED = 'FAILED',
     EXHAUSTED_NEEDS_REDRIVE = 'EXHAUSTED_NEEDS_REDRIVE',
-    TERMINAL_FAILURE = 'TERMINAL_FAILURE' // for validation/business logic errors (should never happen)
+    TERMINAL_FAILURE = 'TERMINAL_FAILURE', // for validation/business logic errors (should never happen)
+    PENDING_APPROVAL = 'PENDING_APPROVAL',
+    REJECTED = 'REJECTED',
 }
 
 export enum TriggerType {
@@ -53,6 +55,11 @@ export interface Trigger {
     submitted_at: Date | null;
     confirmed_at: Date | null;
     updated_at: Date;
+
+    approved_by: string | null;
+    approved_at: Date | null;
+    rejected_by: string | null;
+    rejected_at: Date | null;
 }
 
 export interface CreateTriggerData {
@@ -79,4 +86,9 @@ export interface UpdateTriggerData {
     confirmed_at?: Date;
     on_chain_verified?: boolean;
     on_chain_verified_at?: Date;
+
+    approved_by?: string;
+    approved_at?: Date;
+    rejected_by?: string;
+    rejected_at?: Date;
 }

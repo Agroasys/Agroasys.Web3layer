@@ -113,3 +113,51 @@ When escalating, include: `tradeId`, `actionKey`, `requestId`, `txHash`, current
 - Staging gate runbook: `docs/runbooks/staging-e2e-real-release-gate.md`
 - Staging gate diagnostics (non-real profile): `docs/runbooks/staging-e2e-release-gate.md`
 - Hybrid lifecycle walkthrough: `docs/runbooks/hybrid-split-walkthrough.md`
+
+
+
+## Manual Approval Mode (Pilot)
+
+### Overview
+
+When `ORACLE_MANUAL_APPROVAL_ENABLED=true`, every newly submitted trigger pauses
+at `PENDING_APPROVAL` before any blockchain transaction is attempted.
+The trigger sits in the DB waiting for an explicit human decision.
+
+
+### Flag Behaviour
+
+| `ORACLE_MANUAL_APPROVAL_ENABLED` | What happens on trigger submit |
+|---|---|
+| `false` (default) | Trigger executes immediately as before |
+| `true` | Trigger is persisted as `PENDING_APPROVAL` and returned to caller. No blockchain call is made until `/approve` is called. |
+
+Setting the flag requires a service restart (it is read at boot from env).
+
+
+### Pre-Approval Checklist (Operator)
+
+Before calling `/approve`, verify all of the following:
+
+1. Query the pending trigger, confirm `trade_id`, `trigger_type`, `created_at`.
+2. Confirm no other active trigger exists for the same `action_key`.
+3. Verify on-chain trade status matches the expected pre-condition for the `trigger_type`:
+   - `RELEASE_STAGE_1` -> trade must be `LOCKED`
+   - `CONFIRM_ARRIVAL` -> trade must be `IN_TRANSIT`
+   - `FINALIZE_TRADE` -> trade must be `ARRIVAL_CONFIRMED` and dispute window expired
+4. Confirm no recent `CONFIRMED` or `SUBMITTED` trigger exists for the same `action_key`.
+
+
+
+All approve and reject actions are also emitted as `audit`-level log entries
+(`TRIGGER_APPROVED`, `TRIGGER_REJECTED`) searchable by `idempotencyKey` and `tradeId`.
+
+
+### Escalation And Rollback Path
+
+| Situation | Action |
+|---|---|
+| Trigger approved but blockchain action fails and exhausts retries | Use standard redrive flow  |
+| Same `actionKey` appears in `PENDING_APPROVAL` a second time | Do **not** approve. Escalate to Service Owner, indicates a duplicate submission at the API layer |
+| On-chain state does not match expected pre-condition | Reject with reason, escalate to Service Owner for hotfix decision |
+

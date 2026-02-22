@@ -5,8 +5,10 @@ import {createTrigger,getTriggerByIdempotencyKey,getLatestTriggerByActionKey,upd
 import {generateActionKey,generateRequestId,generateIdempotencyKey,calculateBackoff,} from '../utils/crypto';
 import {classifyError,determineNextStatus,OracleError,ValidationError,} from '../utils/errors';
 import { Logger } from '../utils/logger';
-import { incrementOracleExhaustedRetries, incrementOracleRedriveAttempts } from '../metrics/counters';
+import { incrementOracleExhaustedRetries, incrementOracleRedriveAttempts,incrementOraclePendingApproval,incrementOracleApproved,incrementOracleRejected} from '../metrics/counters';
 import { WebhookNotifier } from '@agroasys/notifications';
+import { approveTrigger, rejectTrigger } from '../database/queries';
+
 
 export interface TriggerRequest {
     tradeId: string;
@@ -33,7 +35,8 @@ export class TriggerManager {
         private sdkClient: SDKClient,
         private maxAttempts: number = 5,
         private baseDelayMs: number = 1000,
-        private notifier?: WebhookNotifier
+        private notifier?: WebhookNotifier,
+        private manualApprovalEnabled: boolean = false,
     ) {}
 
     async executeTrigger(request: TriggerRequest): Promise<TriggerResponse> {
@@ -79,9 +82,34 @@ export class TriggerManager {
             return this.handleExistingTrigger(existingRequest, actionKey);
         }
 
+
         try {
             const trade = await this.sdkClient.getTrade(request.tradeId);
             StateValidator.validateTradeState(trade, request.triggerType);
+
+            if (this.manualApprovalEnabled && !request.isRedrive) {
+                const trigger = await this.createNewTrigger(request, actionKey);
+
+                await updateTrigger(trigger.idempotency_key, {
+                    status: TriggerStatus.PENDING_APPROVAL,
+                });
+
+                incrementOraclePendingApproval(actionKey);
+
+                Logger.audit('TRIGGER_PENDING_APPROVAL', request.tradeId, {
+                    actionKey,
+                    idempotencyKey: trigger.idempotency_key,
+                    triggerType: request.triggerType,
+                });
+
+                return {
+                    idempotencyKey: trigger.idempotency_key,
+                    actionKey,
+                    requestId: request.requestId,
+                    status: TriggerStatus.PENDING_APPROVAL,
+                    message: 'Trigger created and awaiting manual approval',
+                };
+            }
 
             Logger.info('Trade state validated, creating new trigger', {
                 tradeId: request.tradeId,
@@ -236,6 +264,67 @@ export class TriggerManager {
             message: 'Trigger in progress',
         };
     }
+
+    async resumeAfterApproval(idempotencyKey: string,actor: string): Promise<TriggerResponse> {
+        const updated = await approveTrigger(idempotencyKey, actor);
+
+        if (!updated) {
+            const existing = await getTriggerByIdempotencyKey(idempotencyKey);
+            if (!existing) {
+                throw new ValidationError(`Trigger not found: ${idempotencyKey}`);
+            }
+            return this.buildResponseFromTrigger(existing, 'Trigger already processed');
+        }
+
+        incrementOracleApproved(updated.action_key);
+
+        Logger.audit('TRIGGER_APPROVED', updated.trade_id, {
+            actionKey: updated.action_key,
+            idempotencyKey,
+            actor,
+            approvedAt: updated.approved_at,
+        });
+
+        return this.executeWithRetry(updated, updated.action_key);
+    }
+
+
+    async rejectPendingTrigger(idempotencyKey: string,actor: string,reason?: string): Promise<TriggerResponse> {
+        const updated = await rejectTrigger(idempotencyKey, actor, reason);
+
+        if (!updated) {
+            const existing = await getTriggerByIdempotencyKey(idempotencyKey);
+            if (!existing) {
+                throw new ValidationError(`Trigger not found: ${idempotencyKey}`);
+            }
+            return this.buildResponseFromTrigger(existing, 'Trigger already processed');
+        }
+
+        incrementOracleRejected(updated.action_key);
+
+        Logger.audit('TRIGGER_REJECTED', updated.trade_id, {
+            actionKey: updated.action_key,
+            idempotencyKey,
+            actor,
+            reason: reason ?? null,
+            rejectedAt: updated.rejected_at,
+        });
+
+        return this.buildResponseFromTrigger(updated, `Trigger rejected by ${actor}`);
+    }
+
+    private buildResponseFromTrigger(trigger: Trigger, message: string): TriggerResponse {
+        return {
+            idempotencyKey: trigger.idempotency_key,
+            actionKey: trigger.action_key,
+            requestId: trigger.request_id,
+            status: trigger.status,
+            txHash: trigger.tx_hash ?? undefined,
+            blockNumber: trigger.block_number ? Number(trigger.block_number) : undefined,
+            message,
+        };
+    }
+
 
     private async createNewTrigger(
         request: TriggerRequest,
