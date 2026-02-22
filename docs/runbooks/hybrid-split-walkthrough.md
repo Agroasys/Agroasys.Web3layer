@@ -44,7 +44,7 @@ scripts/docker-services.sh health staging-e2e-real
 
 ## Hybrid Model Summary (On-Chain vs Off-Chain)
 - On-chain:
-  - Escrow contract state and events (`TradeLocked`, `FundsReleasedStage1`, `PlatformFeesPaidStage1`, `FundsReleasedStage2`).
+  - Escrow contract state and events (`TradeLocked`, `FundsReleasedStage1`, `PlatformFeesPaidStage1`, `FinalTrancheReleased`).
   - Immutable `ricardianHash` anchoring the legal agreement.
 - Off-chain:
   - Document and logistics verification inputs handled by operator/oracle processes.
@@ -132,16 +132,16 @@ If not:
 - Investigate drift and run-level evidence in `docs/runbooks/reconciliation.md`.
 
 ### 5. Stage-2 release (final settlement)
-After arrival/inspection conditions are satisfied through approved operational controls, stage-2 release is executed through oracle/on-chain flow.
+After arrival is confirmed and the dispute window elapses without an active dispute, final settlement is executed via `finalizeAfterDisputeWindow` (permissionless on-chain closeout).
 
 Expected result:
 - Trade reaches final settlement state (`CLOSED` in indexed trade status).
-- Final tranche release event is visible on indexer timeline.
+- `FinalTrancheReleased` is visible on indexer timeline.
 - Reconciliation confirms on-chain/off-chain parity for the settlement.
 
 If not:
 - Treat as settlement-blocking incident and escalate through on-call path.
-- Do not perform ad-hoc direct contract calls to bypass oracle controls.
+- Use approved fallback run procedure for permissionless finalization after dispute-window checks.
 
 ### 6. Settlement closeout evidence
 Capture and attach:
@@ -174,13 +174,15 @@ Capture and attach:
   - Escalate to on-call engineer/service owner.
 
 ### Settlement stuck on timeout
-- Signal: stage progression not confirmed within expected oracle confirmation window.
+- Signal: dispute window elapsed but final settlement is not confirmed on-chain/indexer.
 - Action:
   - Validate indexer/reconciliation/on-chain consistency.
-  - Follow redrive fallback path; if unresolved, pause further settlement actions and escalate.
+  - Use the permissionless finalization fallback path (`finalizeAfterDisputeWindow`) if preconditions are satisfied.
+  - If unresolved, pause further settlement actions and escalate.
 
 ## Safety Guardrails
-- Do not manually release funds outside approved oracle/service workflow.
+- Do not execute manual stage-1 release outside approved oracle/service workflow.
+- Do not execute stage-2 fallback before dispute-window and trade-state preconditions are satisfied.
 - Do not change escrow/USDC/indexer contract addresses mid-flight for active trades.
 - Do not bypass reconciliation checks when drift evidence is unresolved.
 - Do not disable verification controls without incident approval and audit record.
