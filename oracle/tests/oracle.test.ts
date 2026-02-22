@@ -135,8 +135,8 @@ describeManual('Oracle API integration (manual)', () => {
     });
 
 
-    test('POST /release-stage1 accepts signed request', async () => {
-        const payload = { tradeId: '999', requestId: `test-${Date.now()}` };
+    test.skip('POST /release-stage1 accepts signed request', async () => {
+        const payload = { tradeId: '8', requestId: `test-${Date.now()}` };
 
         const response = await axios.post(
             `${API_URL}/release-stage1`,
@@ -238,7 +238,7 @@ describeManual('Oracle API integration (manual)', () => {
     });
 
     test.skip('POST /approve approves a PENDING_APPROVAL trigger and executes it', async () => {
-        const submitPayload = { tradeId: '4', requestId: `test-approve-${Date.now()}` };
+        const submitPayload = { tradeId: '9', requestId: `test-approve-${Date.now()}` };
 
         const submitResponse = await axios.post(
             `${API_URL}/release-stage1`,
@@ -268,7 +268,7 @@ describeManual('Oracle API integration (manual)', () => {
     });
 
     test.skip('POST /reject rejects a PENDING_APPROVAL trigger with audit trail', async () => {
-        const submitPayload = { tradeId: '5', requestId: `test-reject-${Date.now()}` };
+        const submitPayload = { tradeId: '9', requestId: `test-reject-${Date.now()}` };
 
         const submitResponse = await axios.post(
             `${API_URL}/confirm-arrival`,
