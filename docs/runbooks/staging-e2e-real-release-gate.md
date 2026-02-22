@@ -40,7 +40,8 @@ scripts/docker-services.sh down staging-e2e-real
 
 ## CI scope note
 The manual `staging-e2e-real` flow above is a staging validation runbook.
-GitHub Actions release-gate currently enforces workspace lint/typecheck/test/build checks and does not execute this full Docker profile sequence.
+GitHub Actions release-gate enforces workspace lint/typecheck/test/build checks and a CI-safe staging gate path (`scripts/validate-env.sh staging-e2e-real` plus `STAGING_E2E_REAL_GATE_ASSERT_CONFIG_ONLY=true scripts/staging-e2e-real-gate.sh`).
+CI does not execute the full Docker `up/health/logs/down` staging profile sequence from this runbook.
 Source of truth for CI behavior: `.github/workflows/release-gate.yml`.
 
 ## Expected output

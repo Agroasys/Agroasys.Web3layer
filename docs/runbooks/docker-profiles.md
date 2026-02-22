@@ -2,6 +2,7 @@
 
 ## Purpose
 Run deterministic build/start/health/log actions for each supported compose profile.
+Production launch criteria are defined in `docs/runbooks/production-readiness-checklist.md`.
 
 ## Profiles
 - `local-dev`: lightweight mock indexer responder (`indexer`) for fast iteration.
@@ -56,3 +57,6 @@ scripts/docker-services.sh down <profile>
 ```
 2. Restore last known-good env values.
 3. Re-run profile startup and health commands.
+
+## Related
+- Production readiness checklist: `docs/runbooks/production-readiness-checklist.md`
