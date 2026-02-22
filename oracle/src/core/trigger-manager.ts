@@ -82,33 +82,34 @@ export class TriggerManager {
             return this.handleExistingTrigger(existingRequest, actionKey);
         }
 
-        if (this.manualApprovalEnabled && !request.isRedrive) {
-            const trigger = await this.createNewTrigger(request, actionKey);
-
-            await updateTrigger(trigger.idempotency_key, {
-                status: TriggerStatus.PENDING_APPROVAL,
-            });
-
-            incrementOraclePendingApproval(actionKey);
-
-            Logger.audit('TRIGGER_PENDING_APPROVAL', request.tradeId, {
-                actionKey,
-                idempotencyKey: trigger.idempotency_key,
-                triggerType: request.triggerType,
-            });
-
-            return {
-                idempotencyKey: trigger.idempotency_key,
-                actionKey,
-                requestId: request.requestId,
-                status: TriggerStatus.PENDING_APPROVAL,
-                message: 'Trigger created and awaiting manual approval',
-            };
-        }
 
         try {
             const trade = await this.sdkClient.getTrade(request.tradeId);
             StateValidator.validateTradeState(trade, request.triggerType);
+
+            if (this.manualApprovalEnabled && !request.isRedrive) {
+                const trigger = await this.createNewTrigger(request, actionKey);
+
+                await updateTrigger(trigger.idempotency_key, {
+                    status: TriggerStatus.PENDING_APPROVAL,
+                });
+
+                incrementOraclePendingApproval(actionKey);
+
+                Logger.audit('TRIGGER_PENDING_APPROVAL', request.tradeId, {
+                    actionKey,
+                    idempotencyKey: trigger.idempotency_key,
+                    triggerType: request.triggerType,
+                });
+
+                return {
+                    idempotencyKey: trigger.idempotency_key,
+                    actionKey,
+                    requestId: request.requestId,
+                    status: TriggerStatus.PENDING_APPROVAL,
+                    message: 'Trigger created and awaiting manual approval',
+                };
+            }
 
             Logger.info('Trade state validated, creating new trigger', {
                 tradeId: request.tradeId,

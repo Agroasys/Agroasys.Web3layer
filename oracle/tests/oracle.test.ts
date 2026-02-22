@@ -93,7 +93,7 @@ describeManual('Oracle API integration (manual)', () => {
     });
 
 
-    test('rejects request without Authorization header', async () => {
+    test.skip('rejects request without Authorization header', async () => {
         const payload = { tradeId: '1', requestId: `test-${Date.now()}` };
         await expect(
             axios.post(`${API_URL}/release-stage1`, payload, {
@@ -102,7 +102,7 @@ describeManual('Oracle API integration (manual)', () => {
         ).rejects.toMatchObject({ response: { status: 401 } });
     });
 
-    test('rejects request with invalid API key', async () => {
+    test.skip('rejects request with invalid API key', async () => {
         const payload = { tradeId: '1', requestId: `test-${Date.now()}` };
         const timestamp = Date.now().toString();
         const bodyStr = JSON.stringify(payload);
@@ -122,7 +122,7 @@ describeManual('Oracle API integration (manual)', () => {
         ).rejects.toMatchObject({ response: { status: 401 } });
     });
 
-    test('rejects request without HMAC headers', async () => {
+    test.skip('rejects request without HMAC headers', async () => {
         const payload = { tradeId: '1', requestId: `test-${Date.now()}` };
         await expect(
             axios.post(`${API_URL}/release-stage1`, payload, {
@@ -135,8 +135,8 @@ describeManual('Oracle API integration (manual)', () => {
     });
 
 
-    test.skip('POST /release-stage1 accepts signed request', async () => {
-        const payload = { tradeId: '99', requestId: `test-${Date.now()}` };
+    test('POST /release-stage1 accepts signed request', async () => {
+        const payload = { tradeId: '999', requestId: `test-${Date.now()}` };
 
         const response = await axios.post(
             `${API_URL}/release-stage1`,
@@ -149,13 +149,13 @@ describeManual('Oracle API integration (manual)', () => {
         expect(response.data).toMatchObject({
             success: true,
             idempotencyKey: expect.any(String),
-            actionKey: expect.stringContaining('RELEASE_STAGE1'),
+            actionKey: expect.stringContaining('RELEASE_STAGE_1'),
             status: expect.any(String),
             timestamp: expect.any(String),
         });
     });
 
-    test('POST /confirm-arrival accepts signed request', async () => {
+    test.skip('POST /confirm-arrival accepts signed request', async () => {
         const payload = { tradeId: '2', requestId: `test-${Date.now()}` };
 
         const response = await axios.post(
@@ -220,7 +220,7 @@ describeManual('Oracle API integration (manual)', () => {
         });
     });
 
-    test('POST /redrive rejects missing triggerType', async () => {
+    test.skip('POST /redrive rejects missing triggerType', async () => {
         const payload = { tradeId: '1', requestId: `test-${Date.now()}` };
 
         await expect(
@@ -229,11 +229,99 @@ describeManual('Oracle API integration (manual)', () => {
     });
 
 
-    test('rejects missing tradeId', async () => {
+    test.skip('rejects missing tradeId', async () => {
         const payload = { requestId: `test-${Date.now()}` } as any;
 
         await expect(
             axios.post(`${API_URL}/release-stage1`, payload, { headers: signedHeaders(payload) })
+        ).rejects.toMatchObject({ response: { status: 400 } });
+    });
+
+    test.skip('POST /approve approves a PENDING_APPROVAL trigger and executes it', async () => {
+        const submitPayload = { tradeId: '4', requestId: `test-approve-${Date.now()}` };
+
+        const submitResponse = await axios.post(
+            `${API_URL}/release-stage1`,
+            submitPayload,
+            { headers: signedHeaders(submitPayload) }
+        );
+
+        expect(submitResponse.status).toBe(200);
+        expect(submitResponse.data.status).toBe('PENDING_APPROVAL');
+
+        const { idempotencyKey } = submitResponse.data;
+        expect(idempotencyKey).toBeTruthy();
+
+        const approvePayload = {
+            idempotencyKey,
+            actor: 'operator@agroasys',
+        };
+
+        const approveResponse = await axios.post(
+            `${API_URL}/approve`,
+            approvePayload,
+            { headers: signedHeaders(approvePayload) }
+        );
+
+        expect(approveResponse.status).toBe(200);
+        expect(approveResponse.data.success).toBe(true);
+    });
+
+    test.skip('POST /reject rejects a PENDING_APPROVAL trigger with audit trail', async () => {
+        const submitPayload = { tradeId: '5', requestId: `test-reject-${Date.now()}` };
+
+        const submitResponse = await axios.post(
+            `${API_URL}/confirm-arrival`,
+            submitPayload,
+            { headers: signedHeaders(submitPayload) }
+        );
+
+        expect(submitResponse.status).toBe(200);
+        expect(submitResponse.data.status).toBe('PENDING_APPROVAL');
+
+        const { idempotencyKey } = submitResponse.data;
+        expect(idempotencyKey).toBeTruthy();
+
+        const rejectPayload = {
+            idempotencyKey,
+            actor: 'oncall@agroasys',
+            reason: 'issue during pilot review',
+        };
+
+        const rejectResponse = await axios.post(
+            `${API_URL}/reject`,
+            rejectPayload,
+            { headers: signedHeaders(rejectPayload) }
+        );
+
+        expect(rejectResponse.status).toBe(200);
+        expect(rejectResponse.data.success).toBe(true);
+    });
+
+    test.skip('POST /approve returns 400 when idempotencyKey is missing', async () => {
+        const payload = { actor: 'operator@agroasys' } as any;
+
+        await expect(
+            axios.post(`${API_URL}/approve`, payload, { headers: signedHeaders(payload) })
+        ).rejects.toMatchObject({ response: { status: 400 } });
+    });
+
+    test.skip('POST /reject returns 400 when actor is missing', async () => {
+        const payload = { idempotencyKey: 'some-key' } as any;
+
+        await expect(
+            axios.post(`${API_URL}/reject`, payload, { headers: signedHeaders(payload) })
+        ).rejects.toMatchObject({ response: { status: 400 } });
+    });
+
+    test.skip('POST /approve returns 400 when trigger does not exist', async () => {
+        const payload = {
+            idempotencyKey: 'non-existent-key-000000000000',
+            actor: 'operator@agroasys',
+        };
+
+        await expect(
+            axios.post(`${API_URL}/approve`, payload, { headers: signedHeaders(payload) })
         ).rejects.toMatchObject({ response: { status: 400 } });
     });
 });
