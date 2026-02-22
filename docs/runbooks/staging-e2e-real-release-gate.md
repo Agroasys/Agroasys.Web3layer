@@ -2,6 +2,7 @@
 
 ## Purpose
 Run a staging-grade release gate against the real indexer pipeline profile (`staging-e2e-real`) and validate reconciliation against indexed chain state.
+For pilot startup sequencing and go/no-go criteria, use `docs/runbooks/pilot-environment-onboarding.md`.
 
 ## Profile differences
 - `local-dev`: lightweight in-memory GraphQL responder (`indexer`) for fast iteration.
