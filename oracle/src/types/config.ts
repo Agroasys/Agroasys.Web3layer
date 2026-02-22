@@ -32,4 +32,7 @@ export interface OracleConfig {
     notificationsWebhookUrl?: string;
     notificationsCooldownMs: number;
     notificationsRequestTimeoutMs: number;
+
+    // manual approval mode (pilot)
+    manualApprovalEnabled: boolean;
 }
