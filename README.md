@@ -59,7 +59,7 @@ The protocol is built on a modular stack designed for high throughput and cross-
 
 **Core Protocol & Languages**
 
-- **Smart Contracts**: Solidity (via Solang/Revive compilers targeting RISC-V PolkaVM).
+- **Smart Contracts**: Solidity with Hardhat and Parity resolc plugin stack (`@parity/hardhat-polkadot*` + `@parity/resolc`) for PolkaVM-targeted compilation (`compile:polkavm`). Legacy `compile` remains available during migration.
 
 - **Scripting & Logic**: TypeScript (Node.js v20.x runtime, matching CI).
 
@@ -119,6 +119,8 @@ npm run -w notifications build
 npm run -w contracts lint
 npm run -w contracts typecheck --if-present
 npm run -w contracts compile
+# run deterministic resolc bootstrap from docs/runbooks/polkavm-deploy-verification.md first
+npm run -w contracts compile:polkavm
 npm run -w contracts test
 npm run -w contracts build --if-present
 
@@ -151,6 +153,8 @@ npm run -w treasury build
 
 > Note: `contracts` commands need a Hardhat variable for local runs:
 > `HARDHAT_VAR_PRIVATE_KEY=0x0123456789012345678901234567890123456789012345678901234567890123`
+>
+> For deterministic PolkaVM compile, follow `docs/runbooks/polkavm-deploy-verification.md` ("Deterministic Local Bootstrap") before `compile:polkavm`.
 
 ## **Operational Runbooks**
 
@@ -161,6 +165,7 @@ npm run -w treasury build
 - `docs/runbooks/notifications.md`
 - `docs/runbooks/docker-profiles.md`
 - `docs/runbooks/production-readiness-checklist.md`
+- `docs/runbooks/polkavm-deploy-verification.md`
 - `docs/runbooks/hybrid-split-walkthrough.md`
 - `docs/runbooks/treasury-to-fiat-sop.md`
 - `docs/runbooks/pilot-environment-onboarding.md`

@@ -5,6 +5,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "compile": "hardhat compile",
+    "compile:polkavm": "npm install --no-save --no-package-lock @parity/hardhat-polkadot@0.2.7 @parity/hardhat-polkadot-resolc@0.2.3 @parity/resolc@1.0.0 && USE_POLKAVM_RESOLC=true hardhat compile --network polkadotTestnet --force",
     "test": "hardhat test",
     "test:foundry": "cd foundry && forge test -vvv",
     "coverage": "hardhat coverage",
