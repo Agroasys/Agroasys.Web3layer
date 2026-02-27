@@ -162,6 +162,7 @@ describe("AgroasysEscrow", function () {
       expect(await escrow.governanceTimelock()).to.equal(24 * 3600);
       expect(await escrow.oracleActive()).to.be.true;
       expect(await escrow.paused()).to.be.false;
+      expect(await escrow.claimsPaused()).to.be.false;
       expect(await escrow.isAdmin(admin1.address)).to.be.true;
       expect(await escrow.isAdmin(admin2.address)).to.be.true;
       expect(await escrow.isAdmin(admin3.address)).to.be.true;
@@ -213,16 +214,43 @@ describe("AgroasysEscrow", function () {
         .to.emit(escrow, "FundsReleasedStage1");
     });
 
-    it("Should block claims while paused and allow claims again after quorum unpause", async function () {
+    it("Should allow claims while globally paused when claim freeze is not active", async function () {
       const { tradeId, supplierFirstTranche } = await createDefaultTrade(ethers.id("pause-claim-flow"));
       await escrow.connect(oracle).releaseFundsStage1(tradeId);
       expect(await escrow.claimableUsdc(supplier.address)).to.equal(supplierFirstTranche);
 
       await escrow.connect(admin1).pause();
-      await expect(escrow.connect(supplier).claim()).to.be.revertedWith("paused");
-
-      await unpauseWithQuorum();
       await claimAndAssert(supplier);
+    });
+
+    it("Should enforce dedicated claim freeze and restore claim after unpauseClaims", async function () {
+      const { tradeId, supplierFirstTranche } = await createDefaultTrade(ethers.id("claims-freeze-policy"));
+      await escrow.connect(oracle).releaseFundsStage1(tradeId);
+      expect(await escrow.claimableUsdc(supplier.address)).to.equal(supplierFirstTranche);
+
+      await expect(escrow.connect(admin1).pauseClaims())
+        .to.emit(escrow, "ClaimsPaused")
+        .withArgs(admin1.address);
+      expect(await escrow.claimsPaused()).to.equal(true);
+
+      await expect(escrow.connect(supplier).claim()).to.be.revertedWith("claims paused");
+
+      await escrow.connect(admin1).pause();
+      await expect(escrow.connect(supplier).claim()).to.be.revertedWith("claims paused");
+
+      await expect(escrow.connect(admin2).unpauseClaims())
+        .to.emit(escrow, "ClaimsUnpaused")
+        .withArgs(admin2.address);
+      expect(await escrow.claimsPaused()).to.equal(false);
+
+      await claimAndAssert(supplier);
+    });
+
+    it("Should restrict claim freeze controls to admins", async function () {
+      await expect(escrow.connect(buyer).pauseClaims()).to.be.revertedWith("only admin");
+      await escrow.connect(admin1).pauseClaims();
+      await expect(escrow.connect(buyer).unpauseClaims()).to.be.revertedWith("only admin");
+      await escrow.connect(admin2).unpauseClaims();
     });
 
     it("Should disable oracle in emergency and require governance recovery before unpause", async function () {
