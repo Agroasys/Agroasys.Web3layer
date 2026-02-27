@@ -50,13 +50,6 @@ function hexToBigInt(hexValue) {
   return BigInt(hexValue);
 }
 
-function normalizeHex(value) {
-  if (!value || typeof value !== "string") {
-    return "";
-  }
-  return value.toLowerCase();
-}
-
 function normalizeChainId(value) {
   if (!value || typeof value !== "string") {
     return "";
