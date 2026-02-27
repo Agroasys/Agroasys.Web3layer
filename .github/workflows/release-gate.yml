@@ -274,36 +274,6 @@ jobs:
       - name: Compile contracts via PolkaVM resolc path
         run: npm run -w contracts compile:polkavm
 
-      - name: Run workspace checks
-        shell: bash
-        run: |
-          set +e
-          mkdir -p ci-reports
-          report="ci-reports/${WORKSPACE}.txt"
-          fail=0
-
-          run_check() {
-            local label="$1"
-            local cmd="$2"
-            echo "[$label] command: $cmd" | tee -a "$report"
-            if bash -lc "$cmd"; then
-              echo "[$label] PASS" | tee -a "$report"
-            else
-              echo "[$label] FAIL" | tee -a "$report"
-              fail=1
-            fi
-            echo "" >> "$report"
-          }
-
-          run_check lint "npm run -w ${WORKSPACE} lint --if-present"
-          run_check typecheck "npm run -w ${WORKSPACE} typecheck --if-present"
-          run_check test "npm run -w ${WORKSPACE} test --if-present"
-          run_check build "npm run -w ${WORKSPACE} compile"
-
-          if [[ "$fail" -ne 0 ]]; then
-            exit 1
-          fi
-
       - name: Generate PolkaVM compile evidence bundle
         if: always()
         shell: bash
@@ -410,6 +380,54 @@ jobs:
             "artifactSetHashSha256": "${artifact_set_hash}"
           }
           EOF
+
+      - name: Guard PolkaVM artifact evidence integrity
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_file="reports/polkavm-compile/compile-evidence.json"
+          if [[ ! -f "$bundle_file" ]]; then
+            echo "Missing compile evidence bundle: $bundle_file"
+            exit 1
+          fi
+
+          pvm_count="$(jq -r '.pvmArtifactCount // empty' "$bundle_file")"
+          if [[ -z "$pvm_count" || "$pvm_count" == "0" || "$pvm_count" == "null" ]]; then
+            echo "pvmArtifactCount=$pvm_count (expected >0). resolc artifacts missing/overwritten."
+            exit 1
+          fi
+          echo "pvmArtifactCount=$pvm_count"
+
+      - name: Run workspace checks
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-reports
+          report="ci-reports/${WORKSPACE}.txt"
+          fail=0
+
+          run_check() {
+            local label="$1"
+            local cmd="$2"
+            echo "[$label] command: $cmd" | tee -a "$report"
+            if bash -lc "$cmd"; then
+              echo "[$label] PASS" | tee -a "$report"
+            else
+              echo "[$label] FAIL" | tee -a "$report"
+              fail=1
+            fi
+            echo "" >> "$report"
+          }
+
+          run_check lint "npm run -w ${WORKSPACE} lint --if-present"
+          run_check typecheck "npm run -w ${WORKSPACE} typecheck --if-present"
+          run_check test "npm run -w ${WORKSPACE} test --if-present"
+          run_check build "npm run -w ${WORKSPACE} build --if-present"
+
+          if [[ "$fail" -ne 0 ]]; then
+            exit 1
+          fi
 
       - name: Upload PolkaVM compile evidence bundle
         if: always()
