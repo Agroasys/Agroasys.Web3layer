@@ -283,7 +283,7 @@ async function main() {
     rpcUrl = required("FEE_PATH_RPC_URL");
   }
 
-  if (rpcUrl) {
+  if (mode === "live" && rpcUrl) {
     const chainId = await rpcCall({
       rpcUrl,
       timeoutMs,
