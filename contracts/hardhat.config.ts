@@ -5,6 +5,12 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import { vars } from 'hardhat/config';
 
+const usePolkavmResolc = process.env.USE_POLKAVM_RESOLC === "true";
+if (usePolkavmResolc) {
+  require("@parity/hardhat-polkadot");
+  require("@parity/hardhat-polkadot-resolc");
+}
+
 function optionalVar(name: string): string | undefined {
   try {
     const v = vars.get(name);
@@ -40,8 +46,22 @@ const config: HardhatUserConfig = {
       url: 'https://services.polkadothub-rpc.com/testnet',
       chainId: 420420417,
       accounts: polkadotAccounts,
-    },
+      polkadot: { target: "pvm" },
+    } as any,
   },
 };
+
+if (usePolkavmResolc) {
+  (config as HardhatUserConfig & { resolc?: unknown }).resolc = {
+    version: "1.0.0",
+    compilerSource: "binary",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200,
+      },
+    },
+  };
+}
 
 export default config;

@@ -214,8 +214,190 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate contract typechain artifacts
-        run: npm run -w contracts compile
+      - name: Install pinned resolc binary (deterministic)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RESOLC_VERSION="1.0.0"
+          RESOLC_COMMIT="b080c1"
+
+          case "$(uname -s)" in
+            Linux)
+              HH_PLATFORM="linux-amd64"
+              RESOLC_NAME="resolc-x86_64-unknown-linux-musl"
+              RESOLC_SHA256="e626ba7a1a0d26828c14713781b0082ececc9a0fbfe984f11f0d93d66bbd7806"
+              ;;
+            Darwin)
+              HH_PLATFORM="macosx-amd64"
+              RESOLC_NAME="resolc-universal-apple-darwin"
+              RESOLC_SHA256="eaee8e64a863101e95e92e68b1e4e936081a97a68bc9dbf308a63f2d0084ce83"
+              ;;
+            *)
+              echo "Unsupported OS for pinned resolc install: $(uname -s)"
+              exit 1
+              ;;
+          esac
+
+          RESOLC_FILE="${RESOLC_NAME}+commit.${RESOLC_COMMIT}"
+          COMPILERS_DIR="$(node -e "require('hardhat/internal/util/global-dir').getCompilersDir().then((d) => process.stdout.write(d))")"
+          PLATFORM_DIR="${COMPILERS_DIR}/${HH_PLATFORM}"
+          TARGET_BIN="${PLATFORM_DIR}/${RESOLC_FILE}"
+
+          mkdir -p "${PLATFORM_DIR}"
+          curl -fsSL "https://github.com/paritytech/revive/releases/download/v${RESOLC_VERSION}/${RESOLC_NAME}" -o "${TARGET_BIN}"
+          echo "${RESOLC_SHA256}  ${TARGET_BIN}" | shasum -a 256 -c -
+          chmod +x "${TARGET_BIN}"
+
+          cat > "${PLATFORM_DIR}/resolc-list.json" <<EOF
+          {
+            "builds": [
+              {
+                "name": "${RESOLC_NAME}",
+                "path": "${RESOLC_FILE}",
+                "version": "${RESOLC_VERSION}",
+                "build": "${RESOLC_COMMIT}",
+                "longVersion": "${RESOLC_VERSION}+commit.${RESOLC_COMMIT}.llvm-18.1.8",
+                "sha256": "${RESOLC_SHA256}",
+                "platform": "${HH_PLATFORM}"
+              }
+            ],
+            "releases": {
+              "v${RESOLC_VERSION}": "${RESOLC_FILE}"
+            },
+            "latestRelease": "v${RESOLC_VERSION}"
+          }
+          EOF
+
+          "${TARGET_BIN}" --version
+
+      - name: Compile contracts via PolkaVM resolc path
+        run: npm run -w contracts compile:polkavm
+
+      - name: Generate PolkaVM compile evidence bundle
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p reports/polkavm-compile
+
+          files_file="reports/polkavm-compile/artifact-files.txt"
+          hashes_file="reports/polkavm-compile/artifact-hashes.txt"
+          bundle_file="reports/polkavm-compile/compile-evidence.json"
+
+          find contracts/artifacts -type f | LC_ALL=C sort > "$files_file"
+
+          if [[ -s "$files_file" ]]; then
+            while IFS= read -r file; do
+              shasum -a 256 "$file"
+            done < "$files_file" > "$hashes_file"
+          else
+            : > "$hashes_file"
+          fi
+
+          artifact_set_hash=$(shasum -a 256 "$hashes_file" | awk '{print $1}')
+          commit_sha=$(git rev-parse HEAD)
+          resolc_version=$(node -p "const fs=require('fs');const path=require('path');const entry=require.resolve('@parity/resolc');const pkg=JSON.parse(fs.readFileSync(path.join(path.dirname(entry),'..','package.json'),'utf8'));pkg.version" 2>/dev/null || echo "unknown")
+
+          solc_version=$(node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const dir = path.join(process.cwd(), 'contracts', 'artifacts', 'build-info');
+          try {
+            const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
+            if (files.length === 0) {
+              process.stdout.write('unknown');
+              process.exit(0);
+            }
+            const buildInfo = JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf8'));
+            process.stdout.write(buildInfo.solcVersion || 'unknown');
+          } catch {
+            process.stdout.write('unknown');
+          }
+          NODE
+          )
+
+          solc_long_version=$(node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const dir = path.join(process.cwd(), 'contracts', 'artifacts', 'build-info');
+          try {
+            const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
+            if (files.length === 0) {
+              process.stdout.write('unknown');
+              process.exit(0);
+            }
+            const buildInfo = JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf8'));
+            process.stdout.write(buildInfo.solcLongVersion || 'unknown');
+          } catch {
+            process.stdout.write('unknown');
+          }
+          NODE
+          )
+
+          pvm_artifact_count=$(node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const root = path.join(process.cwd(), 'contracts', 'artifacts');
+          let count = 0;
+          function walk(dir) {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              const full = path.join(dir, entry.name);
+              if (entry.isDirectory()) {
+                walk(full);
+                continue;
+              }
+              if (!entry.name.endsWith('.json') || entry.name.endsWith('.dbg.json')) {
+                continue;
+              }
+              try {
+                const parsed = JSON.parse(fs.readFileSync(full, 'utf8'));
+                if (parsed && parsed._format === 'hh-resolc-artifact-1') {
+                  count += 1;
+                }
+              } catch {}
+            }
+          }
+          try {
+            walk(root);
+            process.stdout.write(String(count));
+          } catch {
+            process.stdout.write('0');
+          }
+          NODE
+          )
+
+          cat > "$bundle_file" <<EOF
+          {
+            "generatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "commitSha": "${commit_sha}",
+            "resolcVersion": "${resolc_version}",
+            "solcVersion": "${solc_version}",
+            "solcLongVersion": "${solc_long_version}",
+            "artifactFileCount": $(wc -l < "$files_file" | tr -d ' '),
+            "pvmArtifactCount": ${pvm_artifact_count},
+            "artifactHashesFile": "${hashes_file}",
+            "artifactSetHashSha256": "${artifact_set_hash}"
+          }
+          EOF
+
+      - name: Guard PolkaVM artifact evidence integrity
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_file="reports/polkavm-compile/compile-evidence.json"
+          if [[ ! -f "$bundle_file" ]]; then
+            echo "Missing compile evidence bundle: $bundle_file"
+            exit 1
+          fi
+
+          pvm_count="$(jq -r '.pvmArtifactCount // empty' "$bundle_file")"
+          if [[ -z "$pvm_count" || "$pvm_count" == "0" || "$pvm_count" == "null" ]]; then
+            echo "pvmArtifactCount=$pvm_count (expected >0). resolc artifacts missing/overwritten."
+            exit 1
+          fi
+          echo "pvmArtifactCount=$pvm_count"
 
       - name: Run workspace checks
         shell: bash
@@ -241,11 +423,18 @@ jobs:
           run_check lint "npm run -w ${WORKSPACE} lint --if-present"
           run_check typecheck "npm run -w ${WORKSPACE} typecheck --if-present"
           run_check test "npm run -w ${WORKSPACE} test --if-present"
-          run_check build "npm run -w ${WORKSPACE} compile"
+          run_check build "npm run -w ${WORKSPACE} build --if-present"
 
           if [[ "$fail" -ne 0 ]]; then
             exit 1
           fi
+
+      - name: Upload PolkaVM compile evidence bundle
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: ci-report-contracts-compile-polkavm
+          path: reports/polkavm-compile
 
       - name: Upload workspace report
         if: always()
