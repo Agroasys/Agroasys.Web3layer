@@ -317,9 +317,10 @@ async function main() {
     onChainCodeNonEmpty: typeof onChainCode === "string" && onChainCode !== "0x",
     bytecodeHashMatch: normalizeHex(onChainBytecodeHash) === normalizeHex(artifactBytecodeHash),
     // Only enforce deployer match when an expected deployer is configured.
-    deployerMatchesExpected: expectedDeployer === null
-      ? true
-      : !!deployer && normalizeHex(deployer) === normalizeHex(expectedDeployer),
+    deployerMatchesExpected:
+      expectedDeployer === null
+        ? true
+        : !!deployer && normalizeHex(deployer) === normalizeHex(expectedDeployer),
   };
 
   const failedChecks = Object.entries(checks)
