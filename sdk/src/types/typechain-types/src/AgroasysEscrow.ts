@@ -48,6 +48,7 @@ export interface AgroasysEscrowInterface extends Interface {
       | "cancelUnpauseProposal"
       | "claim"
       | "claimableUsdc"
+      | "claimsPaused"
       | "confirmArrival"
       | "createTrade"
       | "disableOracleEmergency"
@@ -76,6 +77,7 @@ export interface AgroasysEscrowInterface extends Interface {
       | "oracleUpdateProposalExpiresAt"
       | "oracleUpdateProposals"
       | "pause"
+      | "pauseClaims"
       | "paused"
       | "proposeAddAdmin"
       | "proposeDisputeSolution"
@@ -90,6 +92,7 @@ export interface AgroasysEscrowInterface extends Interface {
       | "tradeHasActiveDisputeProposal"
       | "trades"
       | "treasuryAddress"
+      | "unpauseClaims"
       | "unpauseHasApproved"
       | "unpauseProposal"
       | "usdcToken"
@@ -104,6 +107,8 @@ export interface AgroasysEscrowInterface extends Interface {
       | "ArrivalConfirmed"
       | "ClaimableAccrued"
       | "Claimed"
+      | "ClaimsPaused"
+      | "ClaimsUnpaused"
       | "DisputeApproved"
       | "DisputeFinalized"
       | "DisputeOpenedByBuyer"
@@ -213,6 +218,10 @@ export interface AgroasysEscrowInterface extends Interface {
   encodeFunctionData(
     functionFragment: "claimableUsdc",
     values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "claimsPaused",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "confirmArrival",
@@ -331,6 +340,10 @@ export interface AgroasysEscrowInterface extends Interface {
     values: [BigNumberish]
   ): string;
   encodeFunctionData(functionFragment: "pause", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "pauseClaims",
+    values?: undefined
+  ): string;
   encodeFunctionData(functionFragment: "paused", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "proposeAddAdmin",
@@ -382,6 +395,10 @@ export interface AgroasysEscrowInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "treasuryAddress",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "unpauseClaims",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -474,6 +491,10 @@ export interface AgroasysEscrowInterface extends Interface {
   decodeFunctionResult(functionFragment: "claim", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "claimableUsdc",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "claimsPaused",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -579,6 +600,10 @@ export interface AgroasysEscrowInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "pause", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "pauseClaims",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "paused", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "proposeAddAdmin",
@@ -627,6 +652,10 @@ export interface AgroasysEscrowInterface extends Interface {
   decodeFunctionResult(functionFragment: "trades", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "treasuryAddress",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "unpauseClaims",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -762,6 +791,30 @@ export namespace ClaimedEvent {
   export interface OutputObject {
     claimant: string;
     amount: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace ClaimsPausedEvent {
+  export type InputTuple = [triggeredBy: AddressLike];
+  export type OutputTuple = [triggeredBy: string];
+  export interface OutputObject {
+    triggeredBy: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace ClaimsUnpausedEvent {
+  export type InputTuple = [triggeredBy: AddressLike];
+  export type OutputTuple = [triggeredBy: string];
+  export interface OutputObject {
+    triggeredBy: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -1389,6 +1442,8 @@ export interface AgroasysEscrow extends BaseContract {
 
   claimableUsdc: TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
 
+  claimsPaused: TypedContractMethod<[], [boolean], "view">;
+
   confirmArrival: TypedContractMethod<
     [_tradeId: BigNumberish],
     [void],
@@ -1531,6 +1586,8 @@ export interface AgroasysEscrow extends BaseContract {
 
   pause: TypedContractMethod<[], [void], "nonpayable">;
 
+  pauseClaims: TypedContractMethod<[], [void], "nonpayable">;
+
   paused: TypedContractMethod<[], [boolean], "view">;
 
   proposeAddAdmin: TypedContractMethod<
@@ -1618,6 +1675,8 @@ export interface AgroasysEscrow extends BaseContract {
   >;
 
   treasuryAddress: TypedContractMethod<[], [string], "view">;
+
+  unpauseClaims: TypedContractMethod<[], [void], "nonpayable">;
 
   unpauseHasApproved: TypedContractMethod<
     [arg0: AddressLike],
@@ -1727,6 +1786,9 @@ export interface AgroasysEscrow extends BaseContract {
   getFunction(
     nameOrSignature: "claimableUsdc"
   ): TypedContractMethod<[arg0: AddressLike], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "claimsPaused"
+  ): TypedContractMethod<[], [boolean], "view">;
   getFunction(
     nameOrSignature: "confirmArrival"
   ): TypedContractMethod<[_tradeId: BigNumberish], [void], "nonpayable">;
@@ -1862,6 +1924,9 @@ export interface AgroasysEscrow extends BaseContract {
     nameOrSignature: "pause"
   ): TypedContractMethod<[], [void], "nonpayable">;
   getFunction(
+    nameOrSignature: "pauseClaims"
+  ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "paused"
   ): TypedContractMethod<[], [boolean], "view">;
   getFunction(
@@ -1940,6 +2005,9 @@ export interface AgroasysEscrow extends BaseContract {
     nameOrSignature: "treasuryAddress"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "unpauseClaims"
+  ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "unpauseHasApproved"
   ): TypedContractMethod<[arg0: AddressLike], [boolean], "view">;
   getFunction(
@@ -2008,6 +2076,20 @@ export interface AgroasysEscrow extends BaseContract {
     ClaimedEvent.InputTuple,
     ClaimedEvent.OutputTuple,
     ClaimedEvent.OutputObject
+  >;
+  getEvent(
+    key: "ClaimsPaused"
+  ): TypedContractEvent<
+    ClaimsPausedEvent.InputTuple,
+    ClaimsPausedEvent.OutputTuple,
+    ClaimsPausedEvent.OutputObject
+  >;
+  getEvent(
+    key: "ClaimsUnpaused"
+  ): TypedContractEvent<
+    ClaimsUnpausedEvent.InputTuple,
+    ClaimsUnpausedEvent.OutputTuple,
+    ClaimsUnpausedEvent.OutputObject
   >;
   getEvent(
     key: "DisputeApproved"
@@ -2247,6 +2329,28 @@ export interface AgroasysEscrow extends BaseContract {
       ClaimedEvent.InputTuple,
       ClaimedEvent.OutputTuple,
       ClaimedEvent.OutputObject
+    >;
+
+    "ClaimsPaused(address)": TypedContractEvent<
+      ClaimsPausedEvent.InputTuple,
+      ClaimsPausedEvent.OutputTuple,
+      ClaimsPausedEvent.OutputObject
+    >;
+    ClaimsPaused: TypedContractEvent<
+      ClaimsPausedEvent.InputTuple,
+      ClaimsPausedEvent.OutputTuple,
+      ClaimsPausedEvent.OutputObject
+    >;
+
+    "ClaimsUnpaused(address)": TypedContractEvent<
+      ClaimsUnpausedEvent.InputTuple,
+      ClaimsUnpausedEvent.OutputTuple,
+      ClaimsUnpausedEvent.OutputObject
+    >;
+    ClaimsUnpaused: TypedContractEvent<
+      ClaimsUnpausedEvent.InputTuple,
+      ClaimsUnpausedEvent.OutputTuple,
+      ClaimsUnpausedEvent.OutputObject
     >;
 
     "DisputeApproved(uint256,address,uint256,uint256)": TypedContractEvent<
