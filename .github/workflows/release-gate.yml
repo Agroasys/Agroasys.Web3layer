@@ -87,6 +87,43 @@ jobs:
       - name: Check deprecated profile names in docs
         run: scripts/tests/docs-profile-name-guard.sh
 
+  arch-roadmap-consistency:
+    name: ci/arch-roadmap-consistency
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Run architecture-roadmap consistency guard
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-reports
+          node scripts/architecture-roadmap-consistency-check.mjs \
+            --repo "${{ github.repository }}" \
+            --out "ci-reports/arch-roadmap-consistency.json" \
+            > ci-reports/arch-roadmap-consistency.log 2>&1
+          status=$?
+          cat ci-reports/arch-roadmap-consistency.log
+          exit "$status"
+
+      - name: Upload architecture-roadmap consistency report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: ci-report-arch-roadmap-consistency
+          path: |
+            ci-reports/arch-roadmap-consistency.json
+            ci-reports/arch-roadmap-consistency.log
+
   env-profile-regression:
     name: ci/env-profile-regression
     runs-on: ubuntu-latest
@@ -121,6 +158,7 @@ jobs:
           run_check docker-services-env-layering scripts/tests/docker-services-env-layering.test.sh
           run_check staging-e2e-real-gate-start-block scripts/tests/staging-e2e-real-gate-start-block.test.sh
           run_check notifications-wiring-health scripts/tests/notifications-wiring-health.test.sh
+          run_check arch-roadmap-consistency scripts/tests/architecture-roadmap-consistency-check.test.sh
 
           if [[ "$fail" -ne 0 ]]; then
             exit 1
@@ -1034,6 +1072,7 @@ jobs:
     needs:
       - changes
       - docs-profile-guard
+      - arch-roadmap-consistency
       - env-profile-regression
       - staging-e2e-real-gate
       - asset-fee-path
@@ -1056,6 +1095,7 @@ jobs:
           declare -A results
           results["ci/changes"]="${{ needs.changes.result }}"
           results["ci/docs-profile-guard"]="${{ needs.docs-profile-guard.result }}"
+          results["ci/arch-roadmap-consistency"]="${{ needs.arch-roadmap-consistency.result }}"
           results["ci/env-profile-regression"]="${{ needs.env-profile-regression.result }}"
           results["ci/staging-e2e-real-gate"]="${{ needs.staging-e2e-real-gate.result }}"
           results["ci/asset-fee-path"]="${{ needs.asset-fee-path.result }}"

@@ -66,3 +66,28 @@ For weighted progress sync (optional overrides; defaults are built in for curren
 Auth for project field writes:
 - Preferred: `ROADMAP_APP_ID` + `ROADMAP_APP_PRIVATE_KEY` (+ optional `ROADMAP_APP_INSTALLATION_ID`).
 - Fallback: `github.token` (may be unable to write org ProjectV2 fields depending on org visibility/policy).
+
+## Architecture-Matrix Consistency Guard
+- Checker script: `scripts/architecture-roadmap-consistency-check.mjs`
+- CI artifact: `ci-report-arch-roadmap-consistency`
+
+What the checker enforces:
+1. Required matrix row metadata columns exist and are populated:
+   - `Owner`
+   - `Last Refreshed`
+   - `Refresh Cadence`
+2. Status/evidence consistency rules:
+   - `Done` rows require `100%` and `Remaining Gap` starting with `None`.
+   - Non-`Done`/non-`Out of Scope` rows cannot be `100%` or claim no remaining gap.
+3. Gate synchronization:
+   - Issues `#70/#71/#72` must contain `Last synchronized: <date>` matching matrix snapshot date.
+   - Gate issue bodies must reference `docs/runbooks/architecture-coverage-matrix.md`.
+
+Manual commands:
+```bash
+# offline schema/format checks
+node scripts/architecture-roadmap-consistency-check.mjs --offline
+
+# online checks (issue-state + gate sync checks)
+GITHUB_TOKEN=\"$(gh auth token)\" node scripts/architecture-roadmap-consistency-check.mjs
+```
