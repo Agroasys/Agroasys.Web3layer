@@ -76,6 +76,10 @@ async function sleep(ms) {
 }
 
 async function rpcCall({ rpcUrl, timeoutMs, retries, backoffMs, method, params }) {
+  if (!Number.isInteger(retries) || retries <= 0) {
+    throw new Error(`invalid retries value: ${retries}`);
+  }
+
   for (let attempt = 1; attempt <= retries; attempt += 1) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -83,7 +87,7 @@ async function rpcCall({ rpcUrl, timeoutMs, retries, backoffMs, method, params }
     try {
       const response = await fetch(rpcUrl, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jsonrpc: "2.0",
           id: 1,
@@ -112,8 +116,6 @@ async function rpcCall({ rpcUrl, timeoutMs, retries, backoffMs, method, params }
       clearTimeout(timeout);
     }
   }
-
-  throw new Error(`rpc call unexpectedly exhausted without result (${method})`);
 }
 
 function loadJson(filePath) {
@@ -132,6 +134,10 @@ function resolveCompilerInfo(artifactPath) {
       compilerVersion: buildInfo.solcVersion ?? null,
       solcLongVersion: buildInfo.solcLongVersion ?? null,
     };
+  }
+
+  if (!artifactPath.endsWith(".json")) {
+    fail(`artifact path does not end with ".json": ${artifactPath}`);
   }
 
   const dbgPath = artifactPath.replace(/\.json$/u, ".dbg.json");
@@ -257,6 +263,7 @@ async function main() {
 
   const onChainBytecodeHash = toKeccakHex(hexToBytes(onChainCode));
   const artifactBytecodeHash = toKeccakHex(hexToBytes(artifact.deployedBytecode));
+  // canonicalJson returns a deterministic JSON string; we hash its UTF-8 bytes.
   const abiHash = toKeccakHex(Buffer.from(canonicalJson(artifact.abi), "utf8"));
   const deployer = tx?.from ?? "";
   const expectedDeployer = (process.env.DEPLOY_VERIFY_DEPLOYER || "").trim();
