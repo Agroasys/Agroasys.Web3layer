@@ -1,9 +1,11 @@
 /**
  * SPDX-License-Identifier: Apache-2.0
  */
+import { ethers } from 'ethers';
 import { AdminSDK } from '../src/modules/adminSDK';
 import { DisputeStatus } from '../src/types/dispute';
 import { TEST_CONFIG, assertRequiredEnv, getAdminSigner, hasRequiredEnv } from './setup';
+import { AgroasysEscrow__factory } from '../src/types/typechain-types/factories/src/AgroasysEscrow__factory';
 import type { Signer } from 'ethers';
 
 const isManualE2ERequested = process.env.RUN_E2E === 'true';
@@ -61,12 +63,48 @@ describeIntegration('AdminSDK', () => {
     let adminSDK: AdminSDK;
     let adminSigner1: Signer;
     let adminSigner2: Signer;
+    let escrowReadOnly: ReturnType<typeof AgroasysEscrow__factory.connect>;
+
+    async function requireReceipt(txHash: string): Promise<ethers.TransactionReceipt> {
+        const provider = adminSigner1.provider;
+        if (!provider) {
+            throw new Error('adminSigner1 provider is unavailable');
+        }
+        const receipt = await provider.getTransactionReceipt(txHash);
+        if (!receipt) {
+            throw new Error(`transaction receipt not found for hash: ${txHash}`);
+        }
+        return receipt;
+    }
+
+    async function findEventInReceipt(txHash: string, eventName: string): Promise<ethers.LogDescription | null> {
+        const receipt = await requireReceipt(txHash);
+        for (const log of receipt.logs) {
+            try {
+                const parsed = escrowReadOnly.interface.parseLog({
+                    topics: log.topics as string[],
+                    data: log.data,
+                });
+                if (parsed && parsed.name === eventName) {
+                    return parsed;
+                }
+            } catch {
+                // Ignore non-contract logs.
+            }
+        }
+        return null;
+    }
 
     beforeAll(() => {
         assertRequiredEnv();
         adminSDK = new AdminSDK(TEST_CONFIG);
         adminSigner1 = getAdminSigner(1);
         adminSigner2 = getAdminSigner(2);
+        const provider = adminSigner1.provider;
+        if (!provider) {
+            throw new Error('adminSigner1 provider is unavailable');
+        }
+        escrowReadOnly = AgroasysEscrow__factory.connect(TEST_CONFIG.escrowAddress, provider);
 
         if (shouldRunAdminMutationTests) {
             adminMutationFixture = {
@@ -91,16 +129,26 @@ describeIntegration('AdminSDK', () => {
         expect(isAdmin2).toBe(true);
     });
 
+    test('should return false for non-admin address', async () => {
+        const nonAdminAddress = '0x0000000000000000000000000000000000000001';
+        const isNonAdmin = await adminSDK.isAdmin(nonAdminAddress);
+        expect(isNonAdmin).toBe(false);
+    });
+
     testAdminMutation('should pause protocol', async () => {
         const result = await adminSDK.pause(adminSigner1);
         
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+        const isPaused = await adminSDK.isPaused();
+        expect(isPaused).toBe(true);
     });
 
     testAdminMutation('should propose unpause', async () => {
         const result = await adminSDK.proposeUnpause(adminSigner1);
         
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+        const unpauseProposed = await findEventInReceipt(result.txHash, 'UnpauseProposed');
+        expect(unpauseProposed).not.toBeNull();
     });
 
     testAdminMutation('should approve unpause', async () => {
@@ -126,6 +174,13 @@ describeIntegration('AdminSDK', () => {
         const result = await adminSDK.proposeDisputeSolution(fixture.TEST_TRADE_ID, DisputeStatus.REFUND, adminSigner1);
         
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+        const disputeProposed = await findEventInReceipt(result.txHash, 'DisputeSolutionProposed');
+        expect(disputeProposed).not.toBeNull();
+        if (!disputeProposed) {
+            throw new Error('DisputeSolutionProposed event not found in transaction receipt');
+        }
+        expect(disputeProposed.args.tradeId).toBe(fixture.TEST_TRADE_ID);
+        expect(Number(disputeProposed.args.disputeStatus)).toBe(DisputeStatus.REFUND);
     });
 
     testAdminMutation('should approve dispute solution', async () => {
@@ -147,6 +202,12 @@ describeIntegration('AdminSDK', () => {
         const result = await adminSDK.proposeOracleUpdate(fixture.TEST_NEW_ORACLE_ADDRESS, adminSigner1);
         
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+        const oracleProposed = await findEventInReceipt(result.txHash, 'OracleUpdateProposed');
+        expect(oracleProposed).not.toBeNull();
+        if (!oracleProposed) {
+            throw new Error('OracleUpdateProposed event not found in transaction receipt');
+        }
+        expect((oracleProposed.args.newOracle as string).toLowerCase()).toBe(fixture.TEST_NEW_ORACLE_ADDRESS.toLowerCase());
     });
 
     testAdminMutation('should approve oracle update', async () => {
