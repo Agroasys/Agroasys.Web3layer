@@ -7,8 +7,7 @@ import { TEST_CONFIG, assertRequiredEnv, getAdminSigner, hasRequiredEnv } from '
 import type { Signer } from 'ethers';
 
 const isManualE2ERequested = process.env.RUN_E2E === 'true';
-const hasEnvForManualE2E = hasRequiredEnv;
-const shouldRunManualE2E = isManualE2ERequested && hasEnvForManualE2E;
+const shouldRunManualE2E = isManualE2ERequested && hasRequiredEnv;
 const describeIntegration = shouldRunManualE2E ? describe : describe.skip;
 
 function getOptionalEnv(name: string): string | undefined {
