@@ -97,6 +97,16 @@ function sanitizeRpcUrl(rawUrl) {
   }
 }
 
+function isValidHexString(value) {
+  if (typeof value !== "string") {
+    return false;
+  }
+  if (!/^0[xX][0-9a-fA-F]*$/u.test(value)) {
+    return false;
+  }
+  return value.slice(2).length % 2 === 0;
+}
+
 async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -152,6 +162,9 @@ async function rpcCall({ rpcUrl, timeoutMs, retries, backoffMs, method, params }
       clearTimeout(timeout);
     }
   }
+
+  // Unreachable when retries > 0, kept as a static-analysis safeguard.
+  throw new Error(`rpc call failed (${method}) after ${retries} attempts`);
 }
 
 function loadJson(filePath) {
@@ -226,7 +239,7 @@ async function main() {
   const artifactPath = resolveFromRepo(requiredEnv("DEPLOY_VERIFY_ARTIFACT_PATH"));
   const contractAddress = requiredEnv("DEPLOY_VERIFY_CONTRACT_ADDRESS");
   const txHash = requiredEnv("DEPLOY_VERIFY_TX_HASH");
-  const expectedChainId = (process.env.DEPLOY_VERIFY_EXPECTED_CHAIN_ID || "").trim();
+  const expectedChainId = optionalEnv("DEPLOY_VERIFY_EXPECTED_CHAIN_ID");
   const compilerName = (process.env.DEPLOY_VERIFY_COMPILER_NAME || "solc").trim();
   const timeoutMs = Number(process.env.DEPLOY_VERIFY_TIMEOUT_MS || String(DEFAULT_TIMEOUT_MS));
   const retries = Number(process.env.DEPLOY_VERIFY_RETRIES || String(DEFAULT_RETRIES));
@@ -293,8 +306,26 @@ async function main() {
     params: [txHash],
   });
 
-  const onChainBytecodeHash = toKeccakHex(hexToBytes(onChainCode));
-  const artifactBytecodeHash = toKeccakHex(hexToBytes(artifact.deployedBytecode));
+  if (!isValidHexString(onChainCode)) {
+    fail(`RPC returned malformed contract code for ${contractAddress}: ${String(onChainCode)}`);
+  }
+  if (!isValidHexString(artifact.deployedBytecode)) {
+    fail(
+      `artifact deployedBytecode is malformed for ${artifactPath}: ${String(
+        artifact.deployedBytecode,
+      )}`,
+    );
+  }
+
+  let onChainBytecodeHash = "";
+  let artifactBytecodeHash = "";
+  try {
+    onChainBytecodeHash = toKeccakHex(hexToBytes(onChainCode));
+    artifactBytecodeHash = toKeccakHex(hexToBytes(artifact.deployedBytecode));
+  } catch (error) {
+    fail(`unable to hash bytecode for verification: ${error.message}`);
+  }
+
   // canonicalJson returns a deterministic JSON string; we hash its UTF-8 bytes.
   const abiHash = toKeccakHex(new TextEncoder().encode(canonicalJson(artifact.abi)));
   const deployer = tx?.from ?? null;
@@ -302,18 +333,18 @@ async function main() {
 
   const checks = {
     runtimeTargetDeclared: typeof runtimeTarget === "string" && runtimeTarget.length > 0,
-    runtimeClientVersionPresent:
+    runtimeClientVersionAttempted:
       (typeof rpcClientVersion === "string" && rpcClientVersion.length > 0) ||
       !!rpcClientVersionError,
     chainIdMatchesExpected:
-      !expectedChainId || normalizeHex(chainId) === normalizeHex(expectedChainId),
+      expectedChainId == null || normalizeHex(chainId) === normalizeHex(expectedChainId),
     txFound: !!tx,
     receiptFound: !!receipt,
     txHashMatch: normalizeHex(tx?.hash) === normalizeHex(txHash),
     receiptSuccess: normalizeHex(receipt?.status) === "0x1",
     receiptContractAddressMatch:
       normalizeHex(receipt?.contractAddress) === normalizeHex(contractAddress),
-    txCreatesContract: tx?.to === null,
+    txCreatesContract: !!tx && tx.to === null,
     onChainCodeNonEmpty: typeof onChainCode === "string" && onChainCode !== "0x",
     bytecodeHashMatch: normalizeHex(onChainBytecodeHash) === normalizeHex(artifactBytecodeHash),
     // Only enforce deployer match when an expected deployer is configured.
@@ -345,7 +376,7 @@ async function main() {
     rpcEndpoint: sanitizeRpcUrl(rpcUrl),
     rpcClientVersion,
     rpcClientVersionError,
-    expectedChainId: expectedChainId || null,
+    expectedChainId: expectedChainId ?? null,
     artifactPath: path.relative(repoRoot, artifactPath),
     onChainBytecodeHash,
     artifactBytecodeHash,
