@@ -4,6 +4,12 @@
 
 This runbook describes the escrow payout model after issue `#142` migration from direct push transfers to pull-based `claim()` settlement.
 
+## Decision Record
+
+- ADR: `docs/adr/adr-0142-pull-over-push-claim-settlement.md`
+- Canonical implementation PR chain:
+  - `#151`, `#154`, `#165`, `#166`, `#167`, `#168`
+
 ## Behavior Change
 
 - Before: payout transitions (`releaseFundsStage1`, `finalizeAfterDisputeWindow`, timeout handlers, dispute execution) transferred USDC immediately.
