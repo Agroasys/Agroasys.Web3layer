@@ -62,4 +62,70 @@ export class Client {
             );
         }
     }
+
+    async isPaused(): Promise<boolean> {
+        try {
+            return await this.contract.paused();
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to check paused state: ${error.message}`,
+                { error: error.message }
+            );
+        }
+    }
+
+    async isClaimsPaused(): Promise<boolean> {
+        try {
+            return await this.contract.claimsPaused();
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to check claimsPaused state: ${error.message}`,
+                { error: error.message }
+            );
+        }
+    }
+
+    async getClaimableUsdc(address: string): Promise<bigint> {
+        try {
+            return await this.contract.claimableUsdc(address);
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to get claimable USDC: ${error.message}`,
+                { address, error: error.message }
+            );
+        }
+    }
+
+    async getTotalClaimableUsdc(): Promise<bigint> {
+        try {
+            return await this.contract.totalClaimableUsdc();
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to get total claimable USDC: ${error.message}`,
+                { error: error.message }
+            );
+        }
+    }
+
+    async claim(signer: ethers.Signer): Promise<{ txHash: string; blockNumber: number }> {
+        try {
+            const contractWithSigner = this.contract.connect(signer);
+            const tx = await contractWithSigner.claim();
+            const receipt = await tx.wait();
+
+            if (!receipt) {
+                throw new ContractError('Transaction receipt not available');
+            }
+
+            return {
+                txHash: receipt.hash,
+                blockNumber: receipt.blockNumber
+            };
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to claim USDC: ${error.message}`,
+                { error: error.message }
+            );
+        }
+    }
 }
