@@ -432,7 +432,7 @@ export class TriggerManager {
 
                 if (nextStatus === TriggerStatus.EXHAUSTED_NEEDS_REDRIVE) {
                     const exhaustedMessage =
-                        "Exhausted " + this.maxAttempts + " attempts: " + oracleError.message + ". Use re-drive endpoint to retry.";
+                        `Exhausted ${this.maxAttempts} attempts: ${oracleError.message}. Use re-drive endpoint to retry.`;
                     incrementOracleExhaustedRetries(actionKey);
                     await this.notifyTerminalStatus(trigger, actionKey, nextStatus, exhaustedMessage, attempt);
                     return {
@@ -485,7 +485,7 @@ export class TriggerManager {
             source: 'oracle',
             type: eventType,
             severity: 'critical',
-            dedupKey: 'oracle:' + status + ':' + actionKey,
+            dedupKey: `oracle:${status}:${actionKey}`,
             message,
             correlation: {
                 tradeId: trigger.trade_id,
