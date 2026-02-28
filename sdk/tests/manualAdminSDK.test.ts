@@ -61,8 +61,8 @@ describeIntegration('AdminSDK', () => {
             TEST_DISPUTE_PROPOSAL_ID = requireManualE2EBigIntEnv('TEST_DISPUTE_PROPOSAL_ID');
             TEST_ORACLE_PROPOSAL_ID = requireManualE2EBigIntEnv('TEST_ORACLE_PROPOSAL_ID');
             TEST_ADMIN_ADD_PROPOSAL_ID = requireManualE2EBigIntEnv('TEST_ADMIN_ADD_PROPOSAL_ID');
-            TEST_NEW_ORACLE_ADDRESS = requireManualE2EEnv('NEW_ORACLE_ADDRESS');
-            TEST_NEW_ADMIN_ADDRESS = requireManualE2EEnv('NEW_ADMIN_ADDRESS');
+            TEST_NEW_ORACLE_ADDRESS = requireManualE2EEnv('TEST_NEW_ORACLE_ADDRESS');
+            TEST_NEW_ADMIN_ADDRESS = requireManualE2EEnv('TEST_NEW_ADMIN_ADDRESS');
         }
     });
 

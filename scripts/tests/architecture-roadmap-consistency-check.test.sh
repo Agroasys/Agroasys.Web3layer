@@ -68,6 +68,22 @@ if node "$SCRIPT" --offline --matrix "$fail_matrix" --out "$tmp_dir/fail.json" >
   exit 1
 fi
 
+node -e '
+  const fs = require("node:fs");
+  const outPath = process.argv[1];
+  const report = JSON.parse(fs.readFileSync(outPath, "utf8"));
+  if (report.pass !== false) {
+    throw new Error("expected fail report to have pass=false");
+  }
+  if (!Array.isArray(report.errors) || report.errors.length === 0) {
+    throw new Error("expected fail report to contain at least one error");
+  }
+  const errorsText = report.errors.map(String).join(" ").toLowerCase();
+  if (!errorsText.includes("owner")) {
+    throw new Error("expected fail report errors to mention the Owner field");
+  }
+' "$tmp_dir/fail.json"
+
 cat > "$fail_matrix_last_refreshed" <<'MATRIX'
 # Architecture Coverage Matrix
 
