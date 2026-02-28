@@ -49,6 +49,8 @@ This runbook describes the escrow payout model after issue `#142` migration from
 
 Use these checks during incident triage or release verification:
 
+**Production execution:** Admins run these actions through the Web2 admin dashboard, which calls the AdminSDK to submit transactions (`sdk/src/modules/adminSDK.ts`). The Foundry commands below are a reproducible fallback for audits, incident response, or manual verification when the dashboard path is unavailable.
+
 ```bash
 cast call <ESCROW_ADDRESS> "claimableUsdc(address)(uint256)" <RECIPIENT>
 ```
