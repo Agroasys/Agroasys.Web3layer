@@ -27,13 +27,17 @@ This runbook describes the escrow payout model after issue `#142` migration from
 
 ## Pause Policy Decision
 
-- Policy: `claim()` is blocked while protocol pause is active (`whenNotPaused`).
-- Reason: during emergency containment, we freeze all normal fund-out operations until admins finish incident triage.
-- Operational safety: claims resume through the existing quorum unpause path:
-  1. `proposeUnpause()`
-  2. `approveUnpause()`
-  3. recipients retry `claim()`
-- This behavior is test-backed in `contracts/tests/AgroasysEscrow.ts` (`Should block claims while paused and allow claims again after quorum unpause`).
+- Policy split:
+  - Global `paused` blocks protocol mutation paths (trade creation, stage transitions, dispute execution, timeout flows).
+  - `claim()` remains available during global pause to preserve non-custodial access to already-accrued balances.
+  - Dedicated `claimsPaused` controls (`pauseClaims()` / `unpauseClaims()`) can freeze claims during claim-path incidents.
+- Incident decision matrix:
+  - Use `pause()` for protocol mutation incidents.
+  - Use `pauseClaims()` only for claim/accounting/token-transfer incidents.
+  - Use both if both risk surfaces are impacted.
+- This behavior is test-backed in `contracts/tests/AgroasysEscrow.ts`:
+  - `Should allow claims while globally paused when claim freeze is not active`
+  - `Should enforce dedicated claim freeze and restore claim after unpauseClaims`
 
 ## Operator Verification
 

@@ -145,6 +145,8 @@ contract AgroasysEscrow is ReentrancyGuard {
     address public treasuryAddress;
     /// @notice Global pause flag for normal protocol operations.
     bool public paused;
+    /// @notice Dedicated emergency switch for claim withdrawals.
+    bool public claimsPaused;
     /// @notice Emergency switch to disable oracle-triggered transitions.
     bool public oracleActive;
 
@@ -325,6 +327,8 @@ contract AgroasysEscrow is ReentrancyGuard {
         ClaimType claimType
     );
     event Claimed(address indexed claimant, uint256 amount);
+    event ClaimsPaused(address indexed triggeredBy);
+    event ClaimsUnpaused(address indexed triggeredBy);
     event OracleUpdateProposalExpiredCancelled(uint256 indexed proposalId, address indexed cancelledBy);
     event AdminAddProposalExpiredCancelled(uint256 indexed proposalId, address indexed cancelledBy);
 
@@ -378,6 +382,11 @@ contract AgroasysEscrow is ReentrancyGuard {
         _;
     }
 
+    modifier whenClaimsNotPaused() {
+        require(!claimsPaused, "claims paused");
+        _;
+    }
+
     modifier onlyOracleActive() {
         require(oracleActive, "oracle disabled");
         _;
@@ -390,6 +399,24 @@ contract AgroasysEscrow is ReentrancyGuard {
         require(!paused, "already paused");
         paused = true;
         emit Paused(msg.sender);
+    }
+
+    /**
+     * @notice Pauses claim withdrawals while keeping global pause policy independent.
+     */
+    function pauseClaims() external onlyAdmin {
+        require(!claimsPaused, "claims already paused");
+        claimsPaused = true;
+        emit ClaimsPaused(msg.sender);
+    }
+
+    /**
+     * @notice Unpauses claim withdrawals.
+     */
+    function unpauseClaims() external onlyAdmin {
+        require(claimsPaused, "claims not paused");
+        claimsPaused = false;
+        emit ClaimsUnpaused(msg.sender);
     }
 
     /**
@@ -630,7 +657,7 @@ contract AgroasysEscrow is ReentrancyGuard {
         emit ClaimableAccrued(_tradeId, _recipient, _amount, _claimType);
     }
 
-    function claim() external whenNotPaused nonReentrant {
+    function claim() external whenClaimsNotPaused nonReentrant {
         uint256 amount = claimableUsdc[msg.sender];
         require(amount > 0, "nothing claimable");
 
