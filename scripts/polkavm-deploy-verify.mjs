@@ -298,7 +298,7 @@ async function main() {
   // canonicalJson returns a deterministic JSON string; we hash its UTF-8 bytes.
   const abiHash = toKeccakHex(new TextEncoder().encode(canonicalJson(artifact.abi)));
   const deployer = tx?.from ?? null;
-  const expectedDeployer = optionalEnv("DEPLOY_VERIFY_DEPLOYER") || "";
+  const expectedDeployer = optionalEnv("DEPLOY_VERIFY_DEPLOYER") ?? null;
 
   const checks = {
     runtimeTargetDeclared: typeof runtimeTarget === "string" && runtimeTarget.length > 0,
@@ -317,11 +317,9 @@ async function main() {
     onChainCodeNonEmpty: typeof onChainCode === "string" && onChainCode !== "0x",
     bytecodeHashMatch: normalizeHex(onChainBytecodeHash) === normalizeHex(artifactBytecodeHash),
     // Only enforce deployer match when an expected deployer is configured.
-    deployerMatchesExpected: !expectedDeployer
+    deployerMatchesExpected: expectedDeployer == null
       ? true
-      : typeof deployer === "string" &&
-        deployer.length > 0 &&
-        normalizeHex(deployer) === normalizeHex(expectedDeployer),
+      : !!deployer && normalizeHex(deployer) === normalizeHex(expectedDeployer),
   };
 
   const failedChecks = Object.entries(checks)
