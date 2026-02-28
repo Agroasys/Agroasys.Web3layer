@@ -4,16 +4,54 @@
 import { AdminSDK } from '../src/modules/adminSDK';
 import { DisputeStatus } from '../src/types/dispute';
 import { TEST_CONFIG, assertRequiredEnv, getAdminSigner, hasRequiredEnv } from './setup';
+import type { Signer } from 'ethers';
 
 const isManualE2ERequested = process.env.RUN_E2E === 'true';
 const hasEnvForManualE2E = hasRequiredEnv;
 const shouldRunManualE2E = isManualE2ERequested && hasEnvForManualE2E;
 const describeIntegration = shouldRunManualE2E ? describe : describe.skip;
 
+function getOptionalEnv(name: string): string | undefined {
+    const value = process.env[name];
+    if (typeof value !== 'string') {
+        return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function requireManualE2EEnv(name: string): string {
+    const value = getOptionalEnv(name);
+    if (!value) {
+        throw new Error(`Missing required manual E2E environment variable: ${name}`);
+    }
+    return value;
+}
+
+function requireManualE2EBigIntEnv(name: string): bigint {
+    const value = requireManualE2EEnv(name);
+    try {
+        return BigInt(value);
+    } catch {
+        throw new Error(`Invalid bigint in manual E2E environment variable ${name}: ${value}`);
+    }
+}
+
+const TEST_TRADE_ID = shouldRunManualE2E ? requireManualE2EBigIntEnv('TEST_TRADE_ID') : 0n;
+const TEST_DISPUTE_PROPOSAL_ID = shouldRunManualE2E ? requireManualE2EBigIntEnv('TEST_DISPUTE_PROPOSAL_ID') : 0n;
+const TEST_ORACLE_PROPOSAL_ID = shouldRunManualE2E ? requireManualE2EBigIntEnv('TEST_ORACLE_PROPOSAL_ID') : 0n;
+const TEST_ADMIN_ADD_PROPOSAL_ID = shouldRunManualE2E ? requireManualE2EBigIntEnv('TEST_ADMIN_ADD_PROPOSAL_ID') : 0n;
+const TEST_NEW_ORACLE_ADDRESS = shouldRunManualE2E
+    ? requireManualE2EEnv('NEW_ORACLE_ADDRESS')
+    : '0x0000000000000000000000000000000000000000';
+const TEST_NEW_ADMIN_ADDRESS = shouldRunManualE2E
+    ? requireManualE2EEnv('NEW_ADMIN_ADDRESS')
+    : '0x0000000000000000000000000000000000000000';
+
 describeIntegration('AdminSDK', () => {
     let adminSDK: AdminSDK;
-    let adminSigner1: any;
-    let adminSigner2: any;
+    let adminSigner1: Signer;
+    let adminSigner2: Signer;
 
     beforeAll(() => {
         assertRequiredEnv();
@@ -64,89 +102,67 @@ describeIntegration('AdminSDK', () => {
     });
 
     test.skip('should propose dispute solution', async () => {
-        const tradeId = 0n; // replace
-        
-        const result = await adminSDK.proposeDisputeSolution(tradeId, DisputeStatus.REFUND, adminSigner1);
+        const result = await adminSDK.proposeDisputeSolution(TEST_TRADE_ID, DisputeStatus.REFUND, adminSigner1);
         
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
     });
 
     test.skip('should approve dispute solution', async () => {
-        const proposalId = 0n; // replace
-        
-        const result = await adminSDK.approveDisputeSolution(proposalId, adminSigner2);
+        const result = await adminSDK.approveDisputeSolution(TEST_DISPUTE_PROPOSAL_ID, adminSigner2);
         
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
     });
 
     test.skip('should cancel expired dispute proposal', async () => {
-        const proposalId = 0n; // replace
-        
-        const result = await adminSDK.cancelExpiredDisputeProposal(proposalId, adminSigner1);
+        const result = await adminSDK.cancelExpiredDisputeProposal(TEST_DISPUTE_PROPOSAL_ID, adminSigner1);
         
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
     });
 
     test.skip('should propose oracle update', async () => {
-        const newOracle = '0x20e7E6fC0905E17De2D28E926Ad56324a6844a1D'; // replace
-        
-        const result = await adminSDK.proposeOracleUpdate(newOracle, adminSigner1);
+        const result = await adminSDK.proposeOracleUpdate(TEST_NEW_ORACLE_ADDRESS, adminSigner1);
         
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
     });
 
     test.skip('should approve oracle update', async () => {
-        const proposalId = 0n; // replace
-
-        const result = await adminSDK.approveOracleUpdate(proposalId, adminSigner2);
+        const result = await adminSDK.approveOracleUpdate(TEST_ORACLE_PROPOSAL_ID, adminSigner2);
         
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
     });
 
     test.skip('should execute oracle update', async () => {
-        const proposalId = 0n; // replace
-
-        const result = await adminSDK.executeOracleUpdate(proposalId, adminSigner1);
+        const result = await adminSDK.executeOracleUpdate(TEST_ORACLE_PROPOSAL_ID, adminSigner1);
         
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
     });
 
     test.skip('should cancel expired oracle update proposal', async () => {
-        const proposalId = 0n; // replace
-        
-        const result = await adminSDK.cancelExpiredOracleUpdateProposal(proposalId, adminSigner1);
+        const result = await adminSDK.cancelExpiredOracleUpdateProposal(TEST_ORACLE_PROPOSAL_ID, adminSigner1);
         
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
     });
 
     test.skip('should propose add admin', async () => {
-        const newAdmin = '0xc7fFC27f58117f13BEE926dF9821C7da5826ce23'; // replace
-        
-        const result = await adminSDK.proposeAddAdmin(newAdmin, adminSigner1);
+        const result = await adminSDK.proposeAddAdmin(TEST_NEW_ADMIN_ADDRESS, adminSigner1);
 
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
     });
 
     test.skip('should approve add admin', async () => {
-        const proposalId = 0n; // replace
-
-        const result = await adminSDK.approveAddAdmin(proposalId, adminSigner2);
+        const result = await adminSDK.approveAddAdmin(TEST_ADMIN_ADD_PROPOSAL_ID, adminSigner2);
         
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
     });
 
     test.skip('should execute add admin', async () => {
-        const proposalId = 0n; // replace
-
-        const result = await adminSDK.executeAddAdmin(proposalId, adminSigner1);
+        const result = await adminSDK.executeAddAdmin(TEST_ADMIN_ADD_PROPOSAL_ID, adminSigner1);
         
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
     });
 
     test.skip('should cancel expired add admin proposal', async () => {
-        const proposalId = 0n; // replace
-        
-        const result = await adminSDK.cancelExpiredAddAdminProposal(proposalId, adminSigner1);
+        const result = await adminSDK.cancelExpiredAddAdminProposal(TEST_ADMIN_ADD_PROPOSAL_ID, adminSigner1);
         
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
     });
