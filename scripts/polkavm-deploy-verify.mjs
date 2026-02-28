@@ -26,6 +26,19 @@ function requiredEnv(name) {
   return value.trim();
 }
 
+/**
+ * Reads an optional environment variable, trimming whitespace.
+ * Returns undefined if the variable is not set or is empty after trimming.
+ */
+function optionalEnv(name) {
+  const value = process.env[name];
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 function normalizeHex(value) {
   if (typeof value !== "string" || value.length === 0) {
     return "";
@@ -218,7 +231,7 @@ async function main() {
   if (!Number.isInteger(retries) || retries <= 0) {
     fail(`invalid DEPLOY_VERIFY_RETRIES: ${process.env.DEPLOY_VERIFY_RETRIES}`);
   }
-  if (!Number.isFinite(backoffMs) || backoffMs <= 0) {
+  if (!Number.isFinite(backoffMs) || backoffMs < 0) {
     fail(`invalid DEPLOY_VERIFY_BACKOFF_MS: ${process.env.DEPLOY_VERIFY_BACKOFF_MS}`);
   }
 
@@ -275,7 +288,7 @@ async function main() {
   // canonicalJson returns a deterministic JSON string; we hash its UTF-8 bytes.
   const abiHash = toKeccakHex(Buffer.from(canonicalJson(artifact.abi), "utf8"));
   const deployer = tx?.from;
-  const expectedDeployer = (process.env.DEPLOY_VERIFY_DEPLOYER || "").trim();
+  const expectedDeployer = optionalEnv("DEPLOY_VERIFY_DEPLOYER") || "";
 
   const checks = {
     runtimeTargetDeclared: typeof runtimeTarget === "string" && runtimeTarget.length > 0,
