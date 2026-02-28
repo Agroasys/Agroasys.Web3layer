@@ -166,4 +166,11 @@ describeIntegration('AdminSDK', () => {
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
         console.log(`expired admin add proposal cancelled: ${result.txHash}`);
     });
+
+    test.skip('should claim', async () => {
+        const result = await adminSDK.claim(adminSigner1);
+        
+        expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+        console.log(`claimed: ${result.txHash}`);
+    });
 });

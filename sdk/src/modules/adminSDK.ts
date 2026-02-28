@@ -149,6 +149,56 @@ export class AdminSDK extends Client {
         }
     }
 
+    async pauseClaims(adminSigner: ethers.Signer): Promise<GovernanceResult> {
+        await this.verifyAdmin(adminSigner);
+
+        try {
+            const contractWithSigner = this.contract.connect(adminSigner);
+            const tx = await contractWithSigner.pauseClaims();
+            const receipt = await tx.wait();
+
+            if (!receipt) {
+                throw new ContractError('Transaction receipt not available');
+            }
+
+            return {
+                txHash: receipt.hash,
+                blockNumber: receipt.blockNumber
+            };
+
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to pause claims: ${error.message}`,
+                { error: error.message }
+            );
+        }
+    }
+
+    async unpauseClaims(adminSigner: ethers.Signer): Promise<GovernanceResult> {
+        await this.verifyAdmin(adminSigner);
+
+        try {
+            const contractWithSigner = this.contract.connect(adminSigner);
+            const tx = await contractWithSigner.unpauseClaims();
+            const receipt = await tx.wait();
+
+            if (!receipt) {
+                throw new ContractError('Transaction receipt not available');
+            }
+
+            return {
+                txHash: receipt.hash,
+                blockNumber: receipt.blockNumber
+            };
+
+        } catch (error: any) {
+            throw new ContractError(
+                `Failed to unpause claims: ${error.message}`,
+                { error: error.message }
+            );
+        }
+    }
+
     // #################### DISPUTE RESOLUTION ####################
 
     async proposeDisputeSolution(tradeId: string | bigint, disputeStatus: DisputeStatus, adminSigner: ethers.Signer): Promise<DisputeResult> {

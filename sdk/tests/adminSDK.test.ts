@@ -30,6 +30,8 @@ type MockContractWithSigner = {
   approveUnpause: jest.Mock;
   cancelUnpauseProposal: jest.Mock;
   disableOracleEmergency: jest.Mock;
+  pauseClaims: jest.Mock;
+  unpauseClaims: jest.Mock;
   proposeDisputeSolution: jest.Mock;
   approveDisputeSolution: jest.Mock;
   cancelExpiredDisputeProposal: jest.Mock;
@@ -58,6 +60,8 @@ function makeSdkUnit(isAdmin = true) {
     approveUnpause: jest.fn(),
     cancelUnpauseProposal: jest.fn(),
     disableOracleEmergency: jest.fn(),
+    pauseClaims: jest.fn(),
+    unpauseClaims: jest.fn(),
     proposeDisputeSolution: jest.fn(),
     approveDisputeSolution: jest.fn(),
     cancelExpiredDisputeProposal: jest.fn(),
@@ -131,6 +135,38 @@ describe('AdminSDK unit', () => {
       blockNumber: RECEIPT.blockNumber,
     });
     expect(contractWithSigner.disableOracleEmergency).toHaveBeenCalledTimes(1);
+  });
+
+  test('pauseClaims should call contract and return tx result', async () => {
+    const { sdk, contractWithSigner } = makeSdkUnit(true);
+    const signer = makeSigner();
+    mockSuccessCall(contractWithSigner.pauseClaims);
+
+    await expect(sdk.pauseClaims(signer)).resolves.toEqual({
+      txHash: RECEIPT.hash,
+      blockNumber: RECEIPT.blockNumber,
+    });
+    expect(contractWithSigner.pauseClaims).toHaveBeenCalledTimes(1);
+  });
+
+  test('unpauseClaims should call contract and return tx result', async () => {
+    const { sdk, contractWithSigner } = makeSdkUnit(true);
+    const signer = makeSigner();
+    mockSuccessCall(contractWithSigner.unpauseClaims);
+
+    await expect(sdk.unpauseClaims(signer)).resolves.toEqual({
+      txHash: RECEIPT.hash,
+      blockNumber: RECEIPT.blockNumber,
+    });
+    expect(contractWithSigner.unpauseClaims).toHaveBeenCalledTimes(1);
+  });
+
+  test('pauseClaims and unpauseClaims should reject non-admin signer', async () => {
+    const { sdk } = makeSdkUnit(false);
+    const signer = makeSigner();
+
+    await expect(sdk.pauseClaims(signer)).rejects.toBeInstanceOf(AuthorizationError);
+    await expect(sdk.unpauseClaims(signer)).rejects.toBeInstanceOf(AuthorizationError);
   });
 
   test('dispute expiry cancel should call contract with proposal id', async () => {
