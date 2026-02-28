@@ -48,6 +48,7 @@ export class BuyerSDK extends Client {
     }
     
     async getUSDCAllowance(buyerAddress: string): Promise<bigint> {
+        validateAddress(buyerAddress, 'buyer');
         try {
             const usdcContract = IERC20__factory.connect(
                 this.config.usdcAddress,
@@ -68,6 +69,7 @@ export class BuyerSDK extends Client {
     }
     
     async getUSDCBalance(buyerAddress: string): Promise<bigint> {
+        validateAddress(buyerAddress, 'buyer');
         try {
             const usdcContract = IERC20__factory.connect(
                 this.config.usdcAddress,

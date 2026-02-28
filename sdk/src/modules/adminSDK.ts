@@ -249,7 +249,7 @@ export class AdminSDK extends Client {
             
         } catch (error: any) {
             throw new ContractError(
-                `Failed to approve dispute: ${error.message}`,
+                `Failed to approve dispute solution: ${error.message}`,
                 { proposalId: proposalId.toString(), error: error.message }
             );
         }
