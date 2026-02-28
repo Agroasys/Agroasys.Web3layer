@@ -16,8 +16,8 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
  * - Signature uses buyer-scoped nonce (no global tradeId pre-query race) + deadline + domain separation
  *
  * Business rule enforced:
- * - Stage 1 payout (40% milestone) includes: supplierFirstTranche (principal) + logisticsAmount (fee) + platformFeesAmount (fee)
- * - Stage 2 payout (finalization) includes: supplierSecondTranche (principal) ONLY
+ * - Stage 1 accrual (40% milestone) includes: supplierFirstTranche (principal) + logisticsAmount (fee) + platformFeesAmount (fee)
+ * - Stage 2 accrual (finalization) includes: supplierSecondTranche (principal) ONLY
  */
 contract AgroasysEscrow is ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
@@ -50,6 +50,17 @@ contract AgroasysEscrow is ReentrancyGuard, Pausable {
     enum DisputeStatus {
         REFUND,  // admin resolution: refund buyer remaining escrowed principal (typically supplierSecondTranche)
         RESOLVE  // admin resolution: release remaining escrowed principal to supplier (typically supplierSecondTranche)
+    }
+
+    enum ClaimType {
+        STAGE1_SUPPLIER,
+        STAGE1_LOGISTICS_FEE,
+        STAGE1_PLATFORM_FEE,
+        STAGE2_SUPPLIER,
+        LOCK_TIMEOUT_BUYER_REFUND,
+        IN_TRANSIT_TIMEOUT_BUYER_REFUND,
+        DISPUTE_REFUND_BUYER,
+        DISPUTE_RESOLVE_SUPPLIER
     }
 
     struct Trade {
@@ -141,6 +152,8 @@ contract AgroasysEscrow is ReentrancyGuard, Pausable {
     address[] public admins;
     mapping(address => bool) public isAdmin;
     uint256 public requiredApprovals;
+    mapping(address => uint256) public claimableUsdc;
+    uint256 public totalClaimableUsdc;
 
     // ---- Unpause multi-sig storage ----
     UnpauseProposal public unpauseProposal;
@@ -302,6 +315,13 @@ contract AgroasysEscrow is ReentrancyGuard, Pausable {
         uint256 amount,
         DisputeStatus payoutType
     );
+    event ClaimableAccrued(
+        uint256 indexed tradeId,
+        address indexed recipient,
+        uint256 amount,
+        ClaimType claimType
+    );
+    event Claimed(address indexed claimant, uint256 amount);
     event OracleUpdateProposalExpiredCancelled(uint256 indexed proposalId, address indexed cancelledBy);
     event AdminAddProposalExpiredCancelled(uint256 indexed proposalId, address indexed cancelledBy);
 
@@ -599,6 +619,26 @@ contract AgroasysEscrow is ReentrancyGuard, Pausable {
         return newTradeId;
     }
 
+    function _accrueClaimable(uint256 _tradeId, address _recipient, uint256 _amount, ClaimType _claimType) internal {
+        if (_amount == 0) {
+            return;
+        }
+        claimableUsdc[_recipient] += _amount;
+        totalClaimableUsdc += _amount;
+        emit ClaimableAccrued(_tradeId, _recipient, _amount, _claimType);
+    }
+
+    function claim() external whenNotPaused nonReentrant {
+        uint256 amount = claimableUsdc[msg.sender];
+        require(amount > 0, "nothing claimable");
+
+        claimableUsdc[msg.sender] = 0;
+        totalClaimableUsdc -= amount;
+        usdcToken.safeTransfer(msg.sender, amount);
+
+        emit Claimed(msg.sender, amount);
+    }
+
     // -----------------------------
     // Milestones
     // -----------------------------
@@ -607,9 +647,9 @@ contract AgroasysEscrow is ReentrancyGuard, Pausable {
      * Stage 1 release:
      * - Only oracle
      * - LOCKED -> IN_TRANSIT
-     * - Pay supplier first tranche (principal)
-     * - Pay logistics fee to treasury
-     * - Pay platform fee to treasury
+     * - Accrue supplier first tranche (principal)
+     * - Accrue logistics fee to treasury
+     * - Accrue platform fee to treasury
      */
     function releaseFundsStage1(uint256 _tradeId) external onlyOracle onlyOracleActive whenNotPaused nonReentrant {
         require(_tradeId < tradeCounter, "trade not found");
@@ -620,9 +660,9 @@ contract AgroasysEscrow is ReentrancyGuard, Pausable {
         trade.status = TradeStatus.IN_TRANSIT;
         inTransitSince[_tradeId] = block.timestamp;
 
-        usdcToken.safeTransfer(trade.supplierAddress, trade.supplierFirstTranche);
-        usdcToken.safeTransfer(treasuryAddress, trade.logisticsAmount);
-        usdcToken.safeTransfer(treasuryAddress, trade.platformFeesAmount);
+        _accrueClaimable(_tradeId, trade.supplierAddress, trade.supplierFirstTranche, ClaimType.STAGE1_SUPPLIER);
+        _accrueClaimable(_tradeId, treasuryAddress, trade.logisticsAmount, ClaimType.STAGE1_LOGISTICS_FEE);
+        _accrueClaimable(_tradeId, treasuryAddress, trade.platformFeesAmount, ClaimType.STAGE1_PLATFORM_FEE);
 
         emit FundsReleasedStage1(
             _tradeId,
@@ -674,7 +714,7 @@ contract AgroasysEscrow is ReentrancyGuard, Pausable {
      * Final settlement after dispute window if no dispute was opened.
      * Permissionless (anyone can call) to avoid funds getting stuck if oracle is down.
      *
-     * Business rule: Stage 2 releases ONLY remaining supplier principal (supplierSecondTranche).
+     * Business rule: Stage 2 accrues ONLY remaining supplier principal (supplierSecondTranche).
      * Treasury fees were already collected at Stage 1.
      */
     function finalizeAfterDisputeWindow(uint256 _tradeId) external whenNotPaused nonReentrant {
@@ -688,7 +728,7 @@ contract AgroasysEscrow is ReentrancyGuard, Pausable {
         trade.status = TradeStatus.CLOSED;
         inTransitSince[_tradeId] = 0;
 
-        usdcToken.safeTransfer(trade.supplierAddress, trade.supplierSecondTranche);
+        _accrueClaimable(_tradeId, trade.supplierAddress, trade.supplierSecondTranche, ClaimType.STAGE2_SUPPLIER);
 
         emit FinalTrancheReleased(_tradeId, trade.supplierAddress, trade.supplierSecondTranche);
     }
@@ -706,7 +746,7 @@ contract AgroasysEscrow is ReentrancyGuard, Pausable {
 
         trade.status = TradeStatus.CLOSED;
 
-        usdcToken.safeTransfer(trade.buyerAddress, trade.totalAmountLocked);
+        _accrueClaimable(_tradeId, trade.buyerAddress, trade.totalAmountLocked, ClaimType.LOCK_TIMEOUT_BUYER_REFUND);
 
         emit TradeCancelledAfterLockTimeout(_tradeId, trade.buyerAddress, trade.totalAmountLocked);
     }
@@ -728,7 +768,7 @@ contract AgroasysEscrow is ReentrancyGuard, Pausable {
         trade.status = TradeStatus.CLOSED;
         inTransitSince[_tradeId] = 0;
 
-        usdcToken.safeTransfer(trade.buyerAddress, trade.supplierSecondTranche);
+        _accrueClaimable(_tradeId, trade.buyerAddress, trade.supplierSecondTranche, ClaimType.IN_TRANSIT_TIMEOUT_BUYER_REFUND);
 
         emit InTransitTimeoutRefunded(_tradeId, trade.buyerAddress, trade.supplierSecondTranche);
     }
@@ -836,11 +876,11 @@ contract AgroasysEscrow is ReentrancyGuard, Pausable {
         if (proposal.disputeStatus == DisputeStatus.REFUND) {
             // Refund buyer remaining escrowed principal (supplierSecondTranche)
             recipient = trade.buyerAddress;
-            usdcToken.safeTransfer(recipient, payoutAmount);
+            _accrueClaimable(proposal.tradeId, recipient, payoutAmount, ClaimType.DISPUTE_REFUND_BUYER);
         } else if (proposal.disputeStatus == DisputeStatus.RESOLVE) {
             // Release remaining escrowed principal to supplier (supplierSecondTranche)
             recipient = trade.supplierAddress;
-            usdcToken.safeTransfer(recipient, payoutAmount);
+            _accrueClaimable(proposal.tradeId, recipient, payoutAmount, ClaimType.DISPUTE_RESOLVE_SUPPLIER);
         } else {
             revert("invalid dispute status");
         }
