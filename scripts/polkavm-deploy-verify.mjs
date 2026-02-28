@@ -101,7 +101,7 @@ async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function rpcCall({ rpcUrl, timeoutMs, retries, backoffMs, method, params }) {
+function validateRpcOptions({ retries, timeoutMs, backoffMs }) {
   if (!Number.isInteger(retries) || retries <= 0) {
     throw new Error(`invalid retries value: ${retries}`);
   }
@@ -111,6 +111,10 @@ async function rpcCall({ rpcUrl, timeoutMs, retries, backoffMs, method, params }
   if (!Number.isFinite(backoffMs) || backoffMs < 0) {
     throw new Error(`invalid backoffMs value: ${backoffMs}`);
   }
+}
+
+async function rpcCall({ rpcUrl, timeoutMs, retries, backoffMs, method, params }) {
+  validateRpcOptions({ retries, timeoutMs, backoffMs });
 
   for (let attempt = 1; attempt <= retries; attempt += 1) {
     const controller = new AbortController();
@@ -203,7 +207,7 @@ function resolveHardhatVersion() {
       encoding: "utf8",
     }).trim();
   } catch (error) {
-    const stderr = error && error.stderr ? String(error.stderr).trim() : "";
+    const stderr = error?.stderr ? String(error.stderr).trim() : "";
     const details = stderr ? `\nstderr:\n${stderr}` : "";
     fail(
       `unable to resolve hardhat version using "npx hardhat --version" in ${path.join(
@@ -235,14 +239,10 @@ async function main() {
   if (!fs.existsSync(artifactPath)) {
     fail(`artifact not found: ${artifactPath}`);
   }
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    fail(`invalid DEPLOY_VERIFY_TIMEOUT_MS: ${process.env.DEPLOY_VERIFY_TIMEOUT_MS}`);
-  }
-  if (!Number.isInteger(retries) || retries <= 0) {
-    fail(`invalid DEPLOY_VERIFY_RETRIES: ${process.env.DEPLOY_VERIFY_RETRIES}`);
-  }
-  if (!Number.isFinite(backoffMs) || backoffMs < 0) {
-    fail(`invalid DEPLOY_VERIFY_BACKOFF_MS: ${process.env.DEPLOY_VERIFY_BACKOFF_MS}`);
+  try {
+    validateRpcOptions({ retries, timeoutMs, backoffMs });
+  } catch (error) {
+    fail(error.message);
   }
 
   const artifact = loadJson(artifactPath);
@@ -318,9 +318,8 @@ async function main() {
     bytecodeHashMatch: normalizeHex(onChainBytecodeHash) === normalizeHex(artifactBytecodeHash),
     // Only enforce deployer match when an expected deployer is configured.
     deployerMatchesExpected:
-      expectedDeployer === null
-        ? true
-        : !!deployer && normalizeHex(deployer) === normalizeHex(expectedDeployer),
+      expectedDeployer === null ||
+      (!!deployer && normalizeHex(deployer) === normalizeHex(expectedDeployer)),
   };
 
   const failedChecks = Object.entries(checks)
