@@ -22,6 +22,10 @@ patch_gate="$tmp_dir/write-gate.patch"
 apply_guard_err="$tmp_dir/write-gate-issues-without-apply.err"
 log="$tmp_dir/sync.log"
 
+clear_log() {
+  > "$log"
+}
+
 run_sync_script() {
   node "$SCRIPT" --offline --matrix "$matrix" --cache "$cache" "$@"
 }
@@ -77,7 +81,7 @@ cat > "$cache" <<CACHE
 CACHE
 
 # Clear log file before check-mode scenario.
-> "$log"
+clear_log
 if run_sync_script --out "$report" --patch "$patch" >>"$log" 2>&1; then
   echo "expected sync helper to fail in check mode when stale rows exist" >&2
   echo "sync helper output was:" >&2
@@ -104,7 +108,7 @@ fi
 
 write_matrix_fixture
 # Clear log file before minimum-write scenario.
-> "$log"
+clear_log
 if ! run_sync_script --write --out "$report_write_min" --patch "$patch" >>"$log" 2>&1; then
   echo "expected default write mode to apply minimum-safe row updates" >&2
   echo "sync helper output was:" >&2
@@ -123,7 +127,7 @@ fi
 
 write_matrix_fixture
 # Clear log file before normalized-write scenario.
-> "$log"
+clear_log
 if ! run_sync_script --write --normalize-progress --out "$report_write_norm" --patch "$patch" >>"$log" 2>&1; then
   echo "expected write + normalize-progress mode to apply extended sync updates" >&2
   echo "sync helper output was:" >&2
@@ -141,7 +145,7 @@ if ! grep -Fq "$EXPECTED_NORMALIZED_ROW" "$matrix"; then
 fi
 
 # Clear log file before write-gate-issues guard scenario.
-> "$log"
+clear_log
 if run_sync_script --write-gate-issues --out "$report_gate" --patch "$patch_gate" >>"$log" 2> "$apply_guard_err"; then
   echo "expected write-gate-issues without --apply to fail" >&2
   exit 1
