@@ -236,7 +236,8 @@ if isinstance(trades, list):
 load_env_file ".env"
 load_env_file ".env.staging-e2e-real"
 
-INDEXER_GATEWAY_URL_HOST="${STAGING_E2E_REAL_GATE_INDEXER_GRAPHQL_URL:-http://127.0.0.1:${INDEXER_GRAPHQL_PORT:-4350}/graphql}"
+INDEXER_GRAPHQL_DEFAULT_URL="http://127.0.0.1:${INDEXER_GRAPHQL_PORT:-4350}/graphql"
+INDEXER_GATEWAY_URL_HOST="${STAGING_E2E_REAL_GATE_INDEXER_GRAPHQL_URL:-$INDEXER_GRAPHQL_DEFAULT_URL}"
 RPC_GATEWAY_URL_HOST="$(normalize_host_url "${STAGING_E2E_REAL_GATE_RPC_URL:-${RECONCILIATION_RPC_URL:-}}")"
 NETWORK_NAME="${STAGING_E2E_REAL_NETWORK_NAME:-unknown}"
 CHAIN_ID_VALUE="${STAGING_E2E_REAL_CHAIN_ID:-${RECONCILIATION_CHAIN_ID:-unknown}}"
@@ -247,7 +248,7 @@ LAG_WARMUP_SECONDS="${STAGING_E2E_REAL_LAG_WARMUP_SECONDS:-180}"
 LAG_POLL_SECONDS="${STAGING_E2E_REAL_LAG_POLL_SECONDS:-5}"
 MAX_LAG="${STAGING_E2E_MAX_INDEXER_LAG_BLOCKS:-500}"
 
-RUN_KEY="phase3-gate-$(date +%s)"
+RUN_KEY="staging-e2e-real-gate-$(date +%s)"
 RECONCILIATION_REPORT_PATH="reports/reconciliation/staging-e2e-real-report.json"
 
 mkdir -p "$(dirname "$RECONCILIATION_REPORT_PATH")"
@@ -283,7 +284,7 @@ if [[ "$DYNAMIC_START_BLOCK" == "true" && -n "$RPC_GATEWAY_URL_HOST" ]]; then
     RPC_START_HEAD_NUM="${RPC_START_HEAD_HEX#0x}"
     RPC_START_HEAD_NUM="$(printf '%s' "$RPC_START_HEAD_NUM" | tr '[:upper:]' '[:lower:]')"
     if [[ "$RPC_START_HEAD_NUM" =~ ^[0-9a-f]+$ ]]; then
-      RPC_START_HEAD_DEC=$((16#$RPC_START_HEAD_NUM))
+      RPC_START_HEAD_DEC=$((16#${RPC_START_HEAD_NUM}))
       DYNAMIC_INDEXER_START_BLOCK=$((RPC_START_HEAD_DEC - START_BLOCK_BACKOFF))
       if (( DYNAMIC_INDEXER_START_BLOCK < 1 )); then
         DYNAMIC_INDEXER_START_BLOCK=1
@@ -373,7 +374,7 @@ else
   # Strip the 0x prefix, then parse the remaining value as base-16 decimal.
   RPC_HEAD_NUM="${RPC_HEAD_HEX#0x}"
   RPC_HEAD_NUM="$(printf '%s' "$RPC_HEAD_NUM" | tr '[:upper:]' '[:lower:]')"
-  RPC_HEAD_DEC=$((16#$RPC_HEAD_NUM))
+  RPC_HEAD_DEC=$((16#${RPC_HEAD_NUM}))
   LAG=$((RPC_HEAD_DEC - INDEXER_HEAD))
   echo "lag/head metrics: rpcHead=${RPC_HEAD_DEC}, indexerHead=${INDEXER_HEAD}, lag=${LAG}"
   if [[ "$LAG" -lt 0 ]]; then
@@ -396,7 +397,7 @@ if [[ "$REQUIRE_INDEXED_DATA" == "true" && "$INDEXED_TRADES_COUNT" -eq 0 ]]; the
   fail "indexed data requirement enabled but no indexed trades found"
 elif [[ "$INDEXED_TRADES_COUNT" -eq 0 ]]; then
   echo "WARNING: no indexed trades found and deterministic on-chain seeding is not enabled for this profile."
-  echo "         Set STAGING_E2E_REAL_REQUIRE_INDEXED_DATA=true only when the contract scope is pre-seeded."
+  echo "         Set STAGING_E2E_REAL_REQUIRE_INDEXED_DATA=true only when the contracts are pre-seeded with test data."
   pass "indexed data check completed (require=${REQUIRE_INDEXED_DATA}, count=${INDEXED_TRADES_COUNT})"
 else
   pass "indexed data check completed (require=${REQUIRE_INDEXED_DATA}, count=${INDEXED_TRADES_COUNT})"
