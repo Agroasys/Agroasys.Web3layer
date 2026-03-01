@@ -351,7 +351,7 @@ NODE_GRAPHQL_QUERY
 
 extract_indexer_head_height() {
   require_python3
-  python3 -c 'import json, sys
+  python3 -c 'import json, os, sys
 try:
     data = json.load(sys.stdin)
 except Exception as e:
@@ -732,8 +732,8 @@ fi
 
 CORRELATION_SQL="$(cat <<'SQL'
 SELECT
-  replace(replace(COALESCE(trade_id, ''), chr(31), ' '), E'\t', ' '),
-  replace(replace(COALESCE(tx_hash, ''), chr(31), ' '), E'\t', ' ')
+  translate(COALESCE(trade_id, ''), chr(31) || E'\t', '  '),
+  translate(COALESCE(tx_hash, ''), chr(31) || E'\t', '  ')
 FROM trade_event
 ORDER BY block_number DESC
 LIMIT 5;

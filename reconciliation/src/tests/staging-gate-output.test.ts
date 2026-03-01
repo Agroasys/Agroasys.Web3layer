@@ -1,13 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import { loadStagingGateSqlContract, sqlFingerprint } from './helpers/stagingGateSqlContract';
+import { loadStagingGateSqlContract, sqlFingerprint, loadStagingGateScript } from './helpers/stagingGateSqlContract';
 
-function loadGateScript(): string {
-  const gatePath = path.resolve(__dirname, '../../../scripts/staging-e2e-real-gate.sh');
-  return fs.readFileSync(gatePath, 'utf8');
-}
+const GATE_SCRIPT_CONTENTS = loadStagingGateScript();
 
 const EXPECTED_RUN_SUMMARY_SQL = [
   "SELECT replace(COALESCE(status::text, ''), chr(31), ' '), total_trades, drift_count",
@@ -31,7 +26,7 @@ const EXPECTED_SQL_FINGERPRINTS = {
 } as const;
 
 test('staging-e2e-real gate captures reconciliation run summary output', () => {
-  const script = loadGateScript();
+  const script = GATE_SCRIPT_CONTENTS;
   const sql = loadStagingGateSqlContract(script);
 
   assert.match(script, /reconciliation run summary:/);
@@ -39,7 +34,7 @@ test('staging-e2e-real gate captures reconciliation run summary output', () => {
 });
 
 test('staging-e2e-real gate captures drift classification snapshot output', () => {
-  const script = loadGateScript();
+  const script = GATE_SCRIPT_CONTENTS;
   const sql = loadStagingGateSqlContract(script);
 
   assert.match(script, /drift classification snapshot:/);
@@ -62,14 +57,14 @@ test('staging-e2e-real SQL extractor reports actionable marker errors when scrip
 });
 
 test('staging-e2e-real gate writes deterministic reconciliation report output', () => {
-  const script = loadGateScript();
+  const script = GATE_SCRIPT_CONTENTS;
 
   assert.match(script, /reports\/reconciliation\/staging-e2e-real-report\.json/);
   assert.match(script, /node reconciliation\/dist\/report-cli\.js --run-key=/);
 });
 
 test('staging-e2e-real gate emits config-only reconciliation report payload', () => {
-  const script = loadGateScript();
+  const script = GATE_SCRIPT_CONTENTS;
 
   assert.match(script, /STAGING_E2E_REAL_GATE_ASSERT_CONFIG_ONLY/);
   assert.match(script, /mode\": \"config-only\"/);

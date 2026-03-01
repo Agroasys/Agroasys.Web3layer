@@ -26,7 +26,7 @@ Snapshot date: 2026-02-28
 ## Gate-to-Row Mapping
 MATRIX
 
-if ! node "$SCRIPT" --offline --matrix "$pass_matrix" --out "$tmp_dir/pass.json" >/dev/null; then
+if ! node "$SCRIPT" --offline --matrix "$pass_matrix" --out "$tmp_dir/pass.json" >/dev/null 2>&1; then
   echo "expected consistency checker to succeed for valid matrix" >&2
   exit 1
 fi

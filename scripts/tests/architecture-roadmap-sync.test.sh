@@ -12,6 +12,7 @@ cache="$tmp_dir/cache.json"
 report="$tmp_dir/sync-report.json"
 patch="$tmp_dir/sync.patch"
 report_write="$tmp_dir/sync-report-write.json"
+log="$tmp_dir/sync.log"
 
 cat > "$matrix" <<'MATRIX'
 # Architecture Coverage Matrix
@@ -60,8 +61,10 @@ cat > "$cache" <<'CACHE'
 }
 CACHE
 
-if node "$SCRIPT" --offline --matrix "$matrix" --cache "$cache" --out "$report" --patch "$patch" >/dev/null 2>&1; then
+if node "$SCRIPT" --offline --matrix "$matrix" --cache "$cache" --out "$report" --patch "$patch" >"$log" 2>&1; then
   echo "expected sync helper to fail in check mode when stale rows exist" >&2
+  echo "sync helper output was:" >&2
+  cat "$log" >&2 || true
   exit 1
 fi
 
@@ -87,8 +90,10 @@ if ! grep -q "None (auto-synced from closed issues)" "$patch"; then
   exit 1
 fi
 
-if ! node "$SCRIPT" --offline --write --matrix "$matrix" --cache "$cache" --out "$report_write" --patch "$patch" >/dev/null 2>&1; then
+if ! node "$SCRIPT" --offline --write --matrix "$matrix" --cache "$cache" --out "$report_write" --patch "$patch" >"$log" 2>&1; then
   echo "expected sync helper write mode to apply row updates cleanly" >&2
+  echo "sync helper output was:" >&2
+  cat "$log" >&2 || true
   exit 1
 fi
 
