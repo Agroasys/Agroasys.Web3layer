@@ -4,8 +4,6 @@ set -euo pipefail
 COMPOSE_FILE="docker-compose.services.yml"
 PROFILE="staging-e2e-real"
 failures=0
-READINESS_RETRY_ATTEMPTS=30
-READINESS_RETRY_DELAY=2
 
 load_env_file() {
   local file="$1"
@@ -152,7 +150,7 @@ run_graphql_query_from_reconciliation() {
   run_compose exec -T reconciliation node -e "
     const target = process.env.INDEXER_GRAPHQL_URL;
     if (!target) {
-      console.error('INDEXER_GRAPHQL_URL is not set');
+      console.error('INDEXER_GRAPHQL_URL is not set. Configure INDEXER_GRAPHQL_URL for the reconciliation service (for example in docker-compose.services.yml or a .env file) as the full HTTP(S) URL of the indexer GraphQL endpoint, such as https://your-indexer-host/graphql.');
       process.exit(1);
     }
     fetch(target, {
@@ -247,6 +245,8 @@ START_BLOCK_BACKOFF="${STAGING_E2E_REAL_START_BLOCK_BACKOFF:-250}"
 LAG_WARMUP_SECONDS="${STAGING_E2E_REAL_LAG_WARMUP_SECONDS:-180}"
 LAG_POLL_SECONDS="${STAGING_E2E_REAL_LAG_POLL_SECONDS:-5}"
 MAX_LAG="${STAGING_E2E_MAX_INDEXER_LAG_BLOCKS:-500}"
+READINESS_RETRY_ATTEMPTS="${STAGING_E2E_READINESS_RETRY_ATTEMPTS:-30}"
+READINESS_RETRY_DELAY="${STAGING_E2E_READINESS_RETRY_DELAY:-2}"
 
 RUN_KEY="staging-e2e-real-gate-$(date +%s)"
 RECONCILIATION_REPORT_PATH="reports/reconciliation/staging-e2e-real-report.json"
@@ -260,6 +260,8 @@ require_integer_digits "STAGING_E2E_REAL_START_BLOCK_BACKOFF" "$START_BLOCK_BACK
 require_integer_digits "STAGING_E2E_REAL_LAG_WARMUP_SECONDS" "$LAG_WARMUP_SECONDS"
 require_integer_digits "STAGING_E2E_REAL_LAG_POLL_SECONDS" "$LAG_POLL_SECONDS"
 require_integer_digits "STAGING_E2E_MAX_INDEXER_LAG_BLOCKS" "$MAX_LAG"
+require_integer_digits "STAGING_E2E_READINESS_RETRY_ATTEMPTS" "$READINESS_RETRY_ATTEMPTS"
+require_integer_digits "STAGING_E2E_READINESS_RETRY_DELAY" "$READINESS_RETRY_DELAY"
 
 if [[ "$LAG_WARMUP_SECONDS" == "0" ]]; then
   fail "STAGING_E2E_REAL_LAG_WARMUP_SECONDS must be > 0"
@@ -271,6 +273,14 @@ fi
 
 if [[ "$MAX_LAG" == "0" ]]; then
   fail "STAGING_E2E_MAX_INDEXER_LAG_BLOCKS must be > 0"
+fi
+
+if [[ "$READINESS_RETRY_ATTEMPTS" == "0" ]]; then
+  fail "STAGING_E2E_READINESS_RETRY_ATTEMPTS must be > 0"
+fi
+
+if [[ "$READINESS_RETRY_DELAY" == "0" ]]; then
+  fail "STAGING_E2E_READINESS_RETRY_DELAY must be > 0"
 fi
 
 if [[ "$failures" -gt 0 ]]; then
@@ -374,15 +384,19 @@ else
   # Strip the 0x prefix, then parse the remaining value as base-16 decimal.
   RPC_HEAD_NUM="${RPC_HEAD_HEX#0x}"
   RPC_HEAD_NUM="$(printf '%s' "$RPC_HEAD_NUM" | tr '[:upper:]' '[:lower:]')"
-  RPC_HEAD_DEC=$((16#${RPC_HEAD_NUM}))
-  LAG=$((RPC_HEAD_DEC - INDEXER_HEAD))
-  echo "lag/head metrics: rpcHead=${RPC_HEAD_DEC}, indexerHead=${INDEXER_HEAD}, lag=${LAG}"
-  if [[ "$LAG" -lt 0 ]]; then
-    fail "negative lag indicates possible chain mismatch"
-  elif [[ "$LAG" -le "$MAX_LAG" ]]; then
-    pass "indexer lag within threshold (${LAG} <= ${MAX_LAG})"
+  if [[ -z "$RPC_HEAD_NUM" || ! "$RPC_HEAD_NUM" =~ ^[0-9a-f]+$ ]]; then
+    fail "normalized RPC head value is not a valid hex number: ${RPC_HEAD_NUM}"
   else
-    fail "indexer lag exceeds threshold (${LAG} > ${MAX_LAG})"
+    RPC_HEAD_DEC=$((16#${RPC_HEAD_NUM}))
+    LAG=$((RPC_HEAD_DEC - INDEXER_HEAD))
+    echo "lag/head metrics: rpcHead=${RPC_HEAD_DEC}, indexerHead=${INDEXER_HEAD}, lag=${LAG}"
+    if [[ "$LAG" -lt 0 ]]; then
+      fail "negative lag indicates possible chain mismatch"
+    elif [[ "$LAG" -le "$MAX_LAG" ]]; then
+      pass "indexer lag within threshold (${LAG} <= ${MAX_LAG})"
+    else
+      fail "indexer lag exceeds threshold (${LAG} > ${MAX_LAG})"
+    fi
   fi
 fi
 
