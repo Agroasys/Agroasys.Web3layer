@@ -194,6 +194,14 @@ require_integer_digits() {
   return 0
 }
 
+require_positive_value() {
+  local name="$1"
+  local value="$2"
+  if [[ "$value" == "0" ]]; then
+    fail "$name must be > 0"
+  fi
+}
+
 json_encode_string() {
   require_python3
   python3 -c 'import json, sys, traceback
@@ -227,12 +235,13 @@ run_graphql_query_from_reconciliation() {
   local payload
   payload="$(build_graphql_payload "$query")"
 
-  run_compose exec -T reconciliation node - "$payload" <<'NODE'
+  run_compose exec -T -e COMPOSE_FILE_NAME="${COMPOSE_FILE}" reconciliation node - "$payload" <<'NODE'
 const target = process.env.INDEXER_GRAPHQL_URL;
 if (!target) {
+  const composeFileName = process.env.COMPOSE_FILE_NAME || 'compose.yaml';
   console.error(
     '[reconciliation] INDEXER_GRAPHQL_URL is not set. ' +
-      'Configure INDEXER_GRAPHQL_URL for the reconciliation service (for example in docker-compose.services.yml or a .env file) ' +
+      `Configure INDEXER_GRAPHQL_URL for the reconciliation service (for example in ${composeFileName} or a .env file) ` +
       'as the full HTTP(S) URL of the indexer GraphQL endpoint, such as https://your-indexer-host/graphql.'
   );
   process.exit(1);
@@ -256,7 +265,12 @@ extract_indexer_head_height() {
 try:
     data = json.load(sys.stdin)
 except Exception as e:
-    print(f"Warning: JSON parsing failed, treating indexer head height as unavailable and continuing. Details: {e}", file=sys.stderr)
+    print(
+        f"Warning: JSON parsing failed, treating indexer head height as unavailable and continuing. "
+        f"Check if the indexer GraphQL endpoint is returning valid JSON (for example by inspecting the raw response or relevant service logs). "
+        f"Details: {e}",
+        file=sys.stderr,
+    )
     sys.exit(0)
 root = data.get("data") if isinstance(data, dict) else None
 squid_status = root.get("squidStatus") if isinstance(root, dict) else None
@@ -327,7 +341,7 @@ calculate_dynamic_start_block() {
       export INDEXER_START_BLOCK="$dynamic_indexer_start_block"
       echo "dynamic start block: INDEXER_START_BLOCK=${INDEXER_START_BLOCK} (rpcHead=${rpc_start_head_dec}, backoff=${backoff_value})"
     else
-      echo "warning: invalid normalized RPC head value '${rpc_start_head_hex}' for dynamic start block; using existing INDEXER_START_BLOCK=${INDEXER_START_BLOCK:-unset}" >&2
+      echo "warning: invalid normalized RPC head value '${rpc_start_head_dec}' for dynamic start block (from hex '${rpc_start_head_hex}'); using existing INDEXER_START_BLOCK=${INDEXER_START_BLOCK:-unset}" >&2
     fi
   elif [[ -z "$rpc_start_head_hex" ]]; then
     echo "warning: unable to determine RPC head for dynamic start block; using existing INDEXER_START_BLOCK=${INDEXER_START_BLOCK:-unset}" >&2
@@ -385,25 +399,11 @@ require_integer_digits "STAGING_E2E_MAX_INDEXER_LAG_BLOCKS" "$MAX_INDEXER_LAG_BL
 require_integer_digits "STAGING_E2E_READINESS_RETRY_ATTEMPTS" "$READINESS_RETRY_ATTEMPTS"
 require_integer_digits "STAGING_E2E_READINESS_RETRY_DELAY" "$READINESS_RETRY_DELAY"
 
-if [[ "$LAG_WARMUP_SECONDS" == "0" ]]; then
-  fail "STAGING_E2E_REAL_LAG_WARMUP_SECONDS must be > 0"
-fi
-
-if [[ "$LAG_POLL_SECONDS" == "0" ]]; then
-  fail "STAGING_E2E_REAL_LAG_POLL_SECONDS must be > 0"
-fi
-
-if [[ "$MAX_INDEXER_LAG_BLOCKS" == "0" ]]; then
-  fail "STAGING_E2E_MAX_INDEXER_LAG_BLOCKS must be > 0"
-fi
-
-if [[ "$READINESS_RETRY_ATTEMPTS" == "0" ]]; then
-  fail "STAGING_E2E_READINESS_RETRY_ATTEMPTS must be > 0"
-fi
-
-if [[ "$READINESS_RETRY_DELAY" == "0" ]]; then
-  fail "STAGING_E2E_READINESS_RETRY_DELAY must be > 0"
-fi
+require_positive_value "STAGING_E2E_REAL_LAG_WARMUP_SECONDS" "$LAG_WARMUP_SECONDS"
+require_positive_value "STAGING_E2E_REAL_LAG_POLL_SECONDS" "$LAG_POLL_SECONDS"
+require_positive_value "STAGING_E2E_MAX_INDEXER_LAG_BLOCKS" "$MAX_INDEXER_LAG_BLOCKS"
+require_positive_value "STAGING_E2E_READINESS_RETRY_ATTEMPTS" "$READINESS_RETRY_ATTEMPTS"
+require_positive_value "STAGING_E2E_READINESS_RETRY_DELAY" "$READINESS_RETRY_DELAY"
 
 if [[ "$failure_count" -gt 0 ]]; then
   echo "staging-e2e-real gate failed with ${failure_count} check(s)" >&2
@@ -559,7 +559,8 @@ validate_identifier "POSTGRES_USER" "${POSTGRES_USER:-}"
 validate_identifier "RECONCILIATION_DB_NAME" "${RECONCILIATION_DB_NAME:-}"
 validate_run_key
 
-# Use ASCII Unit Separator (0x1F) as delimiter to minimize collisions with normal text data.
+# Use ASCII Unit Separator (0x1F) as delimiter to minimize collisions with normal text data
+# in reconciliation run and drift summary queries below.
 SUMMARY_FIELD_DELIM=$'\x1f'
 RUN_SUMMARY_SQL=$'SELECT status, total_trades, drift_count FROM reconcile_runs WHERE run_key = :\'run_key_var\' ORDER BY id DESC LIMIT 1;'
 RUN_SUMMARY="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${RECONCILIATION_DB_NAME}" -v run_key_var="${RUN_KEY}" -A -F "${SUMMARY_FIELD_DELIM}" -tc "${RUN_SUMMARY_SQL}" 2>/dev/null || true)"
