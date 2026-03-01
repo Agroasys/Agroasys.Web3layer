@@ -37,6 +37,8 @@ get_rpc_head_hex() {
 }
 
 get_indexer_head_from_db() {
+  validate_identifier "POSTGRES_USER" "${POSTGRES_USER:-}"
+  validate_identifier "INDEXER_DB_NAME" "${INDEXER_DB_NAME:-}"
   run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${INDEXER_DB_NAME}" -Atc "SELECT COALESCE(MAX(block_number), 0) FROM trade_event;"
 }
 
@@ -51,6 +53,34 @@ pass() {
 fail() {
   echo "[FAIL] $1" >&2
   failures=$((failures + 1))
+}
+
+validate_identifier() {
+  local name="$1"
+  local value="$2"
+  if [[ -z "$value" ]]; then
+    fail "$name must not be empty."
+    exit 1
+  fi
+  if [[ ! "$value" =~ ^[A-Za-z0-9_-]+$ ]]; then
+    fail "$name contains invalid characters. Allowed characters are: letters, digits, underscore (_), and hyphen (-)."
+    exit 1
+  fi
+}
+
+validate_run_key() {
+  if [[ -z "${RUN_KEY:-}" ]]; then
+    fail "RUN_KEY is not set or empty"
+    exit 1
+  fi
+  if [[ ! "$RUN_KEY" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    fail "RUN_KEY contains invalid characters"
+    exit 1
+  fi
+}
+
+sql_escape_literal() {
+  printf '%s' "$1" | sed "s/'/''/g"
 }
 
 require_python3() {
@@ -469,7 +499,12 @@ else
   fail "reconciliation once run failed"
 fi
 
-RUN_SUMMARY="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${RECONCILIATION_DB_NAME}" -Atc "SELECT status || ',' || total_trades || ',' || drift_count FROM reconcile_runs WHERE run_key='${RUN_KEY}' ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)"
+validate_identifier "POSTGRES_USER" "${POSTGRES_USER:-}"
+validate_identifier "RECONCILIATION_DB_NAME" "${RECONCILIATION_DB_NAME:-}"
+validate_run_key
+RUN_KEY_SQL="$(sql_escape_literal "$RUN_KEY")"
+
+RUN_SUMMARY="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${RECONCILIATION_DB_NAME}" -Atc "SELECT status || ',' || total_trades || ',' || drift_count FROM reconcile_runs WHERE run_key='${RUN_KEY_SQL}' ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)"
 if [[ -n "$RUN_SUMMARY" ]]; then
   IFS=',' read -r RUN_STATUS RUN_TOTAL RUN_DRIFT <<<"$RUN_SUMMARY"
   echo "reconciliation run summary: runKey=${RUN_KEY}, status=${RUN_STATUS}, totalTrades=${RUN_TOTAL}, driftCount=${RUN_DRIFT}"
@@ -478,7 +513,7 @@ else
   fail "reconciliation run summary unavailable"
 fi
 
-DRIFT_SUMMARY="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${RECONCILIATION_DB_NAME}" -Atc "SELECT mismatch_code || ':' || COUNT(*) FROM reconcile_drifts WHERE run_key='${RUN_KEY}' GROUP BY mismatch_code ORDER BY COUNT(*) DESC;" 2>/dev/null || true)"
+DRIFT_SUMMARY="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${RECONCILIATION_DB_NAME}" -Atc "SELECT mismatch_code || ':' || COUNT(*) FROM reconcile_drifts WHERE run_key='${RUN_KEY_SQL}' GROUP BY mismatch_code ORDER BY COUNT(*) DESC;" 2>/dev/null || true)"
 echo "drift classification snapshot:"
 if [[ -n "$DRIFT_SUMMARY" ]]; then
   echo "$DRIFT_SUMMARY"
@@ -494,6 +529,7 @@ else
   fail "reconciliation report generation failed"
 fi
 
+validate_identifier "INDEXER_DB_NAME" "${INDEXER_DB_NAME:-}"
 CORRELATION_ROWS="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${INDEXER_DB_NAME}" -Atc "SELECT COALESCE(trade_id,''), COALESCE(tx_hash,'') FROM trade_event ORDER BY block_number DESC LIMIT 5;" 2>/dev/null || true)"
 echo "correlation snapshot (indexer + reconciliation context):"
 if [[ -n "$CORRELATION_ROWS" ]]; then
