@@ -254,7 +254,24 @@ fetch(target, {
   headers: { 'content-type': 'application/json' },
   body: process.argv[2],
 })
-  .then((response) => process.exit(response.ok ? 0 : 1))
+  .then(async (response) => {
+    if (response.ok) {
+      process.exit(0);
+    }
+    let bodyText = '';
+    try {
+      bodyText = await response.text();
+    } catch (e) {
+      bodyText = `<failed to read response body: ${e}>`;
+    }
+    console.error(
+      `GraphQL request failed: status=${response.status} ${response.statusText || ''}`.trim()
+    );
+    if (bodyText) {
+      console.error('Response body:', bodyText);
+    }
+    process.exit(1);
+  })
   .catch((err) => {
     console.error('Error while executing GraphQL request:', err);
     process.exit(1);
@@ -441,6 +458,7 @@ fi
 # Validate identifiers before the first non-config-only DB access path.
 validate_identifier "POSTGRES_USER" "${POSTGRES_USER:-}"
 validate_identifier "RECONCILIATION_DB_NAME" "${RECONCILIATION_DB_NAME:-}"
+validate_identifier "INDEXER_DB_NAME" "${INDEXER_DB_NAME:-}"
 validate_run_key
 
 INDEXER_START_BLOCK="${INDEXER_START_BLOCK:-}" scripts/docker-services.sh up "$PROFILE"
@@ -595,7 +613,6 @@ else
   fail "reconciliation report generation failed"
 fi
 
-validate_identifier "INDEXER_DB_NAME" "${INDEXER_DB_NAME:-}"
 CORRELATION_SQL="$(cat <<'SQL'
 SELECT
   replace(COALESCE(trade_id, ''), E'\t', ' '),
