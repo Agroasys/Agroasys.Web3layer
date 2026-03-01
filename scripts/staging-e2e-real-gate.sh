@@ -57,6 +57,37 @@ retry_cmd() {
   return 1
 }
 
+resolve_reconciliation_report_version() {
+  if [[ -n "${RECONCILIATION_REPORT_VERSION:-}" ]]; then
+    printf '%s\n' "$RECONCILIATION_REPORT_VERSION"
+    return 0
+  fi
+
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local version_source="${script_dir}/../reconciliation/src/core/reconciliationReport.ts"
+
+  if [[ -f "$version_source" ]] && command -v node >/dev/null 2>&1; then
+    local version
+    version="$(
+      node -e '
+        const fs = require("node:fs");
+        const filePath = process.argv[1];
+        const source = fs.readFileSync(filePath, "utf8");
+        const match = source.match(/RECONCILIATION_REPORT_VERSION\s*=\s*["\x27]([^"\x27]+)["\x27]/u);
+        process.stdout.write(match ? match[1] : "");
+      ' "$version_source" 2>/dev/null || true
+    )"
+
+    if [[ -n "$version" ]]; then
+      printf '%s\n' "$version"
+      return 0
+    fi
+  fi
+
+  printf '%s\n' "1.0"
+}
+
 require_non_negative_integer() {
   local name="$1"
   local value="$2"
@@ -204,9 +235,10 @@ if [[ "$DYNAMIC_START_BLOCK" == "true" && -n "$RPC_GATEWAY_URL_HOST" ]]; then
 fi
 
 if [[ "${STAGING_E2E_REAL_GATE_ASSERT_CONFIG_ONLY:-false}" == "true" ]]; then
+  REPORT_VERSION="$(resolve_reconciliation_report_version)"
   cat > "$RECONCILIATION_REPORT_PATH" <<EOF
 {
-  "reportVersion": "1.0",
+  "reportVersion": "${REPORT_VERSION}",
   "runKey": null,
   "mode": "config-only",
   "rows": [],
