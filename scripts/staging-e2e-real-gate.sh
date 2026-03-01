@@ -12,6 +12,8 @@ load_env_file() {
     # shellcheck disable=SC1090
     source "$file"
     set +a
+  else
+    echo "Warning: environment file not found, skipping: $file" >&2
   fi
 }
 
@@ -31,13 +33,34 @@ run_with_prefixed_stderr() {
 get_rpc_head_hex() {
   local rpc_head_hex=""
   if [[ -n "${RPC_GATEWAY_URL_HOST:-}" ]]; then
-    rpc_head_hex="$(
+    local curl_output=""
+    local curl_status=0
+    curl_output="$(
       curl -fsS "${RPC_GATEWAY_URL_HOST}" \
         -H 'content-type: application/json' \
         --data '{"id":1,"jsonrpc":"2.0","method":"eth_blockNumber","params":[]}' \
-        | sed -n 's/.*"result":"\(0x[0-9a-fA-F]*\)".*/\1/p' \
-        | head -n1 || true
-    )"
+        2>&1
+    )" || curl_status=$?
+
+    if [[ "$curl_status" -ne 0 ]]; then
+      echo "[get_rpc_head_hex] failed to query RPC at '${RPC_GATEWAY_URL_HOST}' (curl exit code: ${curl_status})" >&2
+      if [[ -n "$curl_output" ]]; then
+        printf '%s\n' "$curl_output" >&2
+      fi
+      rpc_head_hex=""
+    else
+      rpc_head_hex="$(
+        printf '%s\n' "$curl_output" \
+          | sed -n 's/.*"result":"\(0x[0-9a-fA-F]*\)".*/\1/p' \
+          | head -n1
+      )"
+      if [[ -z "$rpc_head_hex" ]]; then
+        echo "[get_rpc_head_hex] RPC response from '${RPC_GATEWAY_URL_HOST}' did not contain a valid hex block number result" >&2
+        if [[ -n "$curl_output" ]]; then
+          printf '%s\n' "$curl_output" >&2
+        fi
+      fi
+    fi
   fi
   printf '%s\n' "$rpc_head_hex"
 }
@@ -60,8 +83,8 @@ PY
 }
 
 get_indexer_head_from_db() {
-  validate_identifier "POSTGRES_USER" "${POSTGRES_USER:-}"
-  validate_identifier "INDEXER_DB_NAME" "${INDEXER_DB_NAME:-}"
+  validate_identifier "POSTGRES_USER" "${POSTGRES_USER:-}" || return 1
+  validate_identifier "INDEXER_DB_NAME" "${INDEXER_DB_NAME:-}" || return 1
   run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${INDEXER_DB_NAME}" -Atc "SELECT COALESCE(MAX(block_number), 0) FROM trade_event;"
 }
 
@@ -83,12 +106,13 @@ validate_identifier() {
   local value="$2"
   if [[ -z "$value" ]]; then
     fail "$name must not be empty."
-    exit 1
+    return 1
   fi
   if [[ ! "$value" =~ ^[A-Za-z0-9_-]+$ ]]; then
     fail "$name contains invalid characters. Allowed characters are: letters, digits, underscore (_), and hyphen (-)."
-    exit 1
+    return 1
   fi
+  return 0
 }
 
 validate_run_key() {
@@ -203,27 +227,27 @@ run_graphql_query_from_reconciliation() {
   local payload
   payload="$(build_graphql_payload "$query")"
 
-  run_compose exec -T reconciliation node -e "
-    const target = process.env.INDEXER_GRAPHQL_URL;
-    if (!target) {
-      console.error(
-        'INDEXER_GRAPHQL_URL is not set. ' +
-          'Configure INDEXER_GRAPHQL_URL for the reconciliation service (for example in docker-compose.services.yml or a .env file) ' +
-          'as the full HTTP(S) URL of the indexer GraphQL endpoint, such as https://your-indexer-host/graphql.'
-      );
-      process.exit(1);
-    }
-    fetch(target, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: process.argv[1],
-    })
-      .then((response) => process.exit(response.ok ? 0 : 1))
-      .catch((err) => {
-        console.error('Error while executing GraphQL request:', err);
-        process.exit(1);
-      });
-  " "$payload"
+  run_compose exec -T reconciliation node - "$payload" <<'NODE'
+const target = process.env.INDEXER_GRAPHQL_URL;
+if (!target) {
+  console.error(
+    'INDEXER_GRAPHQL_URL is not set. ' +
+      'Configure INDEXER_GRAPHQL_URL for the reconciliation service (for example in docker-compose.services.yml or a .env file) ' +
+      'as the full HTTP(S) URL of the indexer GraphQL endpoint, such as https://your-indexer-host/graphql.'
+  );
+  process.exit(1);
+}
+fetch(target, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: process.argv[2],
+})
+  .then((response) => process.exit(response.ok ? 0 : 1))
+  .catch((err) => {
+    console.error('Error while executing GraphQL request:', err);
+    process.exit(1);
+  });
+NODE
 }
 
 extract_indexer_head_height() {
@@ -279,6 +303,31 @@ wait_for_indexer_head_ready() {
 
   printf '\n'
   return 1
+}
+
+calculate_dynamic_start_block() {
+  local rpc_start_head_hex=""
+  local rpc_start_head_dec=""
+  local dynamic_indexer_start_block=0
+
+  rpc_start_head_hex="$(get_rpc_head_hex)"
+  if [[ -n "$rpc_start_head_hex" && "$rpc_start_head_hex" =~ ^0x[0-9a-fA-F]+$ ]]; then
+    rpc_start_head_dec="$(hex_to_decimal "$rpc_start_head_hex" 2>/dev/null || true)"
+    if [[ -n "$rpc_start_head_dec" && "$rpc_start_head_dec" =~ ^[0-9]+$ ]]; then
+      dynamic_indexer_start_block=$((rpc_start_head_dec - START_BLOCK_BACKOFF))
+      if (( dynamic_indexer_start_block < 1 )); then
+        dynamic_indexer_start_block=1
+      fi
+      export INDEXER_START_BLOCK="$dynamic_indexer_start_block"
+      echo "dynamic start block: INDEXER_START_BLOCK=${INDEXER_START_BLOCK} (rpcHead=${rpc_start_head_dec}, backoff=${START_BLOCK_BACKOFF})"
+    else
+      echo "warning: invalid normalized RPC head value '${rpc_start_head_hex}' for dynamic start block; using existing INDEXER_START_BLOCK=${INDEXER_START_BLOCK:-unset}" >&2
+    fi
+  elif [[ -z "$rpc_start_head_hex" ]]; then
+    echo "warning: unable to determine RPC head for dynamic start block; using existing INDEXER_START_BLOCK=${INDEXER_START_BLOCK:-unset}" >&2
+  else
+    echo "warning: invalid RPC head value '${rpc_start_head_hex}' for dynamic start block; using existing INDEXER_START_BLOCK=${INDEXER_START_BLOCK:-unset}" >&2
+  fi
 }
 
 extract_indexed_trades_count() {
@@ -356,24 +405,7 @@ if [[ "$failure_count" -gt 0 ]]; then
 fi
 
 if [[ "$DYNAMIC_START_BLOCK" == "true" && -n "$RPC_GATEWAY_URL_HOST" ]]; then
-  RPC_START_HEAD_HEX="$(get_rpc_head_hex)"
-  if [[ -n "$RPC_START_HEAD_HEX" && "$RPC_START_HEAD_HEX" =~ ^0x[0-9a-fA-F]+$ ]]; then
-    RPC_START_HEAD_DEC="$(hex_to_decimal "$RPC_START_HEAD_HEX" 2>/dev/null || true)"
-    if [[ -n "$RPC_START_HEAD_DEC" && "$RPC_START_HEAD_DEC" =~ ^[0-9]+$ ]]; then
-      DYNAMIC_INDEXER_START_BLOCK=$((RPC_START_HEAD_DEC - START_BLOCK_BACKOFF))
-      if (( DYNAMIC_INDEXER_START_BLOCK < 1 )); then
-        DYNAMIC_INDEXER_START_BLOCK=1
-      fi
-      export INDEXER_START_BLOCK="$DYNAMIC_INDEXER_START_BLOCK"
-      echo "dynamic start block: INDEXER_START_BLOCK=${INDEXER_START_BLOCK} (rpcHead=${RPC_START_HEAD_DEC}, backoff=${START_BLOCK_BACKOFF})"
-    else
-      echo "warning: invalid normalized RPC head value '${RPC_START_HEAD_HEX}' for dynamic start block; using existing INDEXER_START_BLOCK=${INDEXER_START_BLOCK:-unset}" >&2
-    fi
-  elif [[ -z "$RPC_START_HEAD_HEX" ]]; then
-    echo "warning: unable to determine RPC head for dynamic start block; using existing INDEXER_START_BLOCK=${INDEXER_START_BLOCK:-unset}" >&2
-  else
-    echo "warning: invalid RPC head value '${RPC_START_HEAD_HEX}' for dynamic start block; using existing INDEXER_START_BLOCK=${INDEXER_START_BLOCK:-unset}" >&2
-  fi
+  calculate_dynamic_start_block
 fi
 
 if [[ "${STAGING_E2E_REAL_GATE_ASSERT_CONFIG_ONLY:-false}" == "true" ]]; then
