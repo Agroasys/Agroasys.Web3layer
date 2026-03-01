@@ -61,6 +61,12 @@ Purpose:
 ### Backup policy
 - Postgres backups are scheduled, retained by policy, and restoration is periodically tested.
 - Ricardian/legal document storage backup and restore path is documented and tested.
+- Postgres recovery drill evidence is produced via `scripts/postgres-backup-restore-smoke.sh` and stored under `reports/postgres-recovery/`.
+
+### Postgres recovery drill cadence
+- Pilot cadence: run backup/restore smoke at least weekly and archive the generated JSON/log artifacts.
+- Post-pilot cadence: run at least monthly and additionally after schema migrations with non-trivial risk.
+- Runbook source of truth: `docs/runbooks/postgres-backup-restore-recovery.md`.
 
 ### Logging and correlation
 - Structured logs include correlation identifiers (request ID, trade ID, tx hash where applicable).
@@ -96,6 +102,7 @@ Purpose:
 - Profile checks pass for local and staging release-gate paths.
 - Required runbooks are linked and up to date:
   - `docs/runbooks/docker-profiles.md`
+  - `docs/runbooks/postgres-backup-restore-recovery.md`
   - `docs/runbooks/staging-e2e-release-gate.md`
   - `docs/runbooks/staging-e2e-real-release-gate.md`
   - `docs/runbooks/oracle-redrive.md`

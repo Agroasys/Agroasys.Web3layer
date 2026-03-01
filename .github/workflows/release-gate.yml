@@ -203,6 +203,33 @@ jobs:
           name: ci-report-env-profile-regression
           path: ci-reports/env-profile-regression.txt
 
+  postgres-recovery-smoke:
+    name: ci/postgres-recovery-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Run Postgres backup/restore smoke
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-reports reports/postgres-recovery
+          scripts/postgres-backup-restore-smoke.sh > ci-reports/postgres-recovery-smoke.log 2>&1
+          status=$?
+          cat ci-reports/postgres-recovery-smoke.log
+          exit "$status"
+
+      - name: Upload Postgres recovery smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: ci-report-postgres-recovery-smoke
+          path: |
+            ci-reports/postgres-recovery-smoke.log
+            reports/postgres-recovery/backup-restore-smoke.log
+            reports/postgres-recovery/backup-restore-smoke.json
+
   staging-e2e-real-gate:
     name: ci/staging-e2e-real-gate
     runs-on: ubuntu-latest
