@@ -58,6 +58,15 @@ export async function upsertDrift(runId: number, runKey: string, finding: DriftF
   );
 }
 
+export async function upsertRunTradeScope(runId: number, runKey: string, tradeId: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO reconcile_run_trades (run_id, run_key, trade_id)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (run_key, trade_id) DO NOTHING`,
+    [runId, runKey, tradeId]
+  );
+}
+
 export async function completeRun(stats: RunStats): Promise<void> {
   await pool.query(
     `UPDATE reconcile_runs

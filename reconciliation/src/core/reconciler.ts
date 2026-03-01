@@ -4,7 +4,7 @@ import { OnchainClient } from '../blockchain/client';
 import { IndexerClient } from '../indexer/client';
 import { Logger } from '../utils/logger';
 import { classifyDrifts } from './classifier';
-import { completeRun, createRun, failRun, upsertDrift } from '../database/queries';
+import { completeRun, createRun, failRun, upsertDrift, upsertRunTradeScope } from '../database/queries';
 import { DriftFinding, DriftSeverity, ReconcileMode, RunStats } from '../types';
 import { incrementDriftClassification } from '../metrics/counters';
 
@@ -123,6 +123,7 @@ export class ReconciliationService {
 
         for (const indexedTrade of indexedTrades) {
           stats.totalTrades += 1;
+          await upsertRunTradeScope(run.row.id, runKey, indexedTrade.tradeId);
 
           let onchainTrade = null;
           let onchainReadError: string | undefined;
