@@ -39,19 +39,19 @@ retry_cmd() {
   local delay="$3"
   shift 3
 
-  local i=1
-  while (( i <= attempts )); do
+  local attempt=1
+  while (( attempt <= attempts )); do
     if "$@"; then
       return 0
     fi
 
-    if (( i == attempts )); then
+    if (( attempt == attempts )); then
       echo "$label failed after ${attempts} attempt(s)" >&2
       return 1
     fi
 
     sleep "$delay"
-    i=$((i + 1))
+    attempt=$((attempt + 1))
   done
 
   return 1
@@ -70,13 +70,13 @@ resolve_reconciliation_report_version() {
   if [[ -f "$version_source" ]] && command -v node >/dev/null 2>&1; then
     local version
     version="$(
-      node -e '
-        const fs = require("node:fs");
-        const filePath = process.argv[1];
-        const source = fs.readFileSync(filePath, "utf8");
-        const match = source.match(/RECONCILIATION_REPORT_VERSION\s*=\s*["\x27]([^"\x27]+)["\x27]/u);
-        process.stdout.write(match ? match[1] : "");
-      ' "$version_source" 2>/dev/null || true
+      node - "$version_source" 2>/dev/null <<'NODE' || true
+const fs = require("node:fs");
+const filePath = process.argv[2];
+const source = fs.readFileSync(filePath, "utf8");
+const match = source.match(/RECONCILIATION_REPORT_VERSION\s*=\s*["']([^"']+)["']/u);
+process.stdout.write(match ? match[1] : "");
+NODE
     )"
 
     if [[ -n "$version" ]]; then
@@ -100,10 +100,15 @@ require_non_negative_integer() {
   return 0
 }
 
+build_graphql_payload() {
+  local query="$1"
+  printf '{"query":%s}' "$(printf '%s' "$query" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
+}
+
 run_graphql_query() {
   local query="$1"
   local payload
-  payload=$(printf '{"query":%s}' "$(printf '%s' "$query" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")
+  payload="$(build_graphql_payload "$query")"
   curl -fsS "${INDEXER_GATEWAY_URL_HOST}" \
     -H 'content-type: application/json' \
     --data "$payload"
@@ -112,7 +117,7 @@ run_graphql_query() {
 run_graphql_query_from_reconciliation() {
   local query="$1"
   local payload
-  payload=$(printf '{"query":%s}' "$(printf '%s' "$query" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")
+  payload="$(build_graphql_payload "$query")"
 
   run_compose exec -T reconciliation node -e "
     const target = process.env.INDEXER_GRAPHQL_URL;
@@ -325,7 +330,8 @@ echo "indexed trade sample count=${INDEXED_TRADES_COUNT}"
 if [[ "$REQUIRE_INDEXED_DATA" == "true" && "$INDEXED_TRADES_COUNT" -eq 0 ]]; then
   fail "indexed data requirement enabled but no indexed trades found"
 elif [[ "$INDEXED_TRADES_COUNT" -eq 0 ]]; then
-  echo "seed scenario note: repository has no deterministic on-chain seeder for Substrate/Revive in this profile; set STAGING_E2E_REAL_REQUIRE_INDEXED_DATA=true only when contract scope is pre-seeded."
+  echo "WARNING: no indexed trades found and deterministic on-chain seeding is not enabled for this profile."
+  echo "         Set STAGING_E2E_REAL_REQUIRE_INDEXED_DATA=true only when the contract scope is pre-seeded."
   pass "indexed data check completed (require=${REQUIRE_INDEXED_DATA}, count=${INDEXED_TRADES_COUNT})"
 else
   pass "indexed data check completed (require=${REQUIRE_INDEXED_DATA}, count=${INDEXED_TRADES_COUNT})"

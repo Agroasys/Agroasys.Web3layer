@@ -33,7 +33,7 @@ for heading in "${required_headings[@]}"; do
 done
 
 if [[ "$fail" -eq 0 ]]; then
-  echo "api gateway boundary guard: pass"
+  echo "API gateway boundary guard: pass"
   exit 0
 fi
 

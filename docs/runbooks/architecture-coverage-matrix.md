@@ -54,18 +54,19 @@ Row metadata semantics:
 
 ## Milestone Rollup (evidence-based)
 
+_Maintenance note: milestone rollup percentages are manually recomputed using the formula below; update these values whenever roadmap issue `% Complete` values or component statuses change._
 - Milestone A: 52% (snapshot as of 2026-03-01; derived via formula below)
 - Milestone B: 23% (snapshot as of 2026-03-01; derived via formula below)
 - Milestone C: 0% (snapshot as of 2026-03-01; derived via formula below)
 
 Computation method:
-- Scope: for each milestone, take all non-gate roadmap issues linked from the corresponding Component Mapping rows that are not marked `Out of Scope`.
+- Scope: for each milestone, take all non-gate roadmap issues linked from the corresponding Component Mapping rows that are not marked `Out of Scope`, explicitly excluding milestone gate issues (#70/#71/#72).
 - Out-of-scope handling: rows with status `Out of Scope` and any issues referenced only from those rows are excluded from repo completion scoring and from the milestone rollup arithmetic mean.
 - Authoritative signal: use roadmap issue `% Complete` values as per-deliverable completion.
-- Formula: milestone completion = arithmetic mean of in-scope issue `% Complete` values, rounded to nearest whole percent.
+- Formula: milestone completion = arithmetic mean of in-scope issue `% Complete` values (excluding milestone gate issues #70/#71/#72), rounded to nearest whole percent.
 - Deduplication rule: if an issue appears in multiple rows for the same milestone, count it once.
 - Recompute after each in-scope issue status or `% Complete` change.
-- Milestone gate issues (#70/#71/#72) track the rollup value and are excluded from the average.
+- Milestone gate issues (#70/#71/#72) track the rollup value and, as described above, are excluded from the average.
 
 ## Gate-to-Row Mapping
 
@@ -101,7 +102,7 @@ Computation method:
 ## Maintenance Rule
 
 Before marking any milestone gate `Done`:
-1. Ensure each related row above is either `Done` or explicitly out-of-scope with approval.
+1. Ensure each related row above is either `Done` or explicitly `Out of Scope`, with approval recorded in the corresponding gate issue or roadmap item.
 2. Ensure each `Done` row references concrete repo evidence (files, tests, merged PRs, CI run).
 3. Update gate issue body `% Complete` and project field `% Complete` in the same change.
 4. Recompute and update the "Milestone Rollup" percentages above whenever any in-scope issue `% Complete` value changes (or verify that roadmap rollup automation has done so).
