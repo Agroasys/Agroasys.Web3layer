@@ -14,7 +14,8 @@ DEFAULT_START_BLOCK_BACKOFF=250
 # Default 500 is conservative for mixed environments; tune per network block time/SLO.
 DEFAULT_MAX_INDEXER_LAG_BLOCKS=500
 # Use ASCII Unit Separator (0x1F) as delimiter to minimize collisions with normal text data
-# in reconciliation run and drift summary queries below.
+# in reconciliation run and drift summary queries below. Any text field returned by those
+# queries must sanitize chr(31) (for example via replace(..., chr(31), ' ')) before output.
 RECONCILIATION_SUMMARY_FIELD_DELIM=$'\x1f'
 
 load_env_file() {
@@ -210,10 +211,9 @@ require_integer_digits() {
 
   if [[ ! "$value" =~ ^[0-9]+$ ]]; then
     fail "$name must be an integer consisting only of digits 0-9 (received: $value)"
+    return 1
   fi
 
-  # Validation errors are accumulated via the global failure counter.
-  # Always return success so the gate can report all validation failures at once.
   return 0
 }
 
@@ -221,13 +221,26 @@ require_positive_value() {
   local name="$1"
   local value="$2"
   # Reuse digit validation so non-numeric values are flagged consistently.
-  require_integer_digits "$name" "$value"
+  if ! require_integer_digits "$name" "$value"; then
+    return 1
+  fi
+  # Defensive guard before arithmetic in case upstream validation behavior changes.
+  if [[ -z "${value:-}" || ! "$value" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
   # Force base-10 interpretation so values with leading zeros (for example "08")
   # are handled as decimal instead of being treated as invalid octal by Bash math.
   if (( 10#$value == 0 )); then
     fail "$name must be > 0"
+    return 1
   fi
   return 0
+}
+
+# Run a validator while preserving its failure side effects (fail/failure_count)
+# without exiting early under `set -e`.
+run_validation() {
+  "$@" || true
 }
 
 is_valid_hex() {
@@ -344,7 +357,7 @@ try:
 except Exception as e:
     print(
         f"Warning: JSON parsing failed, treating indexer head height as unavailable and continuing. "
-        f"Check whether INDEXER_GRAPHQL_URL is returning valid JSON (for example by inspecting the raw HTTP response or the reconciliation/indexer-pipeline service logs in the current COMPOSE_FILE stack). "
+        f"Check whether INDEXER_GRAPHQL_URL is returning valid JSON (for example by inspecting the raw HTTP response or the reconciliation/indexer-pipeline logs in the active Docker Compose config, COMPOSE_FILE={os.getenv(\"COMPOSE_FILE\", \"docker-compose.services.yml\")}). "
         f"Details: {e}",
         file=sys.stderr,
     )
@@ -481,21 +494,21 @@ mkdir -p "$(dirname "$RECONCILIATION_REPORT_PATH")"
 echo "Starting staging-e2e-real validation gate"
 echo "profile=${PROFILE} indexerHostUrl=${INDEXER_GATEWAY_URL_HOST} rpcHostUrl=${RPC_GATEWAY_URL_HOST}"
 
-require_integer_digits "STAGING_E2E_REAL_START_BLOCK_BACKOFF" "$START_BLOCK_BACKOFF"
-require_integer_digits "STAGING_E2E_REAL_LAG_WARMUP_SECONDS" "$LAG_WARMUP_SECONDS"
-require_integer_digits "STAGING_E2E_REAL_LAG_POLL_SECONDS" "$LAG_POLL_SECONDS"
-require_integer_digits "STAGING_E2E_MAX_INDEXER_LAG_BLOCKS" "$MAX_INDEXER_LAG_BLOCKS"
-require_integer_digits "STAGING_E2E_REAL_READINESS_RETRY_ATTEMPTS" "$READINESS_RETRY_ATTEMPTS"
-require_integer_digits "STAGING_E2E_REAL_READINESS_RETRY_DELAY" "$READINESS_RETRY_DELAY"
-require_integer_digits "STAGING_E2E_REAL_PIPELINE_RESTART_SLEEP" "$PIPELINE_RESTART_SLEEP"
-require_integer_digits "STAGING_E2E_REAL_MIN_INDEXER_START_BLOCK" "$MIN_INDEXER_START_BLOCK"
+run_validation require_integer_digits "STAGING_E2E_REAL_START_BLOCK_BACKOFF" "$START_BLOCK_BACKOFF"
+run_validation require_integer_digits "STAGING_E2E_REAL_LAG_WARMUP_SECONDS" "$LAG_WARMUP_SECONDS"
+run_validation require_integer_digits "STAGING_E2E_REAL_LAG_POLL_SECONDS" "$LAG_POLL_SECONDS"
+run_validation require_integer_digits "STAGING_E2E_MAX_INDEXER_LAG_BLOCKS" "$MAX_INDEXER_LAG_BLOCKS"
+run_validation require_integer_digits "STAGING_E2E_REAL_READINESS_RETRY_ATTEMPTS" "$READINESS_RETRY_ATTEMPTS"
+run_validation require_integer_digits "STAGING_E2E_REAL_READINESS_RETRY_DELAY" "$READINESS_RETRY_DELAY"
+run_validation require_integer_digits "STAGING_E2E_REAL_PIPELINE_RESTART_SLEEP" "$PIPELINE_RESTART_SLEEP"
+run_validation require_integer_digits "STAGING_E2E_REAL_MIN_INDEXER_START_BLOCK" "$MIN_INDEXER_START_BLOCK"
 
-require_positive_value "STAGING_E2E_REAL_LAG_WARMUP_SECONDS" "$LAG_WARMUP_SECONDS"
-require_positive_value "STAGING_E2E_REAL_LAG_POLL_SECONDS" "$LAG_POLL_SECONDS"
-require_positive_value "STAGING_E2E_MAX_INDEXER_LAG_BLOCKS" "$MAX_INDEXER_LAG_BLOCKS"
-require_positive_value "STAGING_E2E_REAL_READINESS_RETRY_ATTEMPTS" "$READINESS_RETRY_ATTEMPTS"
-require_positive_value "STAGING_E2E_REAL_READINESS_RETRY_DELAY" "$READINESS_RETRY_DELAY"
-require_positive_value "STAGING_E2E_REAL_PIPELINE_RESTART_SLEEP" "$PIPELINE_RESTART_SLEEP"
+run_validation require_positive_value "STAGING_E2E_REAL_LAG_WARMUP_SECONDS" "$LAG_WARMUP_SECONDS"
+run_validation require_positive_value "STAGING_E2E_REAL_LAG_POLL_SECONDS" "$LAG_POLL_SECONDS"
+run_validation require_positive_value "STAGING_E2E_MAX_INDEXER_LAG_BLOCKS" "$MAX_INDEXER_LAG_BLOCKS"
+run_validation require_positive_value "STAGING_E2E_REAL_READINESS_RETRY_ATTEMPTS" "$READINESS_RETRY_ATTEMPTS"
+run_validation require_positive_value "STAGING_E2E_REAL_READINESS_RETRY_DELAY" "$READINESS_RETRY_DELAY"
+run_validation require_positive_value "STAGING_E2E_REAL_PIPELINE_RESTART_SLEEP" "$PIPELINE_RESTART_SLEEP"
 
 if [[ "$failure_count" -gt 0 ]]; then
   echo "staging-e2e-real gate failed with ${failure_count} check(s)" >&2
@@ -612,13 +625,10 @@ else
           fi
         fi
       fi
-      if [[ "$LAG" -lt 0 ]]; then
-        fail "negative lag (${LAG} blocks): rpcHead=${RPC_HEAD_DEC} < indexerHead=${INDEXER_HEAD_DEC} indicates possible chain mismatch; verify RPC_GATEWAY_URL_HOST and indexer settings point to the same network/chain"
-      elif [[ "$LAG" -le "$MAX_INDEXER_LAG_BLOCKS" ]]; then
-        pass "indexer lag within threshold (${LAG} <= ${MAX_INDEXER_LAG_BLOCKS})"
-      else
-        fail "indexer lag exceeds threshold (${LAG} > ${MAX_INDEXER_LAG_BLOCKS})"
-      fi
+    fi
+
+    if [[ "$LAG" -lt 0 ]]; then
+      fail "negative lag (${LAG} blocks): rpcHead=${RPC_HEAD_DEC} < indexerHead=${INDEXER_HEAD_DEC} indicates a possible chain mismatch; verify that the configured RPC gateway URL and indexer settings point to the same network/chain (for example, STAGING_E2E_REAL_GATE_RPC_URL)"
     elif [[ "$LAG" -le "$MAX_INDEXER_LAG_BLOCKS" ]]; then
       pass "indexer lag within threshold (${LAG} <= ${MAX_INDEXER_LAG_BLOCKS})"
     else
@@ -678,7 +688,7 @@ else
 fi
 
 RUN_SUMMARY_SQL="$(cat <<'SQL'
-SELECT status, total_trades, drift_count
+SELECT replace(COALESCE(status::text, ''), chr(31), ' '), total_trades, drift_count
 FROM reconcile_runs
 WHERE run_key = :'run_key_var'
 ORDER BY id DESC
@@ -695,7 +705,7 @@ else
 fi
 
 DRIFT_SUMMARY_SQL="$(cat <<'SQL'
-SELECT mismatch_code, COUNT(*)
+SELECT replace(COALESCE(mismatch_code::text, ''), chr(31), ' '), COUNT(*)
 FROM reconcile_drifts
 WHERE run_key = :'run_key_var'
 GROUP BY mismatch_code
