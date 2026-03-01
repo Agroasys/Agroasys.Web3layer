@@ -31,6 +31,15 @@ CREATE TABLE IF NOT EXISTS reconcile_drifts (
     CONSTRAINT uq_run_trade_mismatch_field UNIQUE (run_key, trade_id, mismatch_code, compared_field)
 );
 
+CREATE TABLE IF NOT EXISTS reconcile_run_trades (
+    id SERIAL PRIMARY KEY,
+    run_id INT NOT NULL REFERENCES reconcile_runs(id) ON DELETE CASCADE,
+    run_key VARCHAR(255) NOT NULL REFERENCES reconcile_runs(run_key) ON DELETE CASCADE,
+    trade_id VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_reconcile_run_trade UNIQUE (run_key, trade_id)
+);
+
 ALTER TABLE reconcile_drifts
 ADD COLUMN IF NOT EXISTS compared_field VARCHAR(64) NOT NULL DEFAULT 'general';
 
@@ -56,3 +65,5 @@ CREATE INDEX IF NOT EXISTS idx_reconcile_drifts_trade_id ON reconcile_drifts(tra
 CREATE INDEX IF NOT EXISTS idx_reconcile_drifts_severity ON reconcile_drifts(severity);
 CREATE INDEX IF NOT EXISTS idx_reconcile_drifts_mismatch ON reconcile_drifts(mismatch_code);
 CREATE INDEX IF NOT EXISTS idx_reconcile_drifts_compared_field ON reconcile_drifts(compared_field);
+CREATE INDEX IF NOT EXISTS idx_reconcile_run_trades_run_key ON reconcile_run_trades(run_key);
+CREATE INDEX IF NOT EXISTS idx_reconcile_run_trades_trade_id ON reconcile_run_trades(trade_id);

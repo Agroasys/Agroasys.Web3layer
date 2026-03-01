@@ -3,6 +3,7 @@
 ## Purpose
 Operate reconciliation safely in local/staging and diagnose drift failures.
 For lifecycle checkpoints across lock, stage-1, and final settlement, see `docs/runbooks/hybrid-split-walkthrough.md`.
+If a mismatch may be caused by routing/auth propagation/correlation breakdown between services, use `docs/runbooks/api-gateway-boundary.md` first to classify the handoff boundary before remediating reconciliation state.
 
 ## Preconditions
 - Postgres is reachable.
@@ -22,6 +23,16 @@ Run daemon:
 ```bash
 npm run -w reconciliation reconcile:daemon
 ```
+
+Generate deterministic reconciliation report from DB snapshot:
+
+```bash
+npm run -w reconciliation reconcile:report -- --run-key=<runKey> --out reports/reconciliation/latest.json
+```
+
+Notes:
+- Report command reads reconciliation DB (`DB_NAME`), treasury DB (`TREASURY_DB_NAME`), and indexer DB (`INDEXER_DB_NAME`) using the same Postgres host/user/password env set.
+- Output schema is stable and ordered by `tradeId`, then `txHash`; missing fields are emitted as explicit `null`.
 
 Docker local-dev profile:
 
@@ -126,6 +137,8 @@ Oracle retry/redrive semantics (for settlement action remediation):
   - output prefix: `reconciliation run summary:`
 - drift snapshot:
   - output prefix: `drift classification snapshot:`
+- reconciliation report artifact:
+  - output file: `reports/reconciliation/staging-e2e-real-report.json`
 - treasury payout path evidence:
   - `TreasuryClaimed` and payout receiver governance events in indexer output/artifacts when present
 
@@ -134,6 +147,22 @@ Run and verify:
 ```bash
 scripts/staging-e2e-real-gate.sh
 ```
+
+CI artifact name:
+- `ci-report-reconciliation-report`
+
+## Report review cadence and escalation
+- Cadence:
+  - review the latest reconciliation report for each staging gate run
+  - perform at least one daily review while pilot operations are active
+- Escalate immediately when:
+  - any row has `reconciliationVerdict = "MISMATCH"` for two consecutive runs
+  - mismatch reasons include `AMOUNT_MISMATCH`, `PARTICIPANT_MISMATCH`, or `HASH_MISMATCH`
+  - payout state is `PROCESSING` for longer than the agreed treasury operations window
+- Escalation runbooks:
+  - `docs/runbooks/oracle-redrive.md`
+  - `docs/runbooks/treasury-to-fiat-sop.md`
+  - `docs/incidents/first-15-minutes-checklist.md`
 
 ## Common failure patterns
 - `RPC endpoint is unreachable`: bad RPC URL, local node not running, or network ACL.
