@@ -115,6 +115,22 @@ wait_for_postgres() {
   return 1
 }
 
+wait_for_database() {
+  local container_name="$1"
+  local db_name="$2"
+  local attempt
+
+  for attempt in $(seq 1 60); do
+    if docker exec "$container_name" psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$db_name" -Atc 'SELECT 1' >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  FAIL_REASON="database readiness timeout for container=${container_name} db=${db_name}"
+  return 1
+}
+
 run_psql_retry() {
   local container_name="$1"
   local db_name="$2"
@@ -123,7 +139,7 @@ run_psql_retry() {
   local attempt
 
   for attempt in $(seq 1 "$attempts"); do
-    if docker exec "$container_name" psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$db_name" "$@" >/dev/null; then
+    if docker exec "$container_name" psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$db_name" "$@" >/dev/null 2>&1; then
       return 0
     fi
     if [[ "$attempt" -lt "$attempts" ]]; then
@@ -132,6 +148,26 @@ run_psql_retry() {
   done
 
   FAIL_REASON="psql command failed for container=${container_name} db=${db_name} after ${attempts} attempt(s)"
+  return 1
+}
+
+restore_dump_retry() {
+  local container_name="$1"
+  local db_name="$2"
+  local dump_file="$3"
+  local attempts="$4"
+  local attempt
+
+  for attempt in $(seq 1 "$attempts"); do
+    if docker exec -i "$container_name" psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$db_name" < "$dump_file" >/dev/null 2>&1; then
+      return 0
+    fi
+    if [[ "$attempt" -lt "$attempts" ]]; then
+      sleep 1
+    fi
+  done
+
+  FAIL_REASON="backup restore failed for container=${container_name} db=${db_name} after ${attempts} attempt(s)"
   return 1
 }
 
@@ -155,6 +191,7 @@ docker run -d \
   "$POSTGRES_IMAGE" >/dev/null
 
 wait_for_postgres "$SRC_CONTAINER" "$SOURCE_DB"
+wait_for_database "$SRC_CONTAINER" "$SOURCE_DB"
 
 log "source postgres ready; creating sentinel row"
 run_psql_retry "$SRC_CONTAINER" "$SOURCE_DB" 10 \
@@ -176,9 +213,10 @@ docker run -d \
   "$POSTGRES_IMAGE" >/dev/null
 
 wait_for_postgres "$DST_CONTAINER" "$TARGET_DB"
+wait_for_database "$DST_CONTAINER" "$TARGET_DB"
 
 log "restoring backup into target postgres"
-cat "$DUMP_FILE" | docker exec -i "$DST_CONTAINER" psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$TARGET_DB" >/dev/null
+restore_dump_retry "$DST_CONTAINER" "$TARGET_DB" "$DUMP_FILE" 10
 
 RESTORED_MARKER="$(docker exec "$DST_CONTAINER" psql -U "$POSTGRES_USER" -d "$TARGET_DB" -Atc "SELECT marker FROM ${SENTINEL_TABLE} WHERE id=${SENTINEL_ID};")"
 if [[ "$RESTORED_MARKER" != "$SENTINEL_MARKER" ]]; then
