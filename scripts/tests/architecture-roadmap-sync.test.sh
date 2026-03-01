@@ -76,7 +76,7 @@ cat > "$cache" <<CACHE
 }
 CACHE
 
-: > "$log"
+> "$log"
 if run_sync_script --out "$report" --patch "$patch" >>"$log" 2>&1; then
   echo "expected sync helper to fail in check mode when stale rows exist" >&2
   echo "sync helper output was:" >&2
@@ -100,7 +100,7 @@ if grep -q "None (auto-synced from closed issues)" "$patch"; then
 fi
 
 write_matrix_fixture
-: > "$log"
+> "$log"
 if ! run_sync_script --write --out "$report_write_min" --patch "$patch" >>"$log" 2>&1; then
   echo "expected default write mode to apply minimum-safe row updates" >&2
   echo "sync helper output was:" >&2
@@ -116,7 +116,7 @@ if ! grep -Fq "$EXPECTED_DEFAULT_ROW" "$matrix"; then
 fi
 
 write_matrix_fixture
-: > "$log"
+> "$log"
 if ! run_sync_script --write --normalize-progress --out "$report_write_norm" --patch "$patch" >>"$log" 2>&1; then
   echo "expected write + normalize-progress mode to apply extended sync updates" >&2
   echo "sync helper output was:" >&2
@@ -131,7 +131,7 @@ if ! grep -Fq "$EXPECTED_NORMALIZED_ROW" "$matrix"; then
   exit 1
 fi
 
-: > "$log"
+> "$log"
 if run_sync_script --write-gate-issues --out "$report_gate" --patch "$patch_gate" >>"$log" 2> "$apply_guard_err"; then
   echo "expected write-gate-issues without --apply to fail" >&2
   exit 1
