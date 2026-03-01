@@ -155,7 +155,7 @@ if height is not None:
     sys.stdout.write(str(height))'
   )"
 
-  if [[ "$head" =~ ^-?[0-9]+$ ]]; then
+  if [[ "$head" =~ ^[0-9]+$ ]]; then
     printf '%s\n' "$head"
     return 0
   fi
@@ -174,7 +174,7 @@ wait_for_indexer_head_ready() {
     local current_head
     current_head="$(read_indexer_head || true)"
 
-    if [[ "$current_head" =~ ^-?[0-9]+$ ]] && (( current_head >= minimum_head )); then
+    if [[ "$current_head" =~ ^[0-9]+$ ]] && (( current_head >= minimum_head )); then
       printf '%s\n' "$current_head"
       return 0
     fi
@@ -258,9 +258,10 @@ fi
 
 if [[ "${STAGING_E2E_REAL_GATE_ASSERT_CONFIG_ONLY:-false}" == "true" ]]; then
   REPORT_VERSION="$(resolve_reconciliation_report_version)"
+  REPORT_VERSION_JSON="$(printf '%s' "$REPORT_VERSION" | json_encode_string)"
   cat > "$RECONCILIATION_REPORT_PATH" <<EOF
 {
-  "reportVersion": "${REPORT_VERSION}",
+  "reportVersion": ${REPORT_VERSION_JSON},
   "runKey": null,
   "mode": "config-only",
   "rows": [],
@@ -322,6 +323,9 @@ fi
 
 if [[ -z "$RPC_HEAD_HEX" || -z "$INDEXER_HEAD" ]]; then
   fail "lag/head metrics unavailable"
+# INDEXER_HEAD is expected to be numeric because read_indexer_head validates it
+# and the fallback SQL query returns an integer; keep this as a defensive guard
+# before shell arithmetic.
 elif [[ ! "$INDEXER_HEAD" =~ ^[0-9]+$ ]]; then
   fail "indexer head metric is not numeric: ${INDEXER_HEAD}"
 else
@@ -413,10 +417,16 @@ CORRELATION_ROWS="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "
 echo "correlation snapshot (indexer + reconciliation context):"
 if [[ -n "$CORRELATION_ROWS" ]]; then
   while IFS='|' read -r TRADE_ID TX_HASH; do
-    printf '{"tradeId":"%s","actionKey":null,"requestId":null,"txHash":"%s","chainId":"%s","networkName":"%s"}\n' "${TRADE_ID}" "${TX_HASH}" "${CHAIN_ID_VALUE}" "${NETWORK_NAME}"
+    printf '{"tradeId":%s,"actionKey":null,"requestId":null,"txHash":%s,"chainId":%s,"networkName":%s}\n' \
+      "$(printf '%s' "${TRADE_ID}" | json_encode_string)" \
+      "$(printf '%s' "${TX_HASH}" | json_encode_string)" \
+      "$(printf '%s' "${CHAIN_ID_VALUE}" | json_encode_string)" \
+      "$(printf '%s' "${NETWORK_NAME}" | json_encode_string)"
   done <<< "$CORRELATION_ROWS"
 else
-  printf '{"tradeId":null,"actionKey":null,"requestId":null,"txHash":null,"chainId":"%s","networkName":"%s"}\n' "${CHAIN_ID_VALUE}" "${NETWORK_NAME}"
+  printf '{"tradeId":null,"actionKey":null,"requestId":null,"txHash":null,"chainId":%s,"networkName":%s}\n' \
+    "$(printf '%s' "${CHAIN_ID_VALUE}" | json_encode_string)" \
+    "$(printf '%s' "${NETWORK_NAME}" | json_encode_string)"
 fi
 
 if [[ "$failures" -gt 0 ]]; then
