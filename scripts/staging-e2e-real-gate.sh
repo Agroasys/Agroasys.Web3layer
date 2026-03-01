@@ -20,6 +20,24 @@ normalize_host_url() {
   echo "${url//host.docker.internal/127.0.0.1}"
 }
 
+get_rpc_head_hex() {
+  local rpc_head_hex=""
+  if [[ -n "${RPC_GATEWAY_URL_HOST:-}" ]]; then
+    rpc_head_hex="$(
+      curl -fsS "${RPC_GATEWAY_URL_HOST}" \
+        -H 'content-type: application/json' \
+        --data '{"id":1,"jsonrpc":"2.0","method":"eth_blockNumber","params":[]}' \
+        | sed -n 's/.*"result":"\(0x[0-9a-fA-F]*\)".*/\1/p' \
+        | head -n1 || true
+    )"
+  fi
+  printf '%s\n' "$rpc_head_hex"
+}
+
+get_indexer_head_from_db() {
+  run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${INDEXER_DB_NAME}" -Atc "SELECT COALESCE(MAX(block_number), 0) FROM trade_event;"
+}
+
 run_compose() {
   docker compose -f "$COMPOSE_FILE" --profile "$PROFILE" "$@"
 }
@@ -74,7 +92,7 @@ resolve_reconciliation_report_version() {
 const fs = require("node:fs");
 const filePath = process.argv[2];
 const source = fs.readFileSync(filePath, "utf8");
-const match = source.match(/RECONCILIATION_REPORT_VERSION\s*=\s*["']([^"']+)["']/u);
+const match = source.match(/RECONCILIATION_REPORT_VERSION\s*=\s*["']([^"']+)["']/);
 process.stdout.write(match ? match[1] : "");
 NODE
     )"
@@ -94,10 +112,7 @@ require_integer_digits() {
 
   if [[ ! "$value" =~ ^[0-9]+$ ]]; then
     fail "$name must be an integer consisting only of digits 0-9 (received: $value)"
-    return 1
   fi
-
-  return 0
 }
 
 json_encode_string() {
@@ -213,10 +228,10 @@ mkdir -p "$(dirname "$RECONCILIATION_REPORT_PATH")"
 echo "Starting staging-e2e-real validation gate"
 echo "profile=${PROFILE} indexerHostUrl=${INDEXER_GATEWAY_URL_HOST} rpcHostUrl=${RPC_GATEWAY_URL_HOST}"
 
-if ! require_integer_digits "STAGING_E2E_REAL_START_BLOCK_BACKOFF" "$START_BLOCK_BACKOFF"; then :; fi
-if ! require_integer_digits "STAGING_E2E_REAL_LAG_WARMUP_SECONDS" "$LAG_WARMUP_SECONDS"; then :; fi
-if ! require_integer_digits "STAGING_E2E_REAL_LAG_POLL_SECONDS" "$LAG_POLL_SECONDS"; then :; fi
-if ! require_integer_digits "STAGING_E2E_MAX_INDEXER_LAG_BLOCKS" "$MAX_LAG"; then :; fi
+require_integer_digits "STAGING_E2E_REAL_START_BLOCK_BACKOFF" "$START_BLOCK_BACKOFF"
+require_integer_digits "STAGING_E2E_REAL_LAG_WARMUP_SECONDS" "$LAG_WARMUP_SECONDS"
+require_integer_digits "STAGING_E2E_REAL_LAG_POLL_SECONDS" "$LAG_POLL_SECONDS"
+require_integer_digits "STAGING_E2E_MAX_INDEXER_LAG_BLOCKS" "$MAX_LAG"
 
 if [[ "$LAG_WARMUP_SECONDS" == "0" ]]; then
   fail "STAGING_E2E_REAL_LAG_WARMUP_SECONDS must be > 0"
@@ -236,13 +251,7 @@ if [[ "$failures" -gt 0 ]]; then
 fi
 
 if [[ "$DYNAMIC_START_BLOCK" == "true" && -n "$RPC_GATEWAY_URL_HOST" ]]; then
-  RPC_START_HEAD_HEX="$(
-    curl -fsS "${RPC_GATEWAY_URL_HOST}" \
-      -H 'content-type: application/json' \
-      --data '{"id":1,"jsonrpc":"2.0","method":"eth_blockNumber","params":[]}' \
-      | sed -n 's/.*"result":"\(0x[0-9a-fA-F]*\)".*/\1/p' \
-      | head -n1 || true
-  )"
+  RPC_START_HEAD_HEX="$(get_rpc_head_hex)"
   if [[ -n "$RPC_START_HEAD_HEX" && "$RPC_START_HEAD_HEX" =~ ^0x[0-9a-fA-F]+$ ]]; then
     RPC_START_HEAD_DEC=$((RPC_START_HEAD_HEX))
     DYNAMIC_INDEXER_START_BLOCK=$((RPC_START_HEAD_DEC - START_BLOCK_BACKOFF))
@@ -310,7 +319,7 @@ INDEXER_HEAD="$(wait_for_indexer_head_ready "$LAG_WARMUP_SECONDS" "$LAG_POLL_SEC
 if [[ -n "$INDEXER_HEAD" ]]; then
   pass "indexer head metric available after warmup (height=${INDEXER_HEAD})"
 else
-  INDEXER_HEAD="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${INDEXER_DB_NAME}" -Atc "SELECT COALESCE(MAX(block_number), 0) FROM trade_event;" 2>/dev/null || true)"
+  INDEXER_HEAD="$(get_indexer_head_from_db 2>/dev/null || true)"
   if [[ -n "$INDEXER_HEAD" ]]; then
     pass "indexer head fallback metric available from DB after warmup (height=${INDEXER_HEAD})"
   else
@@ -320,7 +329,7 @@ fi
 
 RPC_HEAD_HEX=""
 if [[ -n "$RPC_GATEWAY_URL_HOST" ]]; then
-  RPC_HEAD_HEX="$(curl -fsS "${RPC_GATEWAY_URL_HOST}" -H 'content-type: application/json' --data '{"id":1,"jsonrpc":"2.0","method":"eth_blockNumber","params":[]}' | sed -n 's/.*"result":"\(0x[0-9a-fA-F]*\)".*/\1/p' | head -n1 || true)"
+  RPC_HEAD_HEX="$(get_rpc_head_hex)"
 fi
 
 if [[ -z "$RPC_HEAD_HEX" || -z "$INDEXER_HEAD" ]]; then
@@ -366,7 +375,7 @@ if run_compose ps --services --filter status=running | grep -qx 'indexer-pipelin
     STATUS_AFTER_RESTART="$(run_graphql_query '{ squidStatus { height } }' || true)"
     HEAD_AFTER_RESTART="$(printf '%s' "$STATUS_AFTER_RESTART" | extract_json_value 'data.get("data",{}).get("squidStatus",{}).get("height")')"
     if [[ -z "$HEAD_AFTER_RESTART" ]]; then
-      HEAD_AFTER_RESTART="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${INDEXER_DB_NAME}" -Atc "SELECT COALESCE(MAX(block_number), 0) FROM trade_event;" 2>/dev/null || true)"
+      HEAD_AFTER_RESTART="$(get_indexer_head_from_db 2>/dev/null || true)"
     fi
 
     if [[ -n "$HEAD_BEFORE_RESTART" && -n "$HEAD_AFTER_RESTART" ]]; then
