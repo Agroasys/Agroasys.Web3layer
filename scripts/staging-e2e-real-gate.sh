@@ -35,6 +35,13 @@ run_with_prefixed_stderr() {
   "$@" 2> >(sed "s/^/[${prefix}] /" >&2)
 }
 
+is_service_running() {
+  local service="$1"
+  run_compose ps --services --filter status=running \
+    | tr '[:space:]' '\n' \
+    | grep -Fxq "$service"
+}
+
 get_rpc_head_hex() {
   local rpc_head_hex=""
   if [[ -n "${RPC_GATEWAY_URL_HOST:-}" ]]; then
@@ -208,10 +215,15 @@ require_positive_value() {
   local value="$2"
   # Reuse digit validation so non-numeric values are flagged consistently.
   require_integer_digits "$name" "$value"
-  if [[ "$value" == "0" ]]; then
+  if (( 10#$value == 0 )); then
     fail "$name must be > 0"
   fi
   return 0
+}
+
+is_valid_hex() {
+  local value="${1:-}"
+  [[ "$value" =~ ^0x[0-9a-fA-F]+$ ]]
 }
 
 json_encode_string() {
@@ -397,7 +409,7 @@ calculate_dynamic_start_block() {
   fi
 
   rpc_start_head_hex="$(get_rpc_head_hex)"
-  if [[ -n "$rpc_start_head_hex" && "$rpc_start_head_hex" =~ ^0x[0-9a-fA-F]+$ ]]; then
+  if [[ -n "$rpc_start_head_hex" ]] && is_valid_hex "$rpc_start_head_hex"; then
     rpc_start_head_dec="$(hex_to_decimal "$rpc_start_head_hex" 2>/dev/null || true)"
     if [[ -n "$rpc_start_head_dec" && "$rpc_start_head_dec" =~ ^[0-9]+$ ]]; then
       dynamic_indexer_start_block=$((rpc_start_head_dec - backoff_value))
@@ -559,7 +571,7 @@ fi
 
 if [[ -z "$RPC_HEAD_HEX" || -z "$INDEXER_HEAD" ]]; then
   fail "lag/head metrics unavailable"
-elif [[ ! "$RPC_HEAD_HEX" =~ ^0x[0-9a-fA-F]+$ ]]; then
+elif ! is_valid_hex "$RPC_HEAD_HEX"; then
   fail "RPC head metric is not a valid hex value: ${RPC_HEAD_HEX}"
 else
   # Strip the 0x prefix, then convert the remaining hexadecimal value to decimal.
@@ -573,7 +585,7 @@ else
     LAG=$((RPC_HEAD_DEC - INDEXER_HEAD_DEC))
     echo "lag/head metrics: rpcHead=${RPC_HEAD_DEC}, indexerHead=${INDEXER_HEAD_DEC}, lag=${LAG}"
     if [[ "$LAG" -lt 0 ]]; then
-      fail "negative lag indicates possible chain mismatch; verify RPC_GATEWAY_URL_HOST and indexer settings point to the same network/chain"
+      fail "negative lag (${LAG} blocks): rpcHead=${RPC_HEAD_DEC} < indexerHead=${INDEXER_HEAD_DEC} indicates possible chain mismatch; verify RPC_GATEWAY_URL_HOST and indexer settings point to the same network/chain"
     elif [[ "$LAG" -le "$MAX_INDEXER_LAG_BLOCKS" ]]; then
       pass "indexer lag within threshold (${LAG} <= ${MAX_INDEXER_LAG_BLOCKS})"
     else
@@ -601,7 +613,7 @@ else
 fi
 
 HEAD_BEFORE_RESTART="${INDEXER_HEAD:-}"
-if run_compose ps --services --filter status=running | tr '[:space:]' '\n' | grep -Fxq "${INDEXER_PIPELINE_SERVICE}"; then
+if is_service_running "${INDEXER_PIPELINE_SERVICE}"; then
   run_compose restart "${INDEXER_PIPELINE_SERVICE}" >/dev/null
   sleep "$PIPELINE_RESTART_SLEEP"
   if retry_cmd "indexer graphql readiness after pipeline restart" "$READINESS_RETRY_ATTEMPTS" "$READINESS_RETRY_DELAY" run_graphql_query 'query { trades(limit: 1) { tradeId } }' >/dev/null; then
