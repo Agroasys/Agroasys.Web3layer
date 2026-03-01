@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$ROOT_DIR/scripts/arch-roadmap-sync.mjs"
+REPO_NAME='Agroasys/Agroasys.Web3layer'
+REPO_ISSUES_BASE_URL="https://github.com/$REPO_NAME/issues"
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
@@ -15,6 +17,10 @@ report_write_min="$tmp_dir/sync-report-write-min.json"
 report_write_norm="$tmp_dir/sync-report-write-norm.json"
 apply_guard_err="$tmp_dir/write-gate-issues-without-apply.err"
 log="$tmp_dir/sync.log"
+
+run_sync_script() {
+  node "$SCRIPT" --offline --matrix "$matrix" --cache "$cache" "$@"
+}
 
 write_matrix_fixture() {
   cat > "$matrix" <<'MATRIX'
@@ -33,71 +39,47 @@ MATRIX
 }
 
 write_matrix_fixture
-cat > "$cache" <<'CACHE'
+cat > "$cache" <<CACHE
 {
   "generatedAt": "2026-03-01T00:00:00.000Z",
-  "repo": "Agroasys/Agroasys.Web3layer",
+  "repo": "$REPO_NAME",
   "issues": [
     {
       "number": 70,
       "state": "open",
       "body": "Last synchronized: 2026-03-01\nSource matrix: docs/runbooks/architecture-coverage-matrix.md",
-      "url": "https://github.com/Agroasys/Agroasys.Web3layer/issues/70"
+      "url": "$REPO_ISSUES_BASE_URL/70"
     },
     {
       "number": 71,
       "state": "open",
       "body": "Last synchronized: 2026-03-01\nSource matrix: docs/runbooks/architecture-coverage-matrix.md",
-      "url": "https://github.com/Agroasys/Agroasys.Web3layer/issues/71"
+      "url": "$REPO_ISSUES_BASE_URL/71"
     },
     {
       "number": 72,
       "state": "open",
       "body": "Last synchronized: 2026-03-01\nSource matrix: docs/runbooks/architecture-coverage-matrix.md",
-      "url": "https://github.com/Agroasys/Agroasys.Web3layer/issues/72"
+      "url": "$REPO_ISSUES_BASE_URL/72"
     },
     {
       "number": 101,
       "state": "closed",
       "body": "Closed issue",
-      "url": "https://github.com/Agroasys/Agroasys.Web3layer/issues/101"
+      "url": "$REPO_ISSUES_BASE_URL/101"
     }
   ]
 }
 CACHE
 
-if node "$SCRIPT" --offline --matrix "$matrix" --cache "$cache" --out "$report" --patch "$patch" >"$log" 2>&1; then
+if run_sync_script --out "$report" --patch "$patch" >"$log" 2>&1; then
   echo "expected sync helper to fail in check mode when stale rows exist" >&2
   echo "sync helper output was:" >&2
   cat "$log" >&2 || true
   exit 1
 fi
 
-node -e '
-  const fs = require("node:fs");
-  const report = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-  if (report.pass !== false) {
-    throw new Error("expected check-mode report.pass=false");
-  }
-  if (!Array.isArray(report.staleRows) || report.staleRows.length !== 1) {
-    throw new Error("expected one stale row recommendation");
-  }
-  if (report.matrix.syncMode !== "status,last-refreshed") {
-    throw new Error(`expected default sync mode to be status,last-refreshed, got ${report.matrix.syncMode}`);
-  }
-  if (!Array.isArray(report.remainingGateIssueDrift) || report.remainingGateIssueDrift.length !== 0) {
-    throw new Error("expected zero remaining gate issue drift from cache fixture");
-  }
-  if (!report.remediation || !report.remediation.writeMatrix) {
-    throw new Error("expected remediation.writeMatrix command");
-  }
-  if (!report.remediation || !report.remediation.writeMatrixNormalized) {
-    throw new Error("expected remediation.writeMatrixNormalized command");
-  }
-  if (!report.remediation.writeGateIssues.includes("--write-gate-issues --apply")) {
-    throw new Error("expected remediation.writeGateIssues to require --apply");
-  }
-' "$report"
+node "$ROOT_DIR/scripts/tests/architecture-roadmap-sync-validator.mjs" check "$report"
 
 if ! grep -q "| Example component | A | Done | 40 | #101 | \`docs/example.md\` | Pending final closeout validation | roadmap-maintainers | 2026-03-01 | weekly |" "$patch"; then
   echo "expected default patch to update only Status and Last Refreshed" >&2
@@ -109,26 +91,14 @@ if grep -q "None (auto-synced from closed issues)" "$patch"; then
 fi
 
 write_matrix_fixture
-if ! node "$SCRIPT" --offline --write --matrix "$matrix" --cache "$cache" --out "$report_write_min" --patch "$patch" >"$log" 2>&1; then
+if ! run_sync_script --write --out "$report_write_min" --patch "$patch" >"$log" 2>&1; then
   echo "expected default write mode to apply minimum-safe row updates" >&2
   echo "sync helper output was:" >&2
   cat "$log" >&2 || true
   exit 1
 fi
 
-node -e '
-  const fs = require("node:fs");
-  const report = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-  if (report.pass !== true) {
-    throw new Error("expected default write-mode report.pass=true");
-  }
-  if (!report.matrix || report.matrix.wroteChanges !== true) {
-    throw new Error("expected default write mode to write changes");
-  }
-  if (report.matrix.normalizeProgress !== false) {
-    throw new Error("expected default write mode normalizeProgress=false");
-  }
-' "$report_write_min"
+node "$ROOT_DIR/scripts/tests/architecture-roadmap-sync-validator.mjs" write-min "$report_write_min"
 
 if ! grep -q "| Example component | A | Done | 40 | #101 | \`docs/example.md\` | Pending final closeout validation | roadmap-maintainers | 2026-03-01 | weekly |" "$matrix"; then
   echo "expected default write mode to keep % Complete and Remaining Gap unchanged" >&2
@@ -136,36 +106,21 @@ if ! grep -q "| Example component | A | Done | 40 | #101 | \`docs/example.md\` |
 fi
 
 write_matrix_fixture
-if ! node "$SCRIPT" --offline --write --normalize-progress --matrix "$matrix" --cache "$cache" --out "$report_write_norm" --patch "$patch" >"$log" 2>&1; then
+if ! run_sync_script --write --normalize-progress --out "$report_write_norm" --patch "$patch" >"$log" 2>&1; then
   echo "expected write + normalize-progress mode to apply extended sync updates" >&2
   echo "sync helper output was:" >&2
   cat "$log" >&2 || true
   exit 1
 fi
 
-node -e '
-  const fs = require("node:fs");
-  const report = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-  if (report.pass !== true) {
-    throw new Error("expected normalized write-mode report.pass=true");
-  }
-  if (!report.matrix || report.matrix.wroteChanges !== true) {
-    throw new Error("expected normalized write mode to write changes");
-  }
-  if (report.matrix.normalizeProgress !== true) {
-    throw new Error("expected normalizeProgress=true in normalized write mode");
-  }
-  if (!Array.isArray(report.remainingStaleRows) || report.remainingStaleRows.length !== 0) {
-    throw new Error("expected no remaining stale rows after write mode");
-  }
-' "$report_write_norm"
+node "$ROOT_DIR/scripts/tests/architecture-roadmap-sync-validator.mjs" write-norm "$report_write_norm"
 
 if ! grep -q "| Example component | A | Done | 100 | #101 | \`docs/example.md\` | None (auto-synced from closed issues) | roadmap-maintainers | 2026-03-01 | weekly |" "$matrix"; then
   echo "expected normalize-progress write mode to rewrite progress fields" >&2
   exit 1
 fi
 
-if node "$SCRIPT" --offline --write-gate-issues --matrix "$matrix" --cache "$cache" --out "$report" --patch "$patch" >"$log" 2> "$apply_guard_err"; then
+if run_sync_script --write-gate-issues --out "$report" --patch "$patch" >"$log" 2> "$apply_guard_err"; then
   echo "expected write-gate-issues without --apply to fail" >&2
   exit 1
 fi
