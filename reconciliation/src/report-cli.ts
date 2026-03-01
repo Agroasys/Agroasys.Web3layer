@@ -13,6 +13,10 @@ interface RunRow {
   run_key: string;
 }
 
+interface RunTradeScopeRow {
+  trade_id: string;
+}
+
 interface DriftSummaryRow {
   trade_id: string;
   mismatch_codes: string[];
@@ -152,7 +156,23 @@ async function fetchDriftSummaries(pool: Pool, runKey: string): Promise<Map<stri
   return map;
 }
 
-async function fetchTreasuryLedgerStates(pool: Pool): Promise<TreasuryLedgerStateRow[]> {
+async function fetchRunTradeScope(pool: Pool, runKey: string): Promise<string[]> {
+  const result = await pool.query<RunTradeScopeRow>(
+    `SELECT trade_id
+     FROM reconcile_run_trades
+     WHERE run_key = $1
+     ORDER BY trade_id ASC`,
+    [runKey]
+  );
+
+  return result.rows.map((row) => row.trade_id);
+}
+
+async function fetchTreasuryLedgerStates(pool: Pool, scopedTradeIds: string[]): Promise<TreasuryLedgerStateRow[]> {
+  if (scopedTradeIds.length === 0) {
+    return [];
+  }
+
   const result = await pool.query<TreasuryLedgerStateRow>(
     `SELECT
         e.id,
@@ -167,7 +187,10 @@ async function fetchTreasuryLedgerStates(pool: Pool): Promise<TreasuryLedgerStat
         ORDER BY p.created_at DESC, p.id DESC
         LIMIT 1
       ) s ON TRUE
+      WHERE e.trade_id = ANY($1::text[])
       ORDER BY e.trade_id ASC, e.tx_hash ASC, e.id ASC`
+    ,
+    [scopedTradeIds]
   );
 
   return result.rows;
@@ -225,6 +248,11 @@ async function main(): Promise<void> {
     }
 
     const driftByTradeId = await fetchDriftSummaries(reconciliationPool, resolvedRunKey);
+    const runTradeScope = await fetchRunTradeScope(reconciliationPool, resolvedRunKey);
+    const scopeTradeIds =
+      runTradeScope.length > 0
+        ? runTradeScope
+        : Array.from(driftByTradeId.keys()).sort((a, b) => a.localeCompare(b));
 
     let treasuryRows: TreasuryLedgerStateRow[] = [];
     if (treasuryDbName) {
@@ -236,7 +264,7 @@ async function main(): Promise<void> {
         database: treasuryDbName,
         max: 2,
       });
-      treasuryRows = await fetchTreasuryLedgerStates(treasuryPool);
+      treasuryRows = await fetchTreasuryLedgerStates(treasuryPool, scopeTradeIds);
     }
 
     let extrinsicHashByTxHash = new Map<string, string | null>();
@@ -263,6 +291,22 @@ async function main(): Promise<void> {
     }));
 
     const seenTradeIds = new Set(rows.map((row) => row.tradeId));
+    for (const tradeId of scopeTradeIds) {
+      if (seenTradeIds.has(tradeId)) {
+        continue;
+      }
+
+      rows.push({
+        tradeId,
+        txHash: null,
+        extrinsicHash: null,
+        payoutState: null,
+        mismatchCodes: driftByTradeId.get(tradeId) || [],
+        ledgerEntryId: null,
+      });
+      seenTradeIds.add(tradeId);
+    }
+
     for (const [tradeId, mismatchCodes] of driftByTradeId.entries()) {
       if (seenTradeIds.has(tradeId)) {
         continue;
@@ -276,6 +320,7 @@ async function main(): Promise<void> {
         mismatchCodes,
         ledgerEntryId: null,
       });
+      seenTradeIds.add(tradeId);
     }
 
     const report = buildReconciliationReport(resolvedRunKey, rows);
