@@ -309,17 +309,23 @@ calculate_dynamic_start_block() {
   local rpc_start_head_hex=""
   local rpc_start_head_dec=""
   local dynamic_indexer_start_block=0
+  local backoff_value="${START_BLOCK_BACKOFF:-250}"
+
+  if [[ -n "${START_BLOCK_BACKOFF:-}" && ! "${START_BLOCK_BACKOFF}" =~ ^[0-9]+$ ]]; then
+    echo "warning: invalid START_BLOCK_BACKOFF='${START_BLOCK_BACKOFF}' for dynamic start block; defaulting to 250" >&2
+    backoff_value=250
+  fi
 
   rpc_start_head_hex="$(get_rpc_head_hex)"
   if [[ -n "$rpc_start_head_hex" && "$rpc_start_head_hex" =~ ^0x[0-9a-fA-F]+$ ]]; then
     rpc_start_head_dec="$(hex_to_decimal "$rpc_start_head_hex" 2>/dev/null || true)"
     if [[ -n "$rpc_start_head_dec" && "$rpc_start_head_dec" =~ ^[0-9]+$ ]]; then
-      dynamic_indexer_start_block=$((rpc_start_head_dec - ${START_BLOCK_BACKOFF:-250}))
+      dynamic_indexer_start_block=$((rpc_start_head_dec - backoff_value))
       if (( dynamic_indexer_start_block < 1 )); then
         dynamic_indexer_start_block=1
       fi
       export INDEXER_START_BLOCK="$dynamic_indexer_start_block"
-      echo "dynamic start block: INDEXER_START_BLOCK=${INDEXER_START_BLOCK} (rpcHead=${rpc_start_head_dec}, backoff=${START_BLOCK_BACKOFF})"
+      echo "dynamic start block: INDEXER_START_BLOCK=${INDEXER_START_BLOCK} (rpcHead=${rpc_start_head_dec}, backoff=${backoff_value})"
     else
       echo "warning: invalid normalized RPC head value '${rpc_start_head_hex}' for dynamic start block; using existing INDEXER_START_BLOCK=${INDEXER_START_BLOCK:-unset}" >&2
     fi
@@ -487,8 +493,9 @@ else
   elif [[ -z "$INDEXER_HEAD" || ! "$INDEXER_HEAD" =~ ^[0-9]+$ ]]; then
     fail "indexer head value is not a valid decimal number: ${INDEXER_HEAD}"
   else
-    LAG=$((RPC_HEAD_DEC - INDEXER_HEAD))
-    echo "lag/head metrics: rpcHead=${RPC_HEAD_DEC}, indexerHead=${INDEXER_HEAD}, lag=${LAG}"
+    INDEXER_HEAD_DEC="${INDEXER_HEAD}"
+    LAG=$((RPC_HEAD_DEC - INDEXER_HEAD_DEC))
+    echo "lag/head metrics: rpcHead=${RPC_HEAD_DEC}, indexerHead=${INDEXER_HEAD_DEC}, lag=${LAG}"
     if [[ "$LAG" -lt 0 ]]; then
       fail "negative lag indicates possible chain mismatch; verify RPC_GATEWAY_URL_HOST and indexer settings point to the same network/chain"
     elif [[ "$LAG" -le "$MAX_INDEXER_LAG_BLOCKS" ]]; then
@@ -552,19 +559,22 @@ validate_identifier "POSTGRES_USER" "${POSTGRES_USER:-}"
 validate_identifier "RECONCILIATION_DB_NAME" "${RECONCILIATION_DB_NAME:-}"
 validate_run_key
 
-RUN_SUMMARY="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${RECONCILIATION_DB_NAME}" -v run_key_var="${RUN_KEY}" -Atc "SELECT status || '|' || total_trades || '|' || drift_count FROM reconcile_runs WHERE run_key = :'run_key_var' ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)"
+SUMMARY_FIELD_DELIM=$'\x1f'
+RUN_SUMMARY="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${RECONCILIATION_DB_NAME}" -v run_key_var="${RUN_KEY}" -A -F "${SUMMARY_FIELD_DELIM}" -tc "SELECT status, total_trades, drift_count FROM reconcile_runs WHERE run_key = :'run_key_var' ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)"
 if [[ -n "$RUN_SUMMARY" ]]; then
-  IFS='|' read -r RUN_STATUS RUN_TOTAL RUN_DRIFT <<<"$RUN_SUMMARY"
+  IFS="${SUMMARY_FIELD_DELIM}" read -r RUN_STATUS RUN_TOTAL RUN_DRIFT <<<"$RUN_SUMMARY"
   echo "reconciliation run summary: runKey=${RUN_KEY}, status=${RUN_STATUS}, totalTrades=${RUN_TOTAL}, driftCount=${RUN_DRIFT}"
   pass "reconciliation run summary captured"
 else
   fail "reconciliation run summary unavailable"
 fi
 
-DRIFT_SUMMARY="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${RECONCILIATION_DB_NAME}" -v run_key_var="${RUN_KEY}" -Atc "SELECT mismatch_code || ':' || COUNT(*) FROM reconcile_drifts WHERE run_key = :'run_key_var' GROUP BY mismatch_code ORDER BY COUNT(*) DESC;" 2>/dev/null || true)"
+DRIFT_SUMMARY_ROWS="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${RECONCILIATION_DB_NAME}" -v run_key_var="${RUN_KEY}" -A -F "${SUMMARY_FIELD_DELIM}" -tc "SELECT mismatch_code, COUNT(*) FROM reconcile_drifts WHERE run_key = :'run_key_var' GROUP BY mismatch_code ORDER BY COUNT(*) DESC;" 2>/dev/null || true)"
 echo "drift classification snapshot:"
-if [[ -n "$DRIFT_SUMMARY" ]]; then
-  echo "$DRIFT_SUMMARY"
+if [[ -n "$DRIFT_SUMMARY_ROWS" ]]; then
+  while IFS="${SUMMARY_FIELD_DELIM}" read -r MISMATCH_CODE MISMATCH_COUNT; do
+    echo "${MISMATCH_CODE}:${MISMATCH_COUNT}"
+  done <<< "$DRIFT_SUMMARY_ROWS"
 else
   echo "(no drift rows)"
 fi
@@ -578,7 +588,7 @@ else
 fi
 
 validate_identifier "INDEXER_DB_NAME" "${INDEXER_DB_NAME:-}"
-CORRELATION_ROWS="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${INDEXER_DB_NAME}" -A -F $'\t' -tc "SELECT COALESCE(trade_id,''), COALESCE(tx_hash,'') FROM trade_event ORDER BY block_number DESC LIMIT 5;" 2>/dev/null || true)"
+CORRELATION_ROWS="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${INDEXER_DB_NAME}" -A -F $'\t' -tc "SELECT replace(COALESCE(trade_id,''), E'\t', ' '), replace(COALESCE(tx_hash,''), E'\t', ' ') FROM trade_event ORDER BY block_number DESC LIMIT 5;" 2>/dev/null || true)"
 echo "correlation snapshot (indexer + reconciliation context):"
 if [[ -n "$CORRELATION_ROWS" ]]; then
   while IFS=$'\t' read -r TRADE_ID TX_HASH; do
