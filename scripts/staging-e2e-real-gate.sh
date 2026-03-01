@@ -231,7 +231,7 @@ run_graphql_query_from_reconciliation() {
 const target = process.env.INDEXER_GRAPHQL_URL;
 if (!target) {
   console.error(
-    'INDEXER_GRAPHQL_URL is not set. ' +
+    '[reconciliation] INDEXER_GRAPHQL_URL is not set. ' +
       'Configure INDEXER_GRAPHQL_URL for the reconciliation service (for example in docker-compose.services.yml or a .env file) ' +
       'as the full HTTP(S) URL of the indexer GraphQL endpoint, such as https://your-indexer-host/graphql.'
   );
@@ -314,7 +314,7 @@ calculate_dynamic_start_block() {
   if [[ -n "$rpc_start_head_hex" && "$rpc_start_head_hex" =~ ^0x[0-9a-fA-F]+$ ]]; then
     rpc_start_head_dec="$(hex_to_decimal "$rpc_start_head_hex" 2>/dev/null || true)"
     if [[ -n "$rpc_start_head_dec" && "$rpc_start_head_dec" =~ ^[0-9]+$ ]]; then
-      dynamic_indexer_start_block=$((rpc_start_head_dec - START_BLOCK_BACKOFF))
+      dynamic_indexer_start_block=$((rpc_start_head_dec - ${START_BLOCK_BACKOFF:-250}))
       if (( dynamic_indexer_start_block < 1 )); then
         dynamic_indexer_start_block=1
       fi
@@ -484,6 +484,8 @@ else
   RPC_HEAD_DEC="$(hex_to_decimal "$RPC_HEAD_HEX" 2>/dev/null || true)"
   if [[ -z "$RPC_HEAD_DEC" || ! "$RPC_HEAD_DEC" =~ ^[0-9]+$ ]]; then
     fail "normalized RPC head value is not a valid hex number: ${RPC_HEAD_HEX}"
+  elif [[ -z "$INDEXER_HEAD" || ! "$INDEXER_HEAD" =~ ^[0-9]+$ ]]; then
+    fail "indexer head value is not a valid decimal number: ${INDEXER_HEAD}"
   else
     LAG=$((RPC_HEAD_DEC - INDEXER_HEAD))
     echo "lag/head metrics: rpcHead=${RPC_HEAD_DEC}, indexerHead=${INDEXER_HEAD}, lag=${LAG}"
@@ -550,9 +552,9 @@ validate_identifier "POSTGRES_USER" "${POSTGRES_USER:-}"
 validate_identifier "RECONCILIATION_DB_NAME" "${RECONCILIATION_DB_NAME:-}"
 validate_run_key
 
-RUN_SUMMARY="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${RECONCILIATION_DB_NAME}" -v run_key_var="${RUN_KEY}" -Atc "SELECT status || ',' || total_trades || ',' || drift_count FROM reconcile_runs WHERE run_key = :'run_key_var' ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)"
+RUN_SUMMARY="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${RECONCILIATION_DB_NAME}" -v run_key_var="${RUN_KEY}" -Atc "SELECT status || '|' || total_trades || '|' || drift_count FROM reconcile_runs WHERE run_key = :'run_key_var' ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)"
 if [[ -n "$RUN_SUMMARY" ]]; then
-  IFS=',' read -r RUN_STATUS RUN_TOTAL RUN_DRIFT <<<"$RUN_SUMMARY"
+  IFS='|' read -r RUN_STATUS RUN_TOTAL RUN_DRIFT <<<"$RUN_SUMMARY"
   echo "reconciliation run summary: runKey=${RUN_KEY}, status=${RUN_STATUS}, totalTrades=${RUN_TOTAL}, driftCount=${RUN_DRIFT}"
   pass "reconciliation run summary captured"
 else
@@ -576,10 +578,10 @@ else
 fi
 
 validate_identifier "INDEXER_DB_NAME" "${INDEXER_DB_NAME:-}"
-CORRELATION_ROWS="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${INDEXER_DB_NAME}" -Atc "SELECT COALESCE(trade_id,''), COALESCE(tx_hash,'') FROM trade_event ORDER BY block_number DESC LIMIT 5;" 2>/dev/null || true)"
+CORRELATION_ROWS="$(run_compose exec -T postgres psql -U "${POSTGRES_USER}" -d "${INDEXER_DB_NAME}" -A -F $'\t' -tc "SELECT COALESCE(trade_id,''), COALESCE(tx_hash,'') FROM trade_event ORDER BY block_number DESC LIMIT 5;" 2>/dev/null || true)"
 echo "correlation snapshot (indexer + reconciliation context):"
 if [[ -n "$CORRELATION_ROWS" ]]; then
-  while IFS='|' read -r TRADE_ID TX_HASH; do
+  while IFS=$'\t' read -r TRADE_ID TX_HASH; do
     printf '{"tradeId":%s,"actionKey":null,"requestId":null,"txHash":%s,"chainId":%s,"networkName":%s}\n' \
       "$(printf '%s' "${TRADE_ID}" | json_encode_string)" \
       "$(printf '%s' "${TX_HASH}" | json_encode_string)" \
