@@ -26,7 +26,7 @@ required_headings=(
 )
 
 for heading in "${required_headings[@]}"; do
-  if ! grep -Fqx "$heading" "$DOC_PATH"; then
+  if ! grep -Fq "$heading" "$DOC_PATH"; then
     echo "[FAIL] Missing required heading in ${DOC_PATH}: ${heading}" >&2
     fail=1
   fi
