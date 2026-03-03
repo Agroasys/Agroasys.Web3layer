@@ -439,7 +439,9 @@ jobs:
           TARGET_BIN="${PLATFORM_DIR}/${RESOLC_FILE}"
 
           mkdir -p "${PLATFORM_DIR}"
-          curl -fsSL "https://github.com/paritytech/revive/releases/download/v${RESOLC_VERSION}/${RESOLC_NAME}" -o "${TARGET_BIN}"
+          curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors \
+            "https://github.com/paritytech/revive/releases/download/v${RESOLC_VERSION}/${RESOLC_NAME}" \
+            -o "${TARGET_BIN}"
           echo "${RESOLC_SHA256}  ${TARGET_BIN}" | shasum -a 256 -c -
           chmod +x "${TARGET_BIN}"
 
@@ -701,7 +703,9 @@ jobs:
           TARGET_BIN="${PLATFORM_DIR}/${RESOLC_FILE}"
 
           mkdir -p "${PLATFORM_DIR}"
-          curl -fsSL "https://github.com/paritytech/revive/releases/download/v${RESOLC_VERSION}/${RESOLC_NAME}" -o "${TARGET_BIN}"
+          curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors \
+            "https://github.com/paritytech/revive/releases/download/v${RESOLC_VERSION}/${RESOLC_NAME}" \
+            -o "${TARGET_BIN}"
           echo "${RESOLC_SHA256}  ${TARGET_BIN}" | shasum -a 256 -c -
           chmod +x "${TARGET_BIN}"
 

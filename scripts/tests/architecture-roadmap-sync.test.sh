@@ -32,12 +32,18 @@ EXPECTED_NORMALIZED_ROW="| ${ROW_COMPONENT} | ${ROW_MILESTONE} | Done | 100 | ${
 MATRIX_INITIAL_ROW="| ${ROW_COMPONENT} | ${ROW_MILESTONE} | In Progress | 40 | ${ROW_ISSUE} | ${ROW_EVIDENCE} | ${ROW_REMAINING_GAP_INITIAL} | ${ROW_OWNER} | ${ROW_LAST_REFRESHED_INITIAL} | ${ROW_REFRESH_CADENCE} |"
 
 # Create a temporary directory, and surface any mktemp error output to aid debugging.
-tmp_dir="$(mktemp -d 2>&1)"
+mktemp_err_file="$(mktemp)"
+if ! tmp_dir="$(mktemp -d 2>"$mktemp_err_file")"; then
+  printf '%s\n' 'Failed to create temporary directory with mktemp -d' >&2
+  if [[ -s "$mktemp_err_file" ]]; then
+    printf '%s\n' "mktemp error: $(cat "$mktemp_err_file")" >&2
+  fi
+  rm -f "$mktemp_err_file"
+  exit 1
+fi
+rm -f "$mktemp_err_file"
 if [[ ! -d "$tmp_dir" ]]; then
   printf '%s\n' 'Failed to create temporary directory with mktemp -d' >&2
-  if [[ -n "${tmp_dir:-}" ]]; then
-    printf '%s\n' "mktemp error: ${tmp_dir}" >&2
-  fi
   exit 1
 fi
 
@@ -70,10 +76,7 @@ clear_log() {
   # Truncate the log file before each scenario, but only if the path is valid.
   if [[ -n "${log:-}" ]]; then
     local log_dir
-    log_dir="$(dirname "$log")" || {
-      printf '%s\n' "Skipping log truncation: unable to determine directory for log path: ${log:-<unset>}" >&2
-      return
-    }
+    log_dir="$(dirname "$log")"
     if [[ -d "$log_dir" ]]; then
       > "$log"
     else
