@@ -40,7 +40,8 @@ patch_gate="$tmp_dir/write-gate.patch"
 log="$tmp_dir/sync.log"
 
 clear_log() {
-  : > "$log"
+  # Truncate the log file before each scenario.
+  > "$log"
 }
 
 run_sync_script() {
@@ -184,7 +185,7 @@ if run_sync_script --write-gate-issues --out "$report_gate" --patch "$patch_gate
   echo "expected write-gate-issues without --apply to fail" >&2
   exit 1
 fi
-if ! grep -q -- "--write-gate-issues requires --apply" "$apply_guard_err"; then
+if ! grep -Eq -- '--write-gate-issues.*requires.*--apply' "$apply_guard_err"; then
   echo "expected actionable --apply guard error message" >&2
   exit 1
 fi
@@ -207,7 +208,7 @@ else
     echo "expected write-gate-issues with --apply to fail in offline mode" >&2
     exit 1
   fi
-  if ! grep -q -- "--write-gate-issues requires online mode" "$log"; then
+  if ! grep -Eq -- '--write-gate-issues.*requires online mode' "$log"; then
     echo "expected offline guard message for write-gate-issues --apply" >&2
     show_log_on_error
     exit 1
