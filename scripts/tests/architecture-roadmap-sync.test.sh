@@ -31,7 +31,15 @@ EXPECTED_NORMALIZED_ROW="| ${ROW_COMPONENT} | ${ROW_MILESTONE} | Done | 100 | ${
 # Initial matrix row used in the fixture before sync.
 MATRIX_INITIAL_ROW="| ${ROW_COMPONENT} | ${ROW_MILESTONE} | In Progress | 40 | ${ROW_ISSUE} | ${ROW_EVIDENCE} | ${ROW_REMAINING_GAP_INITIAL} | ${ROW_OWNER} | ${ROW_LAST_REFRESHED_INITIAL} | ${ROW_REFRESH_CADENCE} |"
 
-tmp_dir="$(mktemp -d)" || { printf '%s\n' 'Failed to create temporary directory with mktemp -d' >&2; exit 1; }
+# Create a temporary directory, and surface any mktemp error output to aid debugging.
+tmp_dir="$(mktemp -d 2>&1)"
+if [[ ! -d "$tmp_dir" ]]; then
+  printf '%s\n' 'Failed to create temporary directory with mktemp -d' >&2
+  if [[ -n "${tmp_dir:-}" ]]; then
+    printf '%s\n' "mktemp error: ${tmp_dir}" >&2
+  fi
+  exit 1
+fi
 
 cleanup_tmp_dir() {
   if [[ -n "${tmp_dir:-}" && -d "$tmp_dir" ]]; then
@@ -89,7 +97,7 @@ run_validator() {
   local report_path="$2"
 
   if ! node "$VALIDATOR_SCRIPT" "$mode" "$report_path" 2>"$validator_log"; then
-    echo "validator failed for mode '$mode' using report '$report_path'" >&2
+    echo "validator failed for mode $mode using report $report_path" >&2
     if [ -s "$validator_log" ]; then
       echo "validator stderr output was:" >&2
       cat "$validator_log" >&2
@@ -161,7 +169,7 @@ CACHE
 clear_log
 # In check mode, the sync helper should exit non-zero when stale rows are detected.
 if run_sync_script --out "$report" --patch "$patch" >>"$log" 2>&1; then
-  echo "expected sync helper to fail in check mode when stale rows exist" >&2
+  echo "expected sync helper to fail in check mode when stale rows exist, but it succeeded" >&2
   show_log_on_error
   exit 1
 fi
@@ -198,6 +206,10 @@ run_validator write-min "$report_write_min"
 
 if ! grep -Fq "$EXPECTED_DEFAULT_ROW" "$matrix"; then
   echo "expected default write mode to keep % Complete and Remaining Gap unchanged" >&2
+  echo "Expected row:" >&2
+  printf '%s\n' "$EXPECTED_DEFAULT_ROW" >&2
+  echo "Actual matrix contents:" >&2
+  cat "$matrix" >&2
   exit 1
 fi
 
