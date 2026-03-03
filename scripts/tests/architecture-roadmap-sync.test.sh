@@ -33,6 +33,10 @@ MATRIX_INITIAL_ROW="| ${ROW_COMPONENT} | ${ROW_MILESTONE} | In Progress | 40 | $
 
 # Create a temporary directory, and surface any mktemp error output to aid debugging.
 mktemp_err_file="$(mktemp)"
+if [[ -z "${mktemp_err_file:-}" || ! -f "$mktemp_err_file" ]]; then
+  printf '%s\n' 'Failed to create temporary file for capturing mktemp errors' >&2
+  exit 1
+fi
 if ! tmp_dir="$(mktemp -d 2>"$mktemp_err_file")"; then
   printf '%s\n' 'Failed to create temporary directory with mktemp -d' >&2
   if [[ -s "$mktemp_err_file" ]]; then
@@ -100,7 +104,7 @@ run_validator() {
   local report_path="$2"
 
   if ! node "$VALIDATOR_SCRIPT" "$mode" "$report_path" 2>"$validator_log"; then
-    echo "validator failed for mode $mode using report $report_path" >&2
+    echo "validator failed for mode \"$mode\" using report \"$report_path\"" >&2
     if [ -s "$validator_log" ]; then
       echo "validator stderr output was:" >&2
       cat "$validator_log" >&2
