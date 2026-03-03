@@ -8,7 +8,9 @@ REPO_ISSUES_BASE_URL="https://github.com/$REPO_NAME/issues"
 EXPECTED_NORMALIZED_REMAINING_GAP='None (auto-synchronized from closed issues)'
 # Fixture starts "In Progress"; expected rows are "Done" to confirm status sync.
 OFFLINE_MODE_REQUIRED_ERROR_KEY='ERR_OFFLINE_MODE_REQUIRED'
-EXPECTED_WRITE_GATE_ISSUES_APPLY_GUARD_MESSAGE="ERROR: --write-gate-issues requires --apply. Re-run with: GITHUB_TOKEN=\"\$(gh auth token)\" node scripts/arch-roadmap-sync.mjs --repo \"${REPO_NAME}\" --write-gate-issues --apply"
+WRITE_GATE_ISSUES_APPLY_GUARD_PREFIX='ERROR: --write-gate-issues requires --apply. Re-run with:'
+WRITE_GATE_ISSUES_APPLY_GUARD_COMMAND='GITHUB_TOKEN="$(gh auth token)" node scripts/arch-roadmap-sync.mjs --repo "'"${REPO_NAME}"'" --write-gate-issues --apply'
+EXPECTED_WRITE_GATE_ISSUES_APPLY_GUARD_MESSAGE="${WRITE_GATE_ISSUES_APPLY_GUARD_PREFIX} ${WRITE_GATE_ISSUES_APPLY_GUARD_COMMAND}"
 
 # Shared row fields to keep fixture and expectations in sync.
 ROW_COMPONENT='Example component'
@@ -51,10 +53,24 @@ report_write_norm="$tmp_dir/sync-report-write-norm.json"
 report_gate="$tmp_dir/write-gate-report.json"
 patch_gate="$tmp_dir/write-gate.patch"
 log="$tmp_dir/sync.log"
+validator_log="$tmp_dir/validator.log"
 
 clear_log() {
-  # Truncate the log file before each scenario.
-  > "$log"
+  # Truncate the log file before each scenario, but only if the path is valid.
+  if [[ -n "${log:-}" ]]; then
+    local log_dir
+    log_dir="$(dirname -- "$log")" || {
+      printf '%s\n' "Skipping log truncation: unable to determine directory for log path: ${log:-<unset>}" >&2
+      return
+    }
+    if [[ -d "$log_dir" ]]; then
+      > "$log"
+    else
+      printf '%s\n' "Skipping log truncation: parent directory does not exist for log path: $log" >&2
+    fi
+  else
+    printf '%s\n' "Skipping log truncation: log path is unset or empty" >&2
+  fi
 }
 
 run_sync_script() {
@@ -69,16 +85,22 @@ run_validator() {
   local mode="$1"
   local report_path="$2"
 
-  if ! node "$ROOT_DIR/scripts/tests/architecture-roadmap-sync-validator.mjs" "$mode" "$report_path"; then
+  if ! node "$ROOT_DIR/scripts/tests/architecture-roadmap-sync-validator.mjs" "$mode" "$report_path" 2>"$validator_log"; then
     echo "validator failed for mode '$mode' using report '$report_path'" >&2
-    echo "sync helper output was:" >&2
+    if [ -s "$validator_log" ]; then
+      echo "validator stderr output was:" >&2
+      cat "$validator_log" >&2
+    else
+      echo "validator produced no stderr output." >&2
+    fi
+    echo "sync helper log output was:" >&2
     cat "$log" >&2
     exit 1
   fi
 }
 
 show_log_on_error() {
-  echo "sync helper output was:" >&2
+  echo "sync helper log output was:" >&2
   cat "$log" >&2
 }
 
@@ -210,6 +232,9 @@ report_gate_apply="$tmp_dir/report-gate-apply.json"
 # can successfully synchronize gate issues against GitHub. Leave it unset for the default
 # offline-only mode, which verifies that an online-only operation is correctly guarded.
 if [[ "${RUN_GATE_ISSUES_E2E:-}" == "true" ]]; then
+  # Note: run_sync_script_online intentionally does not pass --offline and may reuse the same
+  # cache file as offline runs; this branch is meant to exercise real GitHub API calls and
+  # end-to-end synchronization behavior, even when a shared cache is present.
   if ! run_sync_script_online --write-gate-issues --apply --out "$report_gate_apply" --patch "$patch_gate" >>"$log" 2>&1; then
     echo "expected write-gate-issues with --apply to succeed and synchronize gate issues" >&2
     show_log_on_error
