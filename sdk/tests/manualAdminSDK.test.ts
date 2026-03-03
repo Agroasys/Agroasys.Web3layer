@@ -138,6 +138,8 @@ describeIntegration('AdminSDK', () => {
     });
 
     testAdminMutation('should pause protocol', async () => {
+        const wasPaused = await adminSDK.isPaused();
+        expect(wasPaused).toBe(false);
         const result = await adminSDK.pause(adminSigner1);
 
         expectValidTxHash(result.txHash);
@@ -256,6 +258,8 @@ describeIntegration('AdminSDK', () => {
     });
 
     testAdminMutation('should pause claims', async () => {
+        const wasClaimsPaused = await adminSDK.isClaimsPaused();
+        expect(wasClaimsPaused).toBe(false);
         const result = await adminSDK.pauseClaims(adminSigner1);
         expectValidTxHash(result.txHash);
         const isClaimsPaused = await adminSDK.isClaimsPaused();
@@ -263,6 +267,8 @@ describeIntegration('AdminSDK', () => {
     });
 
     testAdminMutation('should unpause claims', async () => {
+        const isClaimsPausedInitially = await adminSDK.isClaimsPaused();
+        expect(isClaimsPausedInitially).toBe(true);
         const result = await adminSDK.unpauseClaims(adminSigner1);
         expectValidTxHash(result.txHash);
         const isClaimsPaused = await adminSDK.isClaimsPaused();
