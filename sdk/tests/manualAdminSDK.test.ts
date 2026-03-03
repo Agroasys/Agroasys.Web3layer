@@ -138,7 +138,14 @@ describeIntegration('AdminSDK', () => {
     });
 
     testAdminMutation('should pause protocol', async () => {
-        const wasPaused = await adminSDK.isPaused();
+        let wasPaused = await adminSDK.isPaused();
+        if (wasPaused) {
+            const unpauseProposal = await adminSDK.proposeUnpause(adminSigner1);
+            expectValidTxHash(unpauseProposal.txHash);
+            const unpauseApproval = await adminSDK.approveUnpause(adminSigner2);
+            expectValidTxHash(unpauseApproval.txHash);
+            wasPaused = await adminSDK.isPaused();
+        }
         expect(wasPaused).toBe(false);
         const result = await adminSDK.pause(adminSigner1);
 
@@ -258,8 +265,13 @@ describeIntegration('AdminSDK', () => {
     });
 
     testAdminMutation('should pause claims', async () => {
-        const wasClaimsPaused = await adminSDK.isClaimsPaused();
-        expect(wasClaimsPaused).toBe(false);
+        const initialClaimsPaused = await adminSDK.isClaimsPaused();
+        if (initialClaimsPaused) {
+            const unpauseResult = await adminSDK.unpauseClaims(adminSigner1);
+            expectValidTxHash(unpauseResult.txHash);
+            const isClaimsPausedAfterUnpause = await adminSDK.isClaimsPaused();
+            expect(isClaimsPausedAfterUnpause).toBe(false);
+        }
         const result = await adminSDK.pauseClaims(adminSigner1);
         expectValidTxHash(result.txHash);
         const isClaimsPaused = await adminSDK.isClaimsPaused();
@@ -267,7 +279,12 @@ describeIntegration('AdminSDK', () => {
     });
 
     testAdminMutation('should unpause claims', async () => {
-        const isClaimsPausedInitially = await adminSDK.isClaimsPaused();
+        let isClaimsPausedInitially = await adminSDK.isClaimsPaused();
+        if (!isClaimsPausedInitially) {
+            const pauseResult = await adminSDK.pauseClaims(adminSigner1);
+            expectValidTxHash(pauseResult.txHash);
+            isClaimsPausedInitially = await adminSDK.isClaimsPaused();
+        }
         expect(isClaimsPausedInitially).toBe(true);
         const result = await adminSDK.unpauseClaims(adminSigner1);
         expectValidTxHash(result.txHash);
