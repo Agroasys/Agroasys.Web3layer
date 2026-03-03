@@ -9,13 +9,15 @@ import {
     TEST_CONFIG,
     assertRequiredEnv,
     getBuyerSigner,
+    getOptionalEnv,
     generateTestRicardianHash,
     hasRequiredEnv,
     parseUSDC
 } from './setup';
+import { TX_HASH_REGEX } from './testUtils';
 
-const SUPPLIER_ADDRESS =
-    process.env.SUPPLIER_ADDRESS ?? '0x4aF052cB4B3eC7b58322548021bF254Cc4c80b2c';
+const DEFAULT_SUPPLIER_ADDRESS = '0x4aF052cB4B3eC7b58322548021bF254Cc4c80b2c';
+const SUPPLIER_ADDRESS = process.env.SUPPLIER_ADDRESS ?? DEFAULT_SUPPLIER_ADDRESS;
 const runManualE2E = process.env.RUN_E2E === 'true';
 const runBuyerClaimE2E = process.env.RUN_BUYER_CLAIM_E2E === 'true';
 const runBuyerDisputeE2E = process.env.RUN_BUYER_DISPUTE_E2E === 'true';
@@ -24,17 +26,6 @@ const describeIntegration = runManualE2E && hasRequiredEnv ? describe : describe
 const testBuyerClaim = runManualE2E && hasRequiredEnv && runBuyerClaimE2E ? test : test.skip;
 const testBuyerDispute = runManualE2E && hasRequiredEnv && runBuyerDisputeE2E ? test : test.skip;
 const testBuyerTimeout = runManualE2E && hasRequiredEnv && runBuyerTimeoutE2E ? test : test.skip;
-const TX_HASH_REGEX = /^0x[a-fA-F0-9]{64}$/;
-
-function getOptionalEnv(name: string): string | undefined {
-    const value = process.env[name];
-    if (typeof value !== 'string') {
-        return undefined;
-    }
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-}
-
 function requireManualBuyerE2EEnv(name: string): string {
     const value = getOptionalEnv(name);
     if (!value) {
@@ -135,9 +126,24 @@ describeIntegration('BuyerSDK', () => {
         expect(Number(createdTrade.status)).toBe(TradeStatus.LOCKED);
     });
 
+    test('should fail to create a trade with invalid supplier address', async () => {
+        const invalidTradeParams = {
+            supplier: '0xINVALID_SUPPLIER_ADDRESS',
+            totalAmount: parseUSDC('10000'),
+            logisticsAmount: parseUSDC('1000'),
+            platformFeesAmount: parseUSDC('500'),
+            supplierFirstTranche: parseUSDC('4000'),
+            supplierSecondTranche: parseUSDC('4500'),
+            ricardianHash: generateTestRicardianHash('invalid-supplier-test')
+        };
+        await expect(buyerSDK.createTrade(invalidTradeParams, buyerSigner)).rejects.toThrow();
+    });
+
     testBuyerDispute('should open dispute', async () => {
         const tradeId = requireManualBuyerE2EBigIntEnv('TEST_DISPUTE_TRADE_ID');
 
+        const tradeBefore = await escrowReadOnly.trades(tradeId);
+        expect([TradeStatus.LOCKED, TradeStatus.IN_TRANSIT]).toContain(Number(tradeBefore.status));
         const result = await buyerSDK.openDispute(tradeId, buyerSigner);
         expectValidTxHash(result.txHash);
         console.log(`Dispute opened: ${result.txHash}`);

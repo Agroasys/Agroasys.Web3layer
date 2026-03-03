@@ -37,6 +37,10 @@ export function assertRequiredEnv(): void {
     );
 }
 
+export function getOptionalEnv(key: string): string | undefined {
+    return readEnv(key);
+}
+
 function getRequiredEnv(key: string): string {
     const value = readEnv(key);
     if (!value) {

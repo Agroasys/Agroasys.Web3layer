@@ -4,7 +4,7 @@
 import { ethers } from 'ethers';
 import { AdminSDK } from '../src/modules/adminSDK';
 import { DisputeStatus } from '../src/types/dispute';
-import { TEST_CONFIG, assertRequiredEnv, getAdminSigner, hasRequiredEnv } from './setup';
+import { TEST_CONFIG, assertRequiredEnv, getAdminSigner, getOptionalEnv, hasRequiredEnv } from './setup';
 import { AgroasysEscrow__factory } from '../src/types/typechain-types/factories/src/AgroasysEscrow__factory';
 import type { Signer } from 'ethers';
 
@@ -14,15 +14,6 @@ const describeIntegration = shouldRunManualE2E ? describe : describe.skip;
 const isAdminMutationE2ERequested = process.env.RUN_ADMIN_MUTATION_E2E === 'true';
 const shouldRunAdminMutationTests = shouldRunManualE2E && isAdminMutationE2ERequested;
 const testAdminMutation = shouldRunAdminMutationTests ? test : test.skip;
-
-function getOptionalEnv(name: string): string | undefined {
-    const value = process.env[name];
-    if (typeof value !== 'string') {
-        return undefined;
-    }
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-}
 
 function requireManualE2EEnv(name: string): string {
     const value = getOptionalEnv(name);
