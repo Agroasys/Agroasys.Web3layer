@@ -31,7 +31,7 @@ EXPECTED_NORMALIZED_ROW="| ${ROW_COMPONENT} | ${ROW_MILESTONE} | Done | 100 | ${
 # Initial matrix row used in the fixture before sync.
 MATRIX_INITIAL_ROW="| ${ROW_COMPONENT} | ${ROW_MILESTONE} | In Progress | 40 | ${ROW_ISSUE} | ${ROW_EVIDENCE} | ${ROW_REMAINING_GAP_INITIAL} | ${ROW_OWNER} | ${ROW_LAST_REFRESHED_INITIAL} | ${ROW_REFRESH_CADENCE} |"
 
-tmp_dir="$(mktemp -d)"
+tmp_dir="$(mktemp -d)" || { printf '%s\n' 'Failed to create temporary directory with mktemp -d' >&2; exit 1; }
 
 cleanup_tmp_dir() {
   if [[ -n "${tmp_dir:-}" && -d "$tmp_dir" ]]; then
@@ -246,6 +246,12 @@ if [[ "${RUN_GATE_ISSUES_E2E:-}" == "true" ]]; then
     exit 1
   fi
   if [[ ! -s "$report_gate_apply" ]]; then
+    if [[ -e "$report_gate_apply" ]]; then
+      report_size_bytes="$(wc -c <"$report_gate_apply" 2>/dev/null || echo "unknown")"
+      echo "gate report file exists but is empty or unreadable: $report_gate_apply (size: ${report_size_bytes} bytes)" >&2
+    else
+      echo "gate report file was not created: $report_gate_apply" >&2
+    fi
     echo "expected write-gate-issues --apply run to produce a non-empty gate report at $report_gate_apply" >&2
     exit 1
   fi
