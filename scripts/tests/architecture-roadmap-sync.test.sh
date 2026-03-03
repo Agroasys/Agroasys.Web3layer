@@ -8,7 +8,7 @@ REPO_NAME='test-org/test-repo'
 REPO_ISSUES_BASE_URL="https://github.com/$REPO_NAME/issues"
 EXPECTED_NORMALIZED_REMAINING_GAP='None (auto-synced from closed issues)'
 # Fixture starts "In Progress"; expected rows are "Done" to confirm status sync.
-OFFLINE_MODE_REQUIRED_ERROR_KEY='ERR_OFFLINE_MODE_REQUIRED'
+OFFLINE_MODE_REQUIRED_ERROR_KEY='--write-gate-issues requires online mode'
 WRITE_GATE_ISSUES_APPLY_GUARD_PREFIX='ERROR: --write-gate-issues requires --apply. Re-run with:'
 WRITE_GATE_ISSUES_APPLY_GUARD_COMMAND="GITHUB_TOKEN=\"\$(gh auth token)\" node scripts/arch-roadmap-sync.mjs --repo \"${REPO_NAME}\" --write-gate-issues --apply"
 EXPECTED_WRITE_GATE_ISSUES_APPLY_GUARD_MESSAGE="${WRITE_GATE_ISSUES_APPLY_GUARD_PREFIX} ${WRITE_GATE_ISSUES_APPLY_GUARD_COMMAND}"

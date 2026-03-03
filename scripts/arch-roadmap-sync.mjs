@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
+import crypto from "node:crypto";
 
 const GATE_ISSUE_NUMBERS = [70, 71, 72];
 const MATRIX_PATH_REFERENCE = "docs/runbooks/architecture-coverage-matrix.md";
@@ -379,7 +380,10 @@ async function patchIssueBody(repo, issueNumber, body, token) {
 }
 
 function buildUnifiedDiff(originalPath, updatedContent) {
-  const tempPath = path.join(os.tmpdir(), `arch-roadmap-sync-${Date.now()}-${Math.random().toString(16).slice(2)}.md`);
+  const tempPath = path.join(
+    os.tmpdir(),
+    `arch-roadmap-sync-${Date.now()}-${crypto.randomBytes(8).toString("hex")}.md`,
+  );
   fs.writeFileSync(tempPath, updatedContent, "utf8");
   const diff = spawnSync("diff", ["-u", originalPath, tempPath], { encoding: "utf8" });
   fs.rmSync(tempPath, { force: true });
@@ -587,7 +591,7 @@ async function main() {
       );
     }
     if (args.offline) {
-      throw new Error("ERR_OFFLINE_MODE_REQUIRED: --write-gate-issues requires online mode");
+      throw new Error("--write-gate-issues requires online mode");
     }
     if (!token) {
       throw new Error("--write-gate-issues requires GITHUB_TOKEN or GH_TOKEN");
@@ -626,6 +630,8 @@ async function main() {
     }
   }
 
+  const baseRemediationCommand =
+    `GITHUB_TOKEN=\"$(gh auth token)\" node scripts/arch-roadmap-sync.mjs --repo \"${args.repo}\"`;
   const report = {
     generatedAt: new Date().toISOString(),
     repo: args.repo,
@@ -654,9 +660,9 @@ async function main() {
     gateUpdatesApplied,
     remainingGateIssueDrift,
     remediation: {
-      writeMatrix: `GITHUB_TOKEN=\"$(gh auth token)\" node scripts/arch-roadmap-sync.mjs --repo \"${args.repo}\" --write`,
-      writeMatrixNormalized: `GITHUB_TOKEN=\"$(gh auth token)\" node scripts/arch-roadmap-sync.mjs --repo \"${args.repo}\" --write --normalize-progress`,
-      writeGateIssues: `GITHUB_TOKEN=\"$(gh auth token)\" node scripts/arch-roadmap-sync.mjs --repo \"${args.repo}\" --write-gate-issues --apply`,
+      writeMatrix: `${baseRemediationCommand} --write`,
+      writeMatrixNormalized: `${baseRemediationCommand} --write --normalize-progress`,
+      writeGateIssues: `${baseRemediationCommand} --write-gate-issues --apply`,
     },
   };
 
