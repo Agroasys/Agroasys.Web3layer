@@ -14,7 +14,7 @@ WRITE_GATE_ISSUES_APPLY_GUARD_COMMAND="GITHUB_TOKEN=\"\$(gh auth token)\" node s
 EXPECTED_WRITE_GATE_ISSUES_APPLY_GUARD_MESSAGE="${WRITE_GATE_ISSUES_APPLY_GUARD_PREFIX} ${WRITE_GATE_ISSUES_APPLY_GUARD_COMMAND}"
 # Match on a stable substring of the guard message to avoid brittle quoting differences.
 diagnose_gate_report_file() {
-  local report_path=$1
+  local report_path="$1"
   if [[ ! -e "$report_path" ]]; then
     echo "gate report file was not created: $report_path" >&2
   elif [[ ! -r "$report_path" ]]; then
@@ -292,6 +292,7 @@ or non-deterministic behavior are undesired; requiring "true" makes
 opting in an explicit, conscious action.
 RUN_GATE_ISSUES_E2E_DOC
 }
+print_run_gate_issues_e2e_docs
 if [[ "${RUN_GATE_ISSUES_E2E:-}" == "true" ]]; then
   # Note: run_sync_script_online intentionally does not pass --offline and may reuse the same
   # cache file as offline runs; this branch is meant to exercise real GitHub API calls and
