@@ -8,8 +8,23 @@ REPO_ISSUES_BASE_URL="https://github.com/$REPO_NAME/issues"
 EXPECTED_NORMALIZED_REMAINING_GAP='None (auto-synchronized from closed issues)'
 # Fixture starts "In Progress"; expected rows are "Done" to confirm status sync.
 OFFLINE_MODE_REQUIRED_ERROR_KEY='ERR_OFFLINE_MODE_REQUIRED'
-EXPECTED_DEFAULT_ROW='| Example component | A | Done | 40 | #101 | `docs/example.md` | Pending final closeout validation | roadmap-maintainers | 2026-03-01 | weekly |'
-EXPECTED_NORMALIZED_ROW="| Example component | A | Done | 100 | #101 | \`docs/example.md\` | ${EXPECTED_NORMALIZED_REMAINING_GAP} | roadmap-maintainers | 2026-03-01 | weekly |"
+EXPECTED_WRITE_GATE_ISSUES_APPLY_GUARD_MESSAGE="ERROR: --write-gate-issues requires --apply. Re-run with: GITHUB_TOKEN=\"\$(gh auth token)\" node scripts/arch-roadmap-sync.mjs --repo \"${REPO_NAME}\" --write-gate-issues --apply"
+
+# Shared row fields to keep fixture and expectations in sync.
+ROW_COMPONENT='Example component'
+ROW_MILESTONE='A'
+ROW_ISSUE='#101'
+ROW_EVIDENCE='`docs/example.md`'
+ROW_OWNER='roadmap-maintainers'
+ROW_REFRESH_CADENCE='weekly'
+ROW_REMAINING_GAP_INITIAL='Pending final closeout validation'
+ROW_LAST_REFRESHED_INITIAL='2026-02-23'
+ROW_LAST_REFRESHED_EXPECTED='2026-03-01'
+# Expected rows after sync (default and normalized modes).
+EXPECTED_DEFAULT_ROW="| ${ROW_COMPONENT} | ${ROW_MILESTONE} | Done | 40 | ${ROW_ISSUE} | ${ROW_EVIDENCE} | ${ROW_REMAINING_GAP_INITIAL} | ${ROW_OWNER} | ${ROW_LAST_REFRESHED_EXPECTED} | ${ROW_REFRESH_CADENCE} |"
+EXPECTED_NORMALIZED_ROW="| ${ROW_COMPONENT} | ${ROW_MILESTONE} | Done | 100 | ${ROW_ISSUE} | ${ROW_EVIDENCE} | ${EXPECTED_NORMALIZED_REMAINING_GAP} | ${ROW_OWNER} | ${ROW_LAST_REFRESHED_EXPECTED} | ${ROW_REFRESH_CADENCE} |"
+# Initial matrix row used in the fixture before sync.
+MATRIX_INITIAL_ROW="| ${ROW_COMPONENT} | ${ROW_MILESTONE} | In Progress | 40 | ${ROW_ISSUE} | ${ROW_EVIDENCE} | ${ROW_REMAINING_GAP_INITIAL} | ${ROW_OWNER} | ${ROW_LAST_REFRESHED_INITIAL} | ${ROW_REFRESH_CADENCE} |"
 
 tmp_dir="$(mktemp -d)"
 
@@ -43,11 +58,11 @@ clear_log() {
 }
 
 run_sync_script() {
-  node "$SCRIPT" --offline --matrix "$matrix" --cache "$cache" "$@"
+  node "$SCRIPT" --offline --repo "$REPO_NAME" --matrix "$matrix" --cache "$cache" "$@"
 }
 
 run_sync_script_online() {
-  node "$SCRIPT" --matrix "$matrix" --cache "$cache" "$@"
+  node "$SCRIPT" --repo "$REPO_NAME" --matrix "$matrix" --cache "$cache" "$@"
 }
 
 run_validator() {
@@ -68,7 +83,7 @@ show_log_on_error() {
 }
 
 write_matrix_fixture() {
-  cat > "$matrix" <<'MATRIX'
+  cat > "$matrix" <<MATRIX
 # Architecture Coverage Matrix
 
 Snapshot date: 2026-03-01
@@ -77,7 +92,7 @@ Snapshot date: 2026-03-01
 
 | Component | Milestone Target | Status | % Complete | Roadmap Issue(s) | Evidence | Remaining Gap | Owner | Last Refreshed | Refresh Cadence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Example component | A | In Progress | 40 | #101 | `docs/example.md` | Pending final closeout validation | roadmap-maintainers | 2026-02-23 | weekly |
+$MATRIX_INITIAL_ROW
 
 ## Gate-to-Row Mapping
 MATRIX
@@ -183,7 +198,7 @@ if run_sync_script --write-gate-issues --out "$report_gate" --patch "$patch_gate
   echo "expected write-gate-issues without --apply to fail" >&2
   exit 1
 fi
-if ! grep -Eq -- '--write-gate-issues.*requires.*--apply' "$apply_guard_err"; then
+if ! grep -Fq -- "$EXPECTED_WRITE_GATE_ISSUES_APPLY_GUARD_MESSAGE" "$apply_guard_err"; then
   echo "expected actionable --apply guard error message" >&2
   exit 1
 fi
@@ -191,6 +206,9 @@ fi
 # Now validate successful write-gate-issues behavior when --apply is provided.
 clear_log
 report_gate_apply="$tmp_dir/report-gate-apply.json"
+# RUN_GATE_ISSUES_E2E=true enables an online end-to-end check that --write-gate-issues --apply
+# can successfully synchronize gate issues against GitHub. Leave it unset for the default
+# offline-only mode, which verifies that an online-only operation is correctly guarded.
 if [[ "${RUN_GATE_ISSUES_E2E:-}" == "true" ]]; then
   if ! run_sync_script_online --write-gate-issues --apply --out "$report_gate_apply" --patch "$patch_gate" >>"$log" 2>&1; then
     echo "expected write-gate-issues with --apply to succeed and synchronize gate issues" >&2
