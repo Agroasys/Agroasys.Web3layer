@@ -66,7 +66,7 @@ describeIntegration('BuyerSDK', () => {
         expect(typeof nonce).toBe('bigint');
         expect(nonce).toBeGreaterThanOrEqual(0n);
         
-        console.log(`buyer nonce: ${nonce}`);
+        console.log(`Buyer nonce: ${nonce}`);
     });
     
     test('should check USDC balance and allowance', async () => {
