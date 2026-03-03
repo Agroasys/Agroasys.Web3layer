@@ -22,6 +22,7 @@ const describeIntegration = runManualE2E && hasRequiredEnv ? describe : describe
 const testBuyerClaim = runManualE2E && hasRequiredEnv && runBuyerClaimE2E ? test : test.skip;
 const testBuyerDispute = runManualE2E && hasRequiredEnv && runBuyerDisputeE2E ? test : test.skip;
 const testBuyerTimeout = runManualE2E && hasRequiredEnv && runBuyerTimeoutE2E ? test : test.skip;
+const TX_HASH_REGEX = /^0x[a-fA-F0-9]{64}$/;
 
 function getOptionalEnv(name: string): string | undefined {
     const value = process.env[name];
@@ -47,6 +48,10 @@ function requireManualBuyerE2EBigIntEnv(name: string): bigint {
     } catch {
         throw new Error(`Invalid bigint in manual buyer E2E environment variable ${name}: ${value}`);
     }
+}
+
+function expectValidTxHash(txHash: string): void {
+    expect(txHash).toMatch(TX_HASH_REGEX);
 }
 
 describeIntegration('BuyerSDK', () => {
@@ -94,7 +99,7 @@ describeIntegration('BuyerSDK', () => {
         };
 
         const result = await buyerSDK.createTrade(tradeParams, buyerSigner);
-        expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+        expectValidTxHash(result.txHash);
         console.log(`Trade created: ${result.txHash}`);
     });
 
@@ -102,7 +107,7 @@ describeIntegration('BuyerSDK', () => {
         const tradeId = requireManualBuyerE2EBigIntEnv('TEST_DISPUTE_TRADE_ID');
 
         const result = await buyerSDK.openDispute(tradeId, buyerSigner);
-        expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+        expectValidTxHash(result.txHash);
         console.log(`Dispute opened: ${result.txHash}`);
     });
 
@@ -110,7 +115,7 @@ describeIntegration('BuyerSDK', () => {
         const tradeId = requireManualBuyerE2EBigIntEnv('TEST_LOCKED_TRADE_ID');
 
         const result = await buyerSDK.cancelLockedTradeAfterTimeout(tradeId, buyerSigner);
-        expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+        expectValidTxHash(result.txHash);
         console.log(`Locked trade cancelled: ${result.txHash}`);
     });
 
@@ -118,13 +123,13 @@ describeIntegration('BuyerSDK', () => {
         const tradeId = requireManualBuyerE2EBigIntEnv('TEST_IN_TRANSIT_TRADE_ID');
 
         const result = await buyerSDK.refundInTransitAfterTimeout(tradeId, buyerSigner);
-        expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+        expectValidTxHash(result.txHash);
         console.log(`In-transit trade refunded: ${result.txHash}`);
     });
 
     testBuyerClaim('should claim funds in the escrow', async () => {
         const result = await buyerSDK.claim(buyerSigner);
-        expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+        expectValidTxHash(result.txHash);
         console.log(`Funds claimed: ${result.txHash}`);
     });
 });
