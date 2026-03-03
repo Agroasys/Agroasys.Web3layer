@@ -6,10 +6,8 @@ SCRIPT="$ROOT_DIR/scripts/arch-roadmap-sync.mjs"
 REPO_NAME='test-org/test-repo'
 REPO_ISSUES_BASE_URL="https://github.com/$REPO_NAME/issues"
 EXPECTED_NORMALIZED_REMAINING_GAP='None (auto-synced from closed issues)'
-EXPECTED_DEFAULT_ROW='| Example component | A | Done | 40 | #101 | `docs/example.md` |'\
-' Pending final closeout validation | roadmap-maintainers | 2026-03-01 | weekly |'
-EXPECTED_NORMALIZED_ROW='| Example component | A | Done | 100 | #101 | `docs/example.md` | '"$EXPECTED_NORMALIZED_REMAINING_GAP"' |'\
-' roadmap-maintainers | 2026-03-01 | weekly |'
+EXPECTED_DEFAULT_ROW='| Example component | A | Done | 40 | #101 | `docs/example.md` | Pending final closeout validation | roadmap-maintainers | 2026-03-01 | weekly |'
+EXPECTED_NORMALIZED_ROW="| Example component | A | Done | 100 | #101 | \`docs/example.md\` | ${EXPECTED_NORMALIZED_REMAINING_GAP} | roadmap-maintainers | 2026-03-01 | weekly |"
 
 tmp_dir="$(mktemp -d)"
 
@@ -51,12 +49,15 @@ run_validator() {
 
   if ! node "$ROOT_DIR/scripts/tests/architecture-roadmap-sync-validator.mjs" "$mode" "$report_path"; then
     echo "validator failed for mode '$mode' using report '$report_path'" >&2
-    if [[ -f "$log" ]]; then
-      echo "sync helper output was:" >&2
-      cat "$log" >&2
-    fi
+    echo "sync helper output was:" >&2
+    cat "$log" >&2
     exit 1
   fi
+}
+
+show_log_on_error() {
+  echo "sync helper output was:" >&2
+  cat "$log" >&2
 }
 
 write_matrix_fixture() {
@@ -113,10 +114,7 @@ CACHE
 clear_log
 if run_sync_script --out "$report" --patch "$patch" >>"$log" 2>&1; then
   echo "expected sync helper to fail in check mode when stale rows exist" >&2
-  echo "sync helper output was:" >&2
-  if [[ -f "$log" ]]; then
-    cat "$log" >&2
-  fi
+  show_log_on_error
   exit 1
 fi
 
@@ -124,6 +122,10 @@ run_validator check "$report"
 
 if ! grep -Fq "$EXPECTED_DEFAULT_ROW" "$patch"; then
   echo "expected default patch to update only Status and Last Refreshed" >&2
+  echo "Expected row:" >&2
+  printf '%s\n' "$EXPECTED_DEFAULT_ROW" >&2
+  echo "Actual patch contents:" >&2
+  cat "$patch" >&2
   exit 1
 fi
 if grep -Fq "$EXPECTED_NORMALIZED_ROW" "$patch"; then
@@ -140,10 +142,7 @@ write_matrix_fixture
 clear_log
 if ! run_sync_script --write --out "$report_write_min" --patch "$patch" >>"$log" 2>&1; then
   echo "expected default write mode to apply minimum-safe row updates" >&2
-  echo "sync helper output was:" >&2
-  if [[ -f "$log" ]]; then
-    cat "$log" >&2
-  fi
+  show_log_on_error
   exit 1
 fi
 
@@ -159,10 +158,7 @@ write_matrix_fixture
 clear_log
 if ! run_sync_script --write --normalize-progress --out "$report_write_norm" --patch "$patch" >>"$log" 2>&1; then
   echo "expected write + normalize-progress mode to apply extended sync updates" >&2
-  echo "sync helper output was:" >&2
-  if [[ -f "$log" ]]; then
-    cat "$log" >&2
-  fi
+  show_log_on_error
   exit 1
 fi
 
