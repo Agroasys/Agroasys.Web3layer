@@ -12,7 +12,9 @@ import {
 } from './setup';
 
 const runManualE2E = process.env.RUN_E2E === 'true';
+const runBuyerClaimE2E = process.env.RUN_BUYER_CLAIM_E2E === 'true';
 const describeIntegration = runManualE2E && hasRequiredEnv ? describe : describe.skip;
+const testBuyerClaim = runManualE2E && hasRequiredEnv && runBuyerClaimE2E ? test : test.skip;
 
 describeIntegration('BuyerSDK', () => {
     let buyerSDK: BuyerSDK;
@@ -87,7 +89,7 @@ describeIntegration('BuyerSDK', () => {
         console.log(`In-transit trade refunded: ${result.txHash}`);
     });
 
-    test.skip('should claim funds in the escrow', async () => {
+    testBuyerClaim('should claim funds in the escrow', async () => {
         const result = await buyerSDK.claim(buyerSigner);
         expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
         console.log(`Funds claimed: ${result.txHash}`);
