@@ -12,6 +12,8 @@ OFFLINE_MODE_REQUIRED_ERROR_KEY='ERR_OFFLINE_MODE_REQUIRED'
 WRITE_GATE_ISSUES_APPLY_GUARD_PREFIX='ERROR: --write-gate-issues requires --apply. Re-run with:'
 WRITE_GATE_ISSUES_APPLY_GUARD_COMMAND='GITHUB_TOKEN="$(gh auth token)" node scripts/arch-roadmap-sync.mjs --repo "'"${REPO_NAME}"'" --write-gate-issues --apply'
 EXPECTED_WRITE_GATE_ISSUES_APPLY_GUARD_MESSAGE="${WRITE_GATE_ISSUES_APPLY_GUARD_PREFIX} ${WRITE_GATE_ISSUES_APPLY_GUARD_COMMAND}"
+# Match on a stable substring of the guard message to avoid brittle quoting differences.
+EXPECTED_WRITE_GATE_ISSUES_APPLY_GUARD_SUBSTRING="${WRITE_GATE_ISSUES_APPLY_GUARD_PREFIX} GITHUB_TOKEN="
 # Optional: set RUN_GATE_ISSUES_E2E=true to enable online end-to-end validation of
 #           --write-gate-issues --apply against GitHub; leave unset for offline-only checks.
 
@@ -236,7 +238,7 @@ if run_sync_script --write-gate-issues --out "$report_gate" --patch "$patch_gate
   echo "expected write-gate-issues without --apply to fail" >&2
   exit 1
 fi
-if ! grep -Fq -- "$EXPECTED_WRITE_GATE_ISSUES_APPLY_GUARD_MESSAGE" "$apply_guard_err"; then
+if ! grep -Fq -- "$EXPECTED_WRITE_GATE_ISSUES_APPLY_GUARD_SUBSTRING" "$apply_guard_err"; then
   echo "expected actionable --apply guard error message" >&2
   exit 1
 fi
