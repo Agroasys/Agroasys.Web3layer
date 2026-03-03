@@ -42,7 +42,7 @@ ROW_ISSUE='#101'
 ROW_EVIDENCE='`docs/example.md`'
 ROW_OWNER='roadmap-maintainers'
 ROW_REFRESH_CADENCE='weekly'
-ROW_REMAINING_GAP_INITIAL='Pending final closeout validation'
+ROW_REMAINING_GAP_INITIAL='Pending final close-out validation'
 ROW_LAST_REFRESHED_INITIAL='2026-02-23'
 ROW_LAST_REFRESHED_EXPECTED='2026-03-01'
 # Expected rows after sync (default and normalized modes).
@@ -276,14 +276,22 @@ fi
 clear_log
 report_gate_apply="$tmp_dir/report-gate-apply.json"
 patch_gate_apply="$tmp_dir/patch-gate-apply.patch"
-# RUN_GATE_ISSUES_E2E=true enables an online end-to-end check that --write-gate-issues --apply
-# can successfully synchronize gate issues against GitHub. Leave it unset for the default
-# offline-only mode, which verifies that an online-only operation is correctly guarded.
-# Note: this check is strict; the variable must be set to the exact string "true" (not "1", "yes",
-# or other truthy values) to enable the online end-to-end validation path. This avoids
-# accidentally enabling online, GitHub-backed runs in environments (e.g., CI, offline
-# development, or air-gapped testing) where network access, credentials, or non-deterministic
-# behavior are undesired; requiring "true" makes opting in an explicit, conscious action.
+print_run_gate_issues_e2e_docs() {
+  : <<'RUN_GATE_ISSUES_E2E_DOC'
+RUN_GATE_ISSUES_E2E=true enables an online end-to-end check that
+--write-gate-issues --apply can successfully synchronize gate issues
+against GitHub.
+Leave RUN_GATE_ISSUES_E2E unset for the default offline-only mode,
+which verifies that an online-only operation is correctly guarded.
+Note: this check is strict; the variable must be set to the exact
+string "true" (not "1", "yes", or other truthy values) to enable the
+online end-to-end validation path. This avoids accidentally enabling
+online, GitHub-backed runs in environments (e.g., CI, offline
+development, or air-gapped testing) where network access, credentials,
+or non-deterministic behavior are undesired; requiring "true" makes
+opting in an explicit, conscious action.
+RUN_GATE_ISSUES_E2E_DOC
+}
 if [[ "${RUN_GATE_ISSUES_E2E:-}" == "true" ]]; then
   # Note: run_sync_script_online intentionally does not pass --offline and may reuse the same
   # cache file as offline runs; this branch is meant to exercise real GitHub API calls and
