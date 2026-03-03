@@ -10,9 +10,23 @@ EXPECTED_NORMALIZED_REMAINING_GAP='None (auto-synced from closed issues)'
 # Fixture starts "In Progress"; expected rows are "Done" to confirm status sync.
 OFFLINE_MODE_REQUIRED_ERROR_KEY='ERR_OFFLINE_MODE_REQUIRED'
 WRITE_GATE_ISSUES_APPLY_GUARD_PREFIX='ERROR: --write-gate-issues requires --apply. Re-run with:'
-WRITE_GATE_ISSUES_APPLY_GUARD_COMMAND='GITHUB_TOKEN="$(gh auth token)" node scripts/arch-roadmap-sync.mjs --repo "'"${REPO_NAME}"'" --write-gate-issues --apply'
+WRITE_GATE_ISSUES_APPLY_GUARD_COMMAND="GITHUB_TOKEN=\"\$(gh auth token)\" node scripts/arch-roadmap-sync.mjs --repo \"${REPO_NAME}\" --write-gate-issues --apply"
 EXPECTED_WRITE_GATE_ISSUES_APPLY_GUARD_MESSAGE="${WRITE_GATE_ISSUES_APPLY_GUARD_PREFIX} ${WRITE_GATE_ISSUES_APPLY_GUARD_COMMAND}"
 # Match on a stable substring of the guard message to avoid brittle quoting differences.
+diagnose_gate_report_file() {
+  local report_path=$1
+  if [[ ! -e "$report_path" ]]; then
+    echo "gate report file was not created: $report_path" >&2
+  elif [[ ! -r "$report_path" ]]; then
+    echo "gate report file exists but is not readable: $report_path" >&2
+  else
+    if report_size_bytes="$(wc -c <"$report_path" 2>/dev/null)"; then
+      echo "gate report file exists but is empty or unreadable: $report_path (size: ${report_size_bytes} bytes)" >&2
+    else
+      echo "gate report file exists but size could not be determined due to an error: $report_path" >&2
+    fi
+  fi
+}
 EXPECTED_WRITE_GATE_ISSUES_APPLY_GUARD_SUBSTRING="${WRITE_GATE_ISSUES_APPLY_GUARD_PREFIX} GITHUB_TOKEN="
 #
 # Optional environment configuration:
@@ -38,6 +52,7 @@ EXPECTED_NORMALIZED_ROW="| ${ROW_COMPONENT} | ${ROW_MILESTONE} | Done | 100 | ${
 MATRIX_INITIAL_ROW="| ${ROW_COMPONENT} | ${ROW_MILESTONE} | In Progress | 40 | ${ROW_ISSUE} | ${ROW_EVIDENCE} | ${ROW_REMAINING_GAP_INITIAL} | ${ROW_OWNER} | ${ROW_LAST_REFRESHED_INITIAL} | ${ROW_REFRESH_CADENCE} |"
 
 # Create a temporary directory, and surface any mktemp error output to aid debugging.
+tmp_root="${TMPDIR:-/tmp}"
 mktemp_err_file="$(mktemp)" || {
   printf '%s\n' 'Failed to create temporary file for capturing mktemp errors' >&2
   exit 1
@@ -45,7 +60,7 @@ mktemp_err_file="$(mktemp)" || {
 if ! tmp_dir="$(mktemp -d 2>"$mktemp_err_file")"; then
   printf '%s\n' 'Failed to create temporary directory with mktemp -d' >&2
   if [[ -s "$mktemp_err_file" ]]; then
-    printf '%s\n' "mktemp error: $(cat "$mktemp_err_file")" >&2
+    printf '%s\n' "mktemp error: $(<"$mktemp_err_file")" >&2
   fi
   rm -f "$mktemp_err_file"
   exit 1
@@ -58,14 +73,11 @@ fi
 
 cleanup_tmp_dir() {
   if [[ -n "${tmp_dir:-}" && -d "$tmp_dir" ]]; then
-    case "$tmp_dir" in
-      /tmp/*|/var/tmp/*|/var/folders/*|/private/var/folders/*)
-        rm -rf "$tmp_dir"
-        ;;
-      *)
-        printf '%s\n' "Skipping cleanup of unexpected tmp_dir path: $tmp_dir" >&2
-        ;;
-    esac
+    if [[ "$tmp_dir" == "$tmp_root"* || "$tmp_dir" == /private"${tmp_root}"* ]]; then
+      rm -rf "$tmp_dir"
+    else
+      printf '%s\n' "Skipping cleanup of unexpected tmp_dir path: $tmp_dir" >&2
+    fi
   fi
 }
 trap cleanup_tmp_dir EXIT
@@ -265,17 +277,7 @@ if [[ "${RUN_GATE_ISSUES_E2E:-}" == "true" ]]; then
     exit 1
   fi
   if [[ ! -s "$report_gate_apply" ]]; then
-    if [[ ! -e "$report_gate_apply" ]]; then
-      echo "gate report file was not created: $report_gate_apply" >&2
-    elif [[ ! -r "$report_gate_apply" ]]; then
-      echo "gate report file exists but is not readable: $report_gate_apply" >&2
-    else
-      if report_size_bytes="$(wc -c <"$report_gate_apply" 2>/dev/null)"; then
-        echo "gate report file exists but is empty or unreadable: $report_gate_apply (size: ${report_size_bytes} bytes)" >&2
-      else
-        echo "gate report file exists but size could not be determined due to an error: $report_gate_apply" >&2
-      fi
-    fi
+    diagnose_gate_report_file "$report_gate_apply"
     echo "expected write-gate-issues --apply run to produce a non-empty gate report at $report_gate_apply" >&2
     exit 1
   fi
