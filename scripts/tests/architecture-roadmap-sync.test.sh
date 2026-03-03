@@ -20,10 +20,10 @@ diagnose_gate_report_file() {
   elif [[ ! -r "$report_path" ]]; then
     echo "gate report file exists but is not readable: $report_path" >&2
   else
-    report_size_bytes="$(wc -c <"$report_path" 2>/dev/null)"
+    report_size="$(wc -c <"$report_path" 2>/dev/null)"
     wc_status=$?
     if [[ $wc_status -eq 0 ]]; then
-      echo "gate report file exists and was successfully read: $report_path (size: ${report_size_bytes} bytes)" >&2
+      echo "gate report file exists and was successfully read: $report_path (size: ${report_size} bytes)" >&2
     else
       echo "gate report file exists but size could not be determined due to an error: $report_path" >&2
     fi
@@ -64,19 +64,14 @@ if command -v realpath >/dev/null 2>&1; then
 else
   tmp_root_real="$tmp_root"
 fi
-mktemp_err_file="$(mktemp)" || {
-  printf '%s\n' 'Failed to create temporary file for capturing mktemp errors' >&2
-  exit 1
-}
-if ! tmp_dir="$(mktemp -d 2>"$mktemp_err_file")"; then
+mktemp_stderr=''
+if ! tmp_dir="$(mktemp -d 2> >(mktemp_stderr="$(cat)"))"; then
   printf '%s\n' 'Failed to create temporary directory with mktemp -d' >&2
-  if [[ -s "$mktemp_err_file" ]]; then
-    printf '%s\n' "mktemp error: $(<"$mktemp_err_file")" >&2
+  if [[ -n "$mktemp_stderr" ]]; then
+    printf '%s\n' "mktemp error: $mktemp_stderr" >&2
   fi
-  rm -f "$mktemp_err_file"
   exit 1
 fi
-rm -f "$mktemp_err_file"
 if [[ ! -d "$tmp_dir" ]]; then
   printf '%s\n' 'Failed to create temporary directory with mktemp -d' >&2
   exit 1
@@ -104,7 +99,7 @@ cleanup_tmp_dir() {
       tmp_root_canon="${tmp_root_real:-}"
     fi
     if [[ -n "$tmp_root_canon" ]]; then
-      if [[ "$tmp_dir_real" == "$tmp_root_canon" || "${tmp_dir_real#$tmp_root_canon/}" != "$tmp_dir_real" ]]; then
+      if [[ "$tmp_dir_real" == "$tmp_root_canon" || "$tmp_dir_real" == "$tmp_root_canon"/* ]]; then
         rm -rf "$tmp_dir_real"
       else
         printf '%s\n' "Skipping cleanup of unexpected tmp_dir path: $tmp_dir_real (tmp_root_real: $tmp_root_canon)" >&2
