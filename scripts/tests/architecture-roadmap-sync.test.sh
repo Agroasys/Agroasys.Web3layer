@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$ROOT_DIR/scripts/arch-roadmap-sync.mjs"
+VALIDATOR_SCRIPT="$ROOT_DIR/scripts/tests/architecture-roadmap-sync-validator.mjs"
 REPO_NAME='test-org/test-repo'
 REPO_ISSUES_BASE_URL="https://github.com/$REPO_NAME/issues"
 EXPECTED_NORMALIZED_REMAINING_GAP='None (auto-synchronized from closed issues)'
@@ -61,7 +62,7 @@ clear_log() {
   # Truncate the log file before each scenario, but only if the path is valid.
   if [[ -n "${log:-}" ]]; then
     local log_dir
-    log_dir="$(dirname -- "$log")" || {
+    log_dir="$(dirname "$log")" || {
       printf '%s\n' "Skipping log truncation: unable to determine directory for log path: ${log:-<unset>}" >&2
       return
     }
@@ -87,7 +88,7 @@ run_validator() {
   local mode="$1"
   local report_path="$2"
 
-  if ! node "$ROOT_DIR/scripts/tests/architecture-roadmap-sync-validator.mjs" "$mode" "$report_path" 2>"$validator_log"; then
+  if ! node "$VALIDATOR_SCRIPT" "$mode" "$report_path" 2>"$validator_log"; then
     echo "validator failed for mode '$mode' using report '$report_path'" >&2
     if [ -s "$validator_log" ]; then
       echo "validator stderr output was:" >&2
@@ -231,6 +232,7 @@ fi
 # Now validate successful write-gate-issues behavior when --apply is provided.
 clear_log
 report_gate_apply="$tmp_dir/report-gate-apply.json"
+patch_gate_apply="$tmp_dir/patch-gate-apply.patch"
 # RUN_GATE_ISSUES_E2E=true enables an online end-to-end check that --write-gate-issues --apply
 # can successfully synchronize gate issues against GitHub. Leave it unset for the default
 # offline-only mode, which verifies that an online-only operation is correctly guarded.
@@ -238,7 +240,7 @@ if [[ "${RUN_GATE_ISSUES_E2E:-}" == "true" ]]; then
   # Note: run_sync_script_online intentionally does not pass --offline and may reuse the same
   # cache file as offline runs; this branch is meant to exercise real GitHub API calls and
   # end-to-end synchronization behavior, even when a shared cache is present.
-  if ! run_sync_script_online --write-gate-issues --apply --out "$report_gate_apply" --patch "$patch_gate" >>"$log" 2>&1; then
+  if ! run_sync_script_online --write-gate-issues --apply --out "$report_gate_apply" --patch "$patch_gate_apply" >>"$log" 2>&1; then
     echo "expected write-gate-issues with --apply to succeed and synchronize gate issues" >&2
     show_log_on_error
     exit 1
@@ -248,7 +250,7 @@ if [[ "${RUN_GATE_ISSUES_E2E:-}" == "true" ]]; then
     exit 1
   fi
 else
-  if run_sync_script --write-gate-issues --apply --out "$report_gate_apply" --patch "$patch_gate" >>"$log" 2>&1; then
+  if run_sync_script --write-gate-issues --apply --out "$report_gate_apply" --patch "$patch_gate_apply" >>"$log" 2>&1; then
     echo "expected write-gate-issues with --apply to fail in offline mode" >&2
     exit 1
   fi
