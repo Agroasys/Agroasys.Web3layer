@@ -1,0 +1,173 @@
+# Compliance Boundary: KYB/KYT/Sanctions
+
+## Purpose and scope
+Define the deterministic policy boundary for compliance checks that gate trade execution in Agroasys Web3layer pilot operations.
+
+This runbook formalizes issue #128 using the approved decision record in issue #200.
+
+Scope:
+- KYB (counterparty/business verification)
+- KYT (transaction/flow risk screening)
+- Sanctions screening
+- Decision, escalation, override, and audit evidence policy
+
+Non-goals:
+- No in-repo provider integration is implemented here.
+- No protocol/on-chain behavior changes are introduced by this runbook.
+
+## Current repo boundary (ground truth)
+Current architecture and runtime surface:
+- The repo currently has no dedicated in-repo KYB/KYT/Sanctions provider client runtime.
+- Service orchestration is service-directed (see `docs/runbooks/api-gateway-boundary.md`), and this policy defines the required gate behavior before trade execution paths proceed.
+- Incident and evidence operations are executed through:
+  - `docs/incidents/first-15-minutes-checklist.md`
+  - `docs/runbooks/staging-e2e-real-release-gate.md`
+  - `docs/observability/logging-schema.md`
+
+Policy authority:
+- Decision source: issue #200 (`Approved by: Aston (pilot default)`).
+- Pilot role mapping:
+  - Compliance Lead: Aston
+  - Incident Commander: Aston
+
+## Decision contract (allow/deny semantics)
+
+### Input contract for every compliance decision
+Every compliance decision record must include:
+- `decisionId`
+- `decisionType` (`KYB` | `KYT` | `SANCTIONS`)
+- `subjectId`
+- `subjectType`
+- `provider`
+- `providerRef`
+- `tradeId`
+- `correlationId`
+- `requestedAt`
+
+### Result states and enforcement action
+| Provider result | Boundary state | Enforcement action |
+| --- | --- | --- |
+| PASS | `ALLOW` | Trade may continue to normal execution path. |
+| FAIL | `DENY` | Block trade execution and return deterministic compliance error code. |
+| UNAVAILABLE/UNKNOWN | `DENY` (fail-closed) | Block new trade execution until provider recovery or approved emergency override. |
+
+### Fail stance by category (pilot default)
+| Category | Provider unavailable/unknown stance | Release impact |
+| --- | --- | --- |
+| KYB | `DENY` (fail-closed) | If outage persists, escalate per thresholds below. |
+| KYT | `DENY` (fail-closed) | If outage persists, escalate per thresholds below. |
+| Sanctions | `DENY` (fail-closed) | If outage persists, escalate per thresholds below. |
+
+## Enforcement path and escalation
+1. Evaluate compliance decision (`PASS`/`FAIL`/`UNAVAILABLE`) before new trade execution.
+2. On `FAIL` or `UNAVAILABLE`, deny execution with canonical error code and record full audit fields.
+3. Escalate provider outage duration:
+   - `>30 minutes`: severity `HIGH`
+   - `>2 hours`: severity `CRITICAL` and pause releases
+4. During `CRITICAL`, no release promotion proceeds until provider health is restored or a documented emergency override is approved.
+
+Routing:
+- `HIGH`: Ops/Engineering on-call (chat + ticket), Incident Commander informed.
+- `CRITICAL`: Platform on-call (pager) + Incident Commander.
+
+## Provider failure behavior
+Failure handling requirements:
+- Retry policy must be bounded and deterministic (no unbounded retries).
+- Retry only transient provider/network failures; do not retry deterministic `FAIL` outcomes.
+- Each failed attempt must preserve `correlationId` and be audit logged.
+- If provider health remains unavailable after bounded retries, classify as `UNAVAILABLE`, deny new trades, and escalate using the thresholds above.
+
+## Canonical error taxonomy
+Use stable error codes for operator triage and deterministic client handling:
+
+| Error code | Meaning | Client-facing contract | Operator action |
+| --- | --- | --- | --- |
+| `CMP_KYB_FAILED` | KYB returned fail/deny | Trade request denied by compliance policy. | Review provider evidence and subject data; no automatic retry. |
+| `CMP_KYT_FAILED` | KYT risk policy denied | Trade request denied by compliance policy. | Review risk signal and incident context. |
+| `CMP_SANCTIONS_MATCH` | Sanctions screening matched prohibited entity | Trade request denied by compliance policy. | Escalate to Compliance Lead and retain evidence. |
+| `CMP_PROVIDER_UNAVAILABLE` | Provider unavailable/unknown | New trades denied until provider recovery or approved override. | Trigger outage escalation and release pause rule. |
+| `CMP_PROVIDER_TIMEOUT` | Provider timed out within retry budget | New trades denied under fail-closed policy. | Investigate provider/network health and retry budget telemetry. |
+| `CMP_OVERRIDE_ACTIVE` | Emergency override currently active | Decision permitted only under active override window. | Verify approvals, time window, and post-incident review ticket. |
+| `CMP_AUDIT_WRITE_FAILED` | Required compliance audit record could not be persisted | Treat as deny for new trades and incident condition. | Restore audit write path before resuming normal flow. |
+
+## Audit evidence contract and retention
+Minimum required audit fields:
+- `decisionId`
+- `decisionType`
+- `subjectId`
+- `subjectType`
+- `provider`
+- `providerRef`
+- `result` (`ALLOW` | `DENY`)
+- `reasonCode`
+- `riskLevel`
+- `tradeId`
+- `correlationId`
+- `requestedAt`
+- `decidedAt`
+- `deciderRole`
+- `overrideApplied`
+- `overrideApproverRoles`
+- `evidenceRef`
+
+Correlation requirements:
+- Include `tradeId`, `requestId`, `txHash`, and `traceId` in logs where applicable, following `docs/observability/logging-schema.md`.
+
+Retention:
+- Compliance audit evidence retention is 7 years.
+- Records must be immutable or append-only after write.
+
+## Manual override governance (emergency only)
+Override is permitted only when all conditions below are met:
+1. Clear business-critical justification is documented.
+2. Explicit risk acceptance is recorded.
+3. Required approvals are documented:
+   - Compliance Lead
+   - Incident Commander
+4. Maximum override window is 24 hours.
+
+Mandatory override evidence:
+- reason
+- affected counterparties
+- expected volume
+- override start and end timestamps
+- approver identities/roles
+- linked post-incident review item
+
+Pilot role mapping:
+- Compliance Lead: Aston
+- Incident Commander: Aston
+- If one person holds both roles during pilot, the override must still be time-boxed and fully documented.
+
+## Deterministic examples
+
+### Example A: PASS
+- Input: KYB/KYT/Sanctions checks return PASS.
+- Decision: `ALLOW`.
+- Action: Continue normal execution path.
+- Log/audit: write full audit contract fields; include correlation fields.
+- Escalation: none.
+
+### Example B: FAIL
+- Input: Sanctions screening returns match.
+- Decision: `DENY` with `CMP_SANCTIONS_MATCH`.
+- Action: Block trade execution.
+- Log/audit: persist provider result, reason code, correlation/trade linkage, decider role.
+- Escalation: notify Compliance Lead; classify incident severity based on blast radius.
+
+### Example C: UNAVAILABLE
+- Input: Provider health unavailable/unknown beyond retry budget.
+- Decision: `DENY` with `CMP_PROVIDER_UNAVAILABLE`.
+- Action: Block new trade execution.
+- Log/audit: capture outage start time, failed attempts, correlation IDs, and affected trades.
+- Escalation:
+  - `>30m`: `HIGH`
+  - `>2h`: `CRITICAL` + pause releases
+- Recovery: resume only after provider health is restored or approved emergency override is in place.
+
+## Operational references
+- `docs/incidents/first-15-minutes-checklist.md`
+- `docs/runbooks/staging-e2e-real-release-gate.md`
+- `docs/runbooks/api-gateway-boundary.md`
+- `docs/observability/logging-schema.md`
+- `docs/runbooks/production-readiness-checklist.md`
