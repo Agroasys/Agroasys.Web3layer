@@ -87,6 +87,16 @@ if [[ ! -d "$tmp_dir" ]]; then
   printf '%s\n' 'Failed to create temporary directory with mktemp -d' >&2
   exit 1
 fi
+# Validate that the created temporary directory is not accessible by group/others.
+# If stat fails, continue without enforcing permissions to avoid breaking compatibility.
+if perm_octal="$(stat -c '%a' "$tmp_dir" 2>/dev/null)"; then
+  perm_go="${perm_octal:${#perm_octal}-2}"
+  if [[ "$perm_go" != "00" ]]; then
+    printf '%s\n' "Temporary directory has too-permissive permissions ($perm_octal): $tmp_dir" >&2
+    printf '%s\n' 'Expected no group/other access (e.g., 700). Aborting.' >&2
+    exit 1
+  fi
+fi
 if command -v realpath >/dev/null 2>&1; then
   if realpath -m "$tmp_dir" >/dev/null 2>&1; then
     tmp_dir_real="$(realpath -m "$tmp_dir")"
@@ -110,7 +120,8 @@ cleanup_tmp_dir() {
       tmp_root_canon="${tmp_root_real:-}"
     fi
     if [[ -n "$tmp_root_canon" ]]; then
-      if [[ "$tmp_dir_real" == "$tmp_root_canon" ]] || [[ "$tmp_dir_real" == $tmp_root_canon/* ]]; then
+      local tmp_root_prefix="${tmp_root_canon}/"
+      if [[ "$tmp_dir_real" == "$tmp_root_canon" ]] || [[ "$tmp_dir_real" == "$tmp_root_prefix"* ]]; then
         rm -rf "$tmp_dir_real"
       else
         printf '%s\n' "Skipping cleanup of unexpected tmp_dir path: $tmp_dir_real (tmp_root_real: $tmp_root_canon)" >&2
@@ -169,7 +180,7 @@ show_log_on_error() {
 }
 
 write_matrix_fixture() {
-  cat > "$matrix" <<MATRIX
+  cat > "$matrix" <<EOF_MATRIX_FIXTURE
 # Architecture Coverage Matrix
 
 Snapshot date: 2026-03-01
@@ -181,11 +192,11 @@ Snapshot date: 2026-03-01
 $MATRIX_INITIAL_ROW
 
 ## Gate-to-Row Mapping
-MATRIX
+EOF_MATRIX_FIXTURE
 }
 
 write_matrix_fixture
-cat > "$cache" <<CACHE
+cat > "$cache" <<EOF_CACHE
 {
   "generatedAt": "2026-03-01T00:00:00.000Z",
   "repo": "$REPO_NAME",
@@ -216,7 +227,7 @@ cat > "$cache" <<CACHE
     }
   ]
 }
-CACHE
+EOF_CACHE
 
 # Clear log file before check-mode scenario.
 clear_log
