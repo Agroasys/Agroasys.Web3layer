@@ -84,7 +84,9 @@ describe('AuthClient', () => {
       // browser signs the exact message returned by the challenge
       expect(mockSignMessage).toHaveBeenCalledWith(CHALLENGE_MSG);
 
-      // login request contains walletAddress + signature + role
+      // login request targets correct login endpoint and contains walletAddress + signature + role
+      const loginUrl = mockFetch.mock.calls[1]![0] as string;
+      expect(loginUrl).toBe(`${BASE}/api/auth/v1/login`);
       const loginInit = mockFetch.mock.calls[1]![1] as RequestInit;
       const loginBody = JSON.parse(loginInit.body as string);
       expect(loginBody.walletAddress).toBe(WALLET);
@@ -92,6 +94,20 @@ describe('AuthClient', () => {
       expect(loginBody.role).toBe('buyer');
 
       expect(result).toEqual(SESSION);
+    });
+
+    test('rejects when wallet signer cannot be obtained', async () => {
+      const walletModule = require('../src/wallet/wallet-provider');
+      (walletModule.web3Wallet.getSigner as jest.Mock).mockRejectedValueOnce(
+        new Error('wallet not available'),
+      );
+
+      await expect(client.login({ role: 'buyer' })).rejects.toBeDefined();
+    });
+
+    test('rejects when wallet address retrieval fails', async () => {
+      mockGetAddress.mockRejectedValueOnce(new Error('user rejected connection'));
+      await expect(client.login({ role: 'buyer' })).rejects.toBeDefined();
     });
 
     test('normalises wallet address to lowercase before challenge', async () => {
