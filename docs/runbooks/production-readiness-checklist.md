@@ -25,6 +25,13 @@ Purpose:
 - Security findings must map to tracked issues with owner, severity, and due date.
 - Release gate includes explicit verification that blocker findings are resolved or waived by policy owner.
 
+### Compliance boundary governance (KYB/KYT/Sanctions)
+- Compliance decision policy is defined in `docs/runbooks/compliance-boundary-kyb-kyt-sanctions.md`.
+- New trades must fail-closed when compliance provider state is unavailable/unknown.
+- Emergency override requires documented approval by Compliance Lead + Incident Commander and is time-boxed to 24 hours.
+- Compliance audit evidence retention is 7 years with immutable/append-only storage expectations.
+- Provider outage escalation is enforced operationally: `HIGH` after 30 minutes, `CRITICAL` after 2 hours with release pause.
+
 ### Signing key custody and rotation
 - Private key access is role-limited and logged.
 - Emergency rotation procedure is documented and tested in non-production first.
@@ -105,5 +112,6 @@ Purpose:
   - `docs/runbooks/postgres-backup-restore-recovery.md`
   - `docs/runbooks/staging-e2e-release-gate.md`
   - `docs/runbooks/staging-e2e-real-release-gate.md`
+  - `docs/runbooks/compliance-boundary-kyb-kyt-sanctions.md`
   - `docs/runbooks/oracle-redrive.md`
   - `docs/incidents/first-15-minutes-checklist.md`
