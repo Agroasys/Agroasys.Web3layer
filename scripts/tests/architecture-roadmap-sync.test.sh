@@ -20,6 +20,8 @@ diagnose_gate_report_file() {
   elif [[ ! -r "$report_path" ]]; then
     echo "gate report file exists but is not readable: $report_path" >&2
   else
+    local report_size
+    local wc_status
     report_size="$(wc -c <"$report_path" 2>/dev/null)"
     wc_status=$?
     if [[ $wc_status -eq 0 ]]; then
