@@ -19,19 +19,71 @@ This repository is the settlement layer in the Agroasys platform. It operates al
 - `indexer`: indexed chain events for query and operational visibility.
 - `ricardian`: contract-hash evidence workflow linking legal agreement to settlement lifecycle.
 
-## What This Repo Contains
+## Core Components
 
-- `contracts`: smart contracts, deployment modules, contract tests, and Foundry fuzzing assets.
-- `oracle`: event-driven settlement trigger service.
-- `indexer`: chain indexing and query pipeline.
-- `sdk`: TypeScript SDK used by integrating services and clients.
-- `auth` + `shared-auth`: authentication service and shared auth package.
-- `reconciliation`: settlement reconciliation workflows.
-- `notifications`: delivery and notification workflows.
-- `ricardian`: Ricardian evidence and proof workflows.
-- `treasury`: treasury operations and settlement support.
-- `scripts`: CI guards, release checks, and operational tooling.
-- `docs/runbooks`: operational, governance, and release runbooks.
+- **Escrow Smart Contract** (`/contracts`): A Solidity-based state machine deployed on PolkaVM. It handles locking, dispute resolution, and atomic splitting of funds.
+- **Oracle Service** (`/oracle`): A hardened Node.js service that bridges real-world logistics events (API webhooks) to on-chain triggers for automated release.
+- **Ricardian Proofs**: The protocol does not store PDF data on-chain. It uses a hash-first model where each trade is anchored by a SHA-256 hash of the off-chain legal contract.
+- **Indexer Service** (`/indexer`): A SubQuery/Squid indexer that tracks `TradeLocked` and `FundsReleased` events to sync on-chain state with off-chain systems.
+
+## How It Works
+
+The protocol uses a deterministic two-stage settlement mechanism. This supports capital-efficient flows where operational costs and platform fees are released first, while preserving security of the principal settlement amount.
+
+### The Lifecycle
+
+1. **Lock (Encumbrance)**
+   **Action:** Buyer deposits `USDC` (or any configured asset) into escrow, covering goods value, logistics fees, and platform fees.  
+   **State:** Protocol records `ricardianHash` and encumbers funds into `stageOneAmount` (operational/fee) and `stageTwoAmount` (net settlement).
+2. **Stage 1 Release (Intermediary / Operational)**
+   **Trigger:** Oracle verifies validated documentation (for example Bill of Lading and export permit).  
+   **Action:** In one atomic transaction, logistics fee is paid to `TreasuryWallet`, platform fee is paid to `TreasuryWallet`, and supplier tranche 1 (default 40%, configurable) is paid to `SupplierAddress`.
+3. **Stage 2 Release (Final Settlement)**
+   **Trigger:** Oracle verifies destination inspection report (quality/quantity confirmation).  
+   **Action:** Remaining supplier tranche (default 60%) is released to `SupplierAddress`, completing settlement.
+
+## Tech Stack
+
+### Core Protocol and Languages
+
+- Smart contracts: Solidity with Hardhat and Parity resolc plugin stack (`@parity/hardhat-polkadot*` + `@parity/resolc`) for `compile:polkavm`. Legacy `compile` remains during migration.
+- Scripting and service logic: TypeScript on Node.js v20.x (same baseline as CI).
+- Infrastructure: Docker and Docker Compose.
+
+### Infrastructure Layers
+
+- Network: Polkadot AssetHub for low-cost native stablecoin settlement rails.
+- Gas abstraction: Asset Conversion Pallet for fee payment in `USDC` instead of `DOT`.
+- Indexing and querying: SubQuery/Squid + GraphQL over Postgres.
+- Development framework: Hardhat (primary) and Foundry (fuzzing).
+- Oracle runtime: Isolated Node.js 20.x service runtime for key management and webhook ingress.
+
+## Repository Structure
+
+```bash
+agroasys-web3/
+├── contracts/          # Solidity Smart Contracts + tests (Hardhat + Foundry)
+│   ├── src/
+│   ├── tests/
+│   └── foundry/test/
+├── oracle/             # Oracle signing and event trigger service
+├── indexer/            # Indexing and GraphQL pipeline
+├── sdk/                # TypeScript SDK
+├── auth/               # Authentication service
+├── shared-auth/        # Shared auth package
+├── reconciliation/     # Reconciliation service
+├── notifications/      # Notification service
+├── ricardian/          # Ricardian evidence service
+├── treasury/           # Treasury operations service
+├── scripts/            # Ops, verification, and CI guard scripts
+└── docs/               # Runbooks, governance, and operational docs
+```
+
+## Security & "Invisible Wallet" Features
+
+- **Gas Abstraction (The "Gas Station")**: Uses Asset Conversion so users do not need to hold `DOT`; protocol can settle fees in `USDC` for a gasless enterprise UX.
+- **Oracle Isolation**: `releaseFunds` is protected by `onlyOracle`. Oracle service is intended to run in an isolated environment (TEE or separate VPC) with restricted key access.
+- **Ricardian Integrity**: `ricardianHash` is immutable after lock, so courts and auditors can verify on-chain settlement against the exact off-chain legal document hash.
 
 ## Local Setup (Node 20)
 
