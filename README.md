@@ -6,6 +6,28 @@ The Agroasys Web3 Layer is a modular, non-custodial settlement infrastructure bu
 
 While built as the settlement engine for the Agroasys Platform, this protocol is open-source and agnostic, allowing any B2B marketplace to integrate trustless stablecoin settlement with Ricardian legal enforceability.
 
+## At a Glance
+
+- What this is: a secure settlement layer for cross-border commodity trade.
+- What this is not: a custody wallet or a full marketplace interface.
+- What this gives partners: transparent settlement logic, clear operational controls, and legal evidence traceability.
+
+## Status and Maturity
+
+- Current phase: Pilot.
+- Operational readiness criteria: `docs/runbooks/production-readiness-checklist.md`.
+
+## Who Should Read Next
+
+- Partners and integrators: `docs/runbooks/hybrid-split-walkthrough.md`.
+- Operators: `docs/runbooks/monitoring-alerting-baseline.md`.
+- Audit and compliance teams: `docs/runbooks/compliance-boundary-kyb-kyt-sanctions.md`.
+
+## Scope Boundaries
+
+- This repository focuses on settlement protocol, operations, and evidence workflows.
+- It does not replace internal ERP systems, banking rails, or external marketplace frontends.
+
 > Note: Optimize for deterministic operations and auditability. If a step matters in production, it should be scriptable, tested, and documented in a runbook.
 
 ## Architecture
@@ -178,3 +200,7 @@ See `CONTRIBUTING.md` for contribution flow and PR expectations.
 ## Security
 
 See `SECURITY.md` for disclosure policy.
+
+## Partners and Contributors
+
+We welcome partners, sponsors, and contributors who are building secure and practical trade settlement systems. Collaboration details are in `CONTRIBUTING.md`.
