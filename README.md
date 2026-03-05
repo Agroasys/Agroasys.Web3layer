@@ -1,16 +1,16 @@
 # **Agroasys: A commercial trade settlement protocol**
 
-_**The trustless settlement engine for cross-border commodities trade.**_
+_**A non-custodial, evidence-driven settlement engine for cross-border trade workflows.**_
 
-The Agroasys Web3 Layer is a modular, non-custodial settlement infrastructure built on Polkadot AssetHub. It is designed to replace traditional Letters of Credit (LC) with cryptographically secured, two-stage smart contract escrows.
+The Agroasys Web3 Layer is a modular, non-custodial settlement infrastructure built on Polkadot Asset Hub. It provides milestone-based smart contract escrow designed to reduce counterparty risk and shorten settlement cycles through verifiable, evidence-driven state transitions.
 
-While built as the settlement engine for the Agroasys Platform, this protocol is open-source and agnostic, allowing any B2B marketplace to integrate trustless stablecoin settlement with Ricardian legal enforceability.
+While initially developed as the settlement engine for the Agroasys Platform, this protocol is open-source and integration-friendly, allowing any B2B marketplace or trade workflow to adopt stablecoin escrow settlement with Ricardian contract anchoring and audit-grade evidence traceability.
 
 ## At a Glance
 
-- What this is: a secure settlement layer for cross-border commodity trade.
-- What this is not: a custody wallet or a full marketplace interface.
-- What this gives partners: transparent settlement logic, clear operational controls, and legal evidence traceability.
+- What this is: a secure settlement layer for commercial trade (DvP-style escrow, milestones, dispute and timeout flows).
+- What this is not: a custody wallet, a bank, or a full marketplace interface.
+- What this gives partners: transparent settlement logic, deterministic operational controls, and evidence traceability for reconciliation and dispute review.
 
 ## Status and Maturity
 
@@ -37,31 +37,31 @@ This repository is the settlement layer in the Agroasys platform. It operates al
 ![web3layer](https://github.com/user-attachments/assets/c2677f8f-b430-42f6-a267-285683da74df)
 
 - `contracts`: escrow state machine and settlement logic.
-- `oracle`: validated real-world event triggers into on-chain actions.
+- `oracle`: validated real-world milestone attestations into on-chain state transitions.
 - `indexer`: indexed chain events for query and operational visibility.
 - `ricardian`: contract-hash evidence workflow linking legal agreement to settlement lifecycle.
 
 ## Core Components
 
-- **Escrow Smart Contract** (`/contracts`): A Solidity-based state machine deployed on PolkaVM. It handles locking, dispute resolution, and atomic splitting of funds.
-- **Oracle Service** (`/oracle`): A hardened Node.js service that bridges real-world logistics events (API webhooks) to on-chain triggers for automated release.
-- **Ricardian Proofs**: The protocol does not store PDF data on-chain. It uses a hash-first model where each trade is anchored by a SHA-256 hash of the off-chain legal contract.
-- **Indexer Service** (`/indexer`): A SubQuery/Squid indexer that tracks `TradeLocked` and `FundsReleased` events to sync on-chain state with off-chain systems.
+- **Escrow Smart Contract** (`/contracts`): A Solidity-based state machine compiled for PolkaVM using the Parity toolchain. It handles locking, dispute holds, timeouts, and deterministic splitting and routing of funds.
+- **Oracle Service** (`/oracle`): A hardened Node.js service that submits signed, schema-validated milestone attestations (for example shipment and inspection evidence references) to drive state transitions.
+- **Ricardian Anchoring**: The protocol does not store PDFs on-chain. Each trade is anchored by a SHA-256 hash of the off-chain legal contract (TradeID), tying evidence and settlement to a single immutable reference.
+- **Indexer Service** (`/indexer`): An indexer that tracks core settlement events to support reconciliation, operational monitoring, and audit-style reporting.
 
 ## How It Works
 
-The protocol uses a deterministic two-stage settlement mechanism. This supports capital-efficient flows where operational costs and platform fees are released first, while preserving security of the principal settlement amount.
+The protocol implements a deterministic two-stage settlement mechanism. This supports flows where operational costs and fees can be released earlier, while preserving safety of the principal settlement amount.
 
 ### The Lifecycle
 
 1. **Lock (Encumbrance)**
    **Action:** Buyer deposits `USDC` (or any configured asset) into escrow, covering goods value, logistics fees, and platform fees.  
-   **State:** Protocol records `ricardianHash` and encumbers funds into `stageOneAmount` (operational/fee) and `stageTwoAmount` (net settlement).
-2. **Stage 1 Release (Intermediary / Operational)**
-   **Trigger:** Oracle verifies validated documentation (for example Bill of Lading and export permit).  
+   **State:** Protocol records `ricardianHash` and encumbers funds into `stageOneAmount` (operational and fee) and `stageTwoAmount` (net settlement).
+2. **Stage 1 Release (Operational)**
+   **Trigger:** Oracle submits a signed attestation referencing validated documentation (for example Bill of Lading and export permit).  
    **Action:** In one atomic transaction, logistics fee is paid to `TreasuryWallet`, platform fee is paid to `TreasuryWallet`, and supplier tranche 1 (default 40%, configurable) is paid to `SupplierAddress`.
 3. **Stage 2 Release (Final Settlement)**
-   **Trigger:** Oracle verifies destination inspection report (quality/quantity confirmation).  
+   **Trigger:** Oracle submits a signed attestation referencing destination inspection evidence (quality and quantity confirmation).  
    **Action:** Remaining supplier tranche (default 60%) is released to `SupplierAddress`, completing settlement.
 
 ## Tech Stack
@@ -74,9 +74,9 @@ The protocol uses a deterministic two-stage settlement mechanism. This supports 
 
 ### Infrastructure Layers
 
-- Network: Polkadot AssetHub for low-cost native stablecoin settlement rails.
-- Gas abstraction: Asset Conversion Pallet for fee payment in `USDC` instead of `DOT`.
-- Indexing and querying: SubQuery/Squid + GraphQL over Postgres.
+- Network: Polkadot Asset Hub for low-cost native stablecoin settlement rails.
+- Fee payment: Asset Conversion Pallet for fee payment in `USDC` instead of `DOT` where supported.
+- Indexing and querying: SubQuery or Squid + GraphQL over Postgres.
 - Development framework: Hardhat (primary) and Foundry (fuzzing).
 - Oracle runtime: Isolated Node.js 20.x service runtime for key management and webhook ingress.
 
