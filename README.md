@@ -6,6 +6,20 @@ The Agroasys Web3 Layer is a modular, non-custodial settlement infrastructure bu
 
 While built as the settlement engine for the Agroasys Platform, this protocol is open-source and agnostic, allowing any B2B marketplace to integrate trustless stablecoin settlement with Ricardian legal enforceability.
 
+## Quick Start
+
+```bash
+nvm use
+# expected: Node.js v20.x
+npm ci
+npm run lint
+npm run security:deps
+scripts/docker-services.sh up local-dev
+scripts/docker-services.sh health local-dev
+```
+
+For full CI parity and release-gate flows, see the sections below and the runbooks under `docs/runbooks/`.
+
 ## **Architecture**
 
 This repository houses the "Settlement Layer" of the architecture. It is designed to operate seamlessly alongside off-chain "Shadow Ledgers" or Web2 marketplaces, serving as the immutable source of truth for funds.
@@ -79,16 +93,23 @@ The protocol is built on a modular stack designed for high throughput and cross-
 
 ## **Repository Structure**
 
-```
+```bash
 agroasys-web3/
-├── contracts/          # Solidity Smart Contracts (PolkaVM)
-│   ├── AgroasysEscrow.sol
-│   └── interfaces/     # IERC20 & Polkadot Precompiles
-├── scripts/            # Deployment & Verification scripts
-├── oracle/             # The Oracle Signing Service (Node.js)
-├── indexer/            # SubQuery/Squid Indexer Schema
-├── sdk/                # TypeScript SDK for Frontend Integration
-└── test/               # Hardhat Unit & Integration Tests
+├── contracts/          # Solidity Smart Contracts + tests (Hardhat + Foundry)
+│   ├── src/
+│   ├── tests/
+│   └── foundry/test/
+├── oracle/             # Oracle signing and event trigger service
+├── indexer/            # Indexing and GraphQL pipeline
+├── sdk/                # TypeScript SDK
+├── auth/               # Authentication service
+├── shared-auth/        # Shared auth package
+├── reconciliation/     # Reconciliation service
+├── notifications/      # Notification service
+├── ricardian/          # Ricardian evidence service
+├── treasury/           # Treasury operations service
+├── scripts/            # Ops, verification, and CI guard scripts
+└── docs/               # Runbooks, governance, and operational docs
 ```
 ## **Security & "Invisible Wallet" Features**
 
@@ -167,6 +188,7 @@ npm run -w treasury build
 - `docs/runbooks/asset-conversion-fee-validation.md`
 - `docs/runbooks/production-readiness-checklist.md`
 - `docs/runbooks/monitoring-alerting-baseline.md`
+- `docs/runbooks/compliance-boundary-kyb-kyt-sanctions.md`
 - `docs/runbooks/api-gateway-boundary.md`
 - `docs/runbooks/polkavm-deploy-verification.md`
 - `docs/runbooks/hybrid-split-walkthrough.md`
@@ -209,19 +231,8 @@ Branch protection should require these checks:
 - `ci/treasury`
 - `ci/release-gate`
 
-Local parity commands:
+Use the `CI Parity Checks` command block above for local parity execution.
 
-```bash
-npm ci
-npm run -w contracts lint && npm run -w contracts compile && npm run -w contracts test
-npm run -w sdk lint && npm run -w sdk test && npm run -w sdk build
-npm run -w oracle lint && npm run -w oracle test && npm run -w oracle build
-npm run -w indexer lint && npm run -w indexer build
-npm run -w notifications lint && npm run -w notifications build
-npm run -w reconciliation lint && npm run -w reconciliation test && npm run -w reconciliation build
-npm run -w ricardian lint && npm run -w ricardian test && npm run -w ricardian build
-npm run -w treasury lint && npm run -w treasury test && npm run -w treasury build
-```
 
 ## Docker Profiles
 
