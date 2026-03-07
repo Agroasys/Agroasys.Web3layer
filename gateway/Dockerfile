@@ -3,11 +3,15 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY gateway/package.json gateway/package.json
+COPY sdk/package.json sdk/package.json
+
+RUN apk add --no-cache --virtual .build-deps python3 make g++
 
 RUN npm ci
 
 COPY docs docs
 COPY gateway gateway
+COPY sdk sdk
 
 RUN npm run -w gateway build
 
@@ -17,12 +21,16 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY gateway/package.json gateway/package.json
+COPY sdk/package.json sdk/package.json
 
-RUN npm ci --omit=dev --workspace gateway --include-workspace-root=false \
-  && npm cache clean --force
+RUN apk add --no-cache --virtual .build-deps python3 make g++ \
+  && npm ci --omit=dev --workspace gateway --workspace @agroasys/sdk --include-workspace-root=false \
+  && npm cache clean --force \
+  && apk del .build-deps
 
 COPY --from=builder /app/gateway/dist /app/gateway/dist
 COPY --from=builder /app/gateway/src/database/schema.sql /app/gateway/src/database/schema.sql
+COPY --from=builder /app/sdk/dist /app/sdk/dist
 
 RUN addgroup -S agro && adduser -S agro -G agro \
   && chown -R agro:agro /app
