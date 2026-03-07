@@ -15,6 +15,10 @@ const baseConfig: GatewayConfig = {
   dbPassword: 'postgres',
   authBaseUrl: 'http://127.0.0.1:3005',
   authRequestTimeoutMs: 5000,
+  rpcUrl: 'http://127.0.0.1:8545',
+  rpcReadTimeoutMs: 8000,
+  chainId: 31337,
+  escrowAddress: '0x0000000000000000000000000000000000000000',
   enableMutations: true,
   writeAllowlist: ['uid-admin'],
   commitSha: 'abc1234',
@@ -62,6 +66,8 @@ describe('gateway auth middleware', () => {
     await middleware(req, mockRes(), next);
 
     expect(next).toHaveBeenCalledWith();
+    expect(req.gatewayPrincipal?.sessionReference).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(req.gatewayPrincipal?.sessionReference).not.toBe('sess-1');
     expect(req.gatewayPrincipal?.gatewayRoles).toEqual(['operator:read', 'operator:write']);
     expect(req.gatewayPrincipal?.writeEnabled).toBe(true);
   });
