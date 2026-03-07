@@ -1328,7 +1328,14 @@ components:
       enum: [KYB, KYT, SANCTIONS]
     ComplianceDecisionResult:
       type: string
-      enum: [ALLOW, DENY, HOLD, OVERRIDE]
+      enum: [ALLOW, DENY]
+      description: |
+        Result states are intentionally limited to the policy-defined enforcement outcomes in
+        `docs/runbooks/compliance-boundary-kyb-kyt-sanctions.md`.
+
+        Emergency override is represented as `result=ALLOW` together with `reasonCode=CMP_OVERRIDE_ACTIVE`
+        and the override audit fields below. Provider unavailability and unknown outcomes remain fail-closed
+        as `result=DENY`.
     ComplianceBlockState:
       type: string
       enum: [not_blocked, blocked, resume_pending]
@@ -1341,6 +1348,8 @@ components:
         - reasonCode
         - provider
         - providerRef
+        - subjectId
+        - subjectType
         - correlationId
         - audit
       properties:
@@ -1368,7 +1377,7 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Required when `result=OVERRIDE`.
+          description: Used when `reasonCode=CMP_OVERRIDE_ACTIVE` to record the approved override window.
         correlationId:
           type: string
         audit:
@@ -1383,6 +1392,8 @@ components:
         - reasonCode
         - provider
         - providerRef
+        - subjectId
+        - subjectType
         - correlationId
         - decidedAt
         - audit
@@ -1403,10 +1414,8 @@ components:
           type: string
         subjectId:
           type: string
-          nullable: true
         subjectType:
           type: string
-          nullable: true
         riskLevel:
           type: string
           nullable: true

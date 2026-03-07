@@ -70,7 +70,7 @@ Primary source of truth:
 
 ### Off-chain policy and audit controls
 These do not currently exist as a dedicated runtime service in this repo and are contract-first in the gateway spec:
-- compliance decision records (`ALLOW`, `DENY`, `HOLD`, `OVERRIDE`)
+- compliance decision records (`ALLOW`, `DENY`), with emergency override carried by `reasonCode=CMP_OVERRIDE_ACTIVE`
 - compliance decision history for a trade
 - block oracle progression for a trade
 - resume oracle progression for a trade
