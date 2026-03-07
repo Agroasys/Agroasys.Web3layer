@@ -297,6 +297,56 @@ describe('gateway compliance routes contract', () => {
     }
   });
 
+  test('resume oracle progression rejects stale decision references', async () => {
+    const { server, baseUrl } = await startServer();
+
+    try {
+      const allowResponse = await createDecision(baseUrl, buildDecisionBody({
+        result: 'ALLOW',
+        reasonCode: 'CMP_OVERRIDE_ACTIVE',
+        overrideWindowEndsAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        correlationId: 'corr-allow-stale',
+      }), 'idem-create-stale-allow');
+      const allowPayload = await allowResponse.json();
+
+      const denyResponse = await createDecision(baseUrl, buildDecisionBody({
+        correlationId: 'corr-deny-stale',
+      }), 'idem-create-stale-deny');
+      const denyPayload = await denyResponse.json();
+
+      await fetch(`${baseUrl}/compliance/trades/TRD-1/block-oracle-progression`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer session-admin',
+          'Content-Type': 'application/json',
+          'Idempotency-Key': 'idem-block-stale',
+        },
+        body: JSON.stringify(buildControlBody({ decisionId: denyPayload.data.decisionId })),
+      });
+
+      const resumeResponse = await fetch(`${baseUrl}/compliance/trades/TRD-1/resume-oracle-progression`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer session-admin',
+          'Content-Type': 'application/json',
+          'Idempotency-Key': 'idem-resume-stale',
+        },
+        body: JSON.stringify(buildControlBody({
+          reasonCode: 'CMP_OVERRIDE_ACTIVE',
+          decisionId: allowPayload.data.decisionId,
+        })),
+      });
+      const resumePayload = await resumeResponse.json();
+
+      expect(resumeResponse.status).toBe(409);
+      expect(validateError(resumePayload)).toBe(true);
+      expect(resumePayload.error.code).toBe('CONFLICT');
+      expect(resumePayload.error.message).toContain('latest effective compliance decision must be used');
+    } finally {
+      server.close();
+    }
+  });
+
   test('mutation routes replay the prior response for duplicate idempotency keys', async () => {
     const { server, baseUrl } = await startServer();
 

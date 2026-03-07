@@ -163,6 +163,58 @@ describe('compliance service', () => {
     ).rejects.toThrow('latest effective compliance decision must be ALLOW');
   });
 
+  test('rejects resume attempts that cite a stale ALLOW decision', async () => {
+    const { service } = buildService();
+    const principal = buildPrincipal();
+    const requestContext = buildRequestContext();
+
+    const allowDecision = await service.createDecision({
+      ...validateComplianceDecisionCreateRequest(buildDecisionInput({
+        result: 'ALLOW',
+        reasonCode: 'CMP_OVERRIDE_ACTIVE',
+        overrideWindowEndsAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      })),
+      principal,
+      requestContext,
+      routePath: '/api/dashboard-gateway/v1/compliance/decisions',
+      idempotencyKey: 'idem-allow',
+    });
+
+    const denyDecision = await service.createDecision({
+      ...validateComplianceDecisionCreateRequest(buildDecisionInput({
+        correlationId: 'corr-2',
+      })),
+      principal,
+      requestContext: { ...requestContext, requestId: 'req-deny', correlationId: 'corr-2' },
+      routePath: '/api/dashboard-gateway/v1/compliance/decisions',
+      idempotencyKey: 'idem-deny-latest',
+    });
+
+    await service.blockOracleProgression({
+      tradeId: 'TRD-1',
+      reasonCode: 'CMP_PROVIDER_UNAVAILABLE',
+      decisionId: denyDecision.decisionId,
+      audit: buildAudit(),
+      principal,
+      requestContext: { ...requestContext, requestId: 'req-block-stale' },
+      routePath: '/api/dashboard-gateway/v1/compliance/trades/TRD-1/block-oracle-progression',
+      idempotencyKey: 'idem-block-stale',
+    });
+
+    await expect(
+      service.resumeOracleProgression({
+        tradeId: 'TRD-1',
+        reasonCode: 'CMP_OVERRIDE_ACTIVE',
+        decisionId: allowDecision.decisionId,
+        audit: buildAudit(),
+        principal,
+        requestContext: { ...requestContext, requestId: 'req-resume-stale' },
+        routePath: '/api/dashboard-gateway/v1/compliance/trades/TRD-1/resume-oracle-progression',
+        idempotencyKey: 'idem-resume-stale',
+      }),
+    ).rejects.toThrow('latest effective compliance decision must be used');
+  });
+
   test('refuses resume when override window has expired', async () => {
     const expiredDecision: ComplianceDecisionRecord = {
       decisionId: 'decision-expired',

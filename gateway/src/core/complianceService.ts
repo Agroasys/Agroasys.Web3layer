@@ -384,26 +384,37 @@ export class ComplianceService {
       });
     }
 
-    const decision = await this.resolveDecisionForTrade(input.tradeId, input.decisionId);
-    if (!decision) {
+    const [requestedDecision, latestDecision] = await Promise.all([
+      this.resolveDecisionForTrade(input.tradeId, input.decisionId),
+      this.store.getLatestDecision(input.tradeId),
+    ]);
+    if (!latestDecision) {
       throw new GatewayError(409, 'CONFLICT', 'An ALLOW compliance decision is required before resuming oracle progression', {
         tradeId: input.tradeId,
       });
     }
 
-    if (decision.result !== 'ALLOW') {
-      throw new GatewayError(409, 'CONFLICT', 'The latest effective compliance decision must be ALLOW before resuming oracle progression', {
+    if (requestedDecision && requestedDecision.decisionId !== latestDecision.decisionId) {
+      throw new GatewayError(409, 'CONFLICT', 'The latest effective compliance decision must be used when resuming oracle progression', {
         tradeId: input.tradeId,
-        decisionId: decision.decisionId,
-        result: decision.result,
+        decisionId: requestedDecision.decisionId,
+        latestDecisionId: latestDecision.decisionId,
       });
     }
 
-    if (decision.reasonCode === 'CMP_OVERRIDE_ACTIVE') {
-      if (!decision.overrideWindowEndsAt || Date.parse(decision.overrideWindowEndsAt) <= Date.now()) {
+    if (latestDecision.result !== 'ALLOW') {
+      throw new GatewayError(409, 'CONFLICT', 'The latest effective compliance decision must be ALLOW before resuming oracle progression', {
+        tradeId: input.tradeId,
+        decisionId: latestDecision.decisionId,
+        result: latestDecision.result,
+      });
+    }
+
+    if (latestDecision.reasonCode === 'CMP_OVERRIDE_ACTIVE') {
+      if (!latestDecision.overrideWindowEndsAt || Date.parse(latestDecision.overrideWindowEndsAt) <= Date.now()) {
         throw new GatewayError(409, 'CONFLICT', 'The active override window has expired; oracle progression cannot be resumed', {
           tradeId: input.tradeId,
-          decisionId: decision.decisionId,
+          decisionId: latestDecision.decisionId,
         });
       }
     }
@@ -411,7 +422,7 @@ export class ComplianceService {
     const updatedAt = new Date().toISOString();
     const block: OracleProgressionBlockRecord = {
       ...existingBlock,
-      latestDecisionId: decision.decisionId,
+      latestDecisionId: latestDecision.decisionId,
       blockState: 'not_blocked',
       reasonCode: input.reasonCode,
       requestId: input.requestContext.requestId,
