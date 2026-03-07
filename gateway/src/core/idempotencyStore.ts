@@ -25,12 +25,13 @@ export interface IdempotencyStore {
     requestPath: string;
     requestFingerprint: string;
     requestId: string;
-  }): Promise<IdempotencyRecord>;
+  }): Promise<{ record: IdempotencyRecord; created: boolean }>;
   complete(key: string, response: {
     responseStatus: number;
     responseHeaders: Record<string, string>;
     responseBody: unknown;
   }): Promise<void>;
+  releasePending(key: string): Promise<void>;
   markReplay(key: string): Promise<void>;
 }
 
@@ -99,7 +100,7 @@ export function createPostgresIdempotencyStore(pool: Pool): IdempotencyStore {
     get,
 
     async createPending(entry) {
-      await pool.query(
+      const insertResult = await pool.query<IdempotencyRow>(
         `INSERT INTO idempotency_keys (
            idempotency_key,
            request_method,
@@ -107,7 +108,18 @@ export function createPostgresIdempotencyStore(pool: Pool): IdempotencyStore {
            request_fingerprint,
            request_id
          ) VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (idempotency_key) DO NOTHING`,
+         ON CONFLICT (idempotency_key) DO NOTHING
+         RETURNING
+           idempotency_key AS "idempotencyKey",
+           request_method AS "requestMethod",
+           request_path AS "requestPath",
+           request_fingerprint AS "requestFingerprint",
+           request_id AS "requestId",
+           response_status AS "responseStatus",
+           response_headers AS "responseHeaders",
+           response_body AS "responseBody",
+           completed_at AS "completedAt",
+           created_at AS "createdAt"`,
         [
           entry.idempotencyKey,
           entry.requestMethod,
@@ -117,12 +129,23 @@ export function createPostgresIdempotencyStore(pool: Pool): IdempotencyStore {
         ],
       );
 
+      const createdRow = insertResult.rows[0];
+      if (createdRow) {
+        return {
+          record: mapRow(createdRow),
+          created: true,
+        };
+      }
+
       const stored = await get(entry.idempotencyKey);
       if (!stored) {
         throw new Error(`Failed to persist idempotency key ${entry.idempotencyKey}`);
       }
 
-      return stored;
+      return {
+        record: stored,
+        created: false,
+      };
     },
 
     async complete(key, response) {
@@ -135,6 +158,15 @@ export function createPostgresIdempotencyStore(pool: Pool): IdempotencyStore {
              updated_at = NOW()
          WHERE idempotency_key = $1`,
         [key, response.responseStatus, JSON.stringify(response.responseHeaders), JSON.stringify(response.responseBody)],
+      );
+    },
+
+    async releasePending(key) {
+      await pool.query(
+        `DELETE FROM idempotency_keys
+         WHERE idempotency_key = $1
+           AND completed_at IS NULL`,
+        [key],
       );
     },
 
@@ -160,7 +192,10 @@ export function createInMemoryIdempotencyStore(): IdempotencyStore {
     async createPending(entry) {
       const existing = store.get(entry.idempotencyKey);
       if (existing) {
-        return existing;
+        return {
+          record: existing,
+          created: false,
+        };
       }
 
       const record: IdempotencyRecord = {
@@ -177,7 +212,10 @@ export function createInMemoryIdempotencyStore(): IdempotencyStore {
       };
 
       store.set(entry.idempotencyKey, record);
-      return record;
+      return {
+        record,
+        created: true,
+      };
     },
 
     async complete(key, response) {
@@ -193,6 +231,15 @@ export function createInMemoryIdempotencyStore(): IdempotencyStore {
         responseBody: response.responseBody,
         completedAt: new Date().toISOString(),
       });
+    },
+
+    async releasePending(key) {
+      const existing = store.get(key);
+      if (!existing || existing.completedAt) {
+        return;
+      }
+
+      store.delete(key);
     },
 
     async markReplay(key) {

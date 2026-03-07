@@ -59,9 +59,16 @@ export function createIdempotencyMiddleware(store: IdempotencyStore) {
 
     const requestPath = req.originalUrl || req.path;
     const requestFingerprint = buildRequestFingerprint(req.method, requestPath, req.rawBody);
-    const existing = await store.get(idempotencyKey);
+    const reservation = await store.createPending({
+      idempotencyKey,
+      requestMethod: req.method,
+      requestPath,
+      requestFingerprint,
+      requestId: req.requestContext?.requestId || 'unknown',
+    });
 
-    if (existing) {
+    if (!reservation.created) {
+      const existing = reservation.record;
       if (
         existing.requestFingerprint !== requestFingerprint ||
         existing.requestMethod !== req.method ||
@@ -89,14 +96,6 @@ export function createIdempotencyMiddleware(store: IdempotencyStore) {
       return;
     }
 
-    await store.createPending({
-      idempotencyKey,
-      requestMethod: req.method,
-      requestPath,
-      requestFingerprint,
-      requestId: req.requestContext?.requestId || 'unknown',
-    });
-
     req.idempotencyState = {
       idempotencyKey,
       requestFingerprint,
@@ -120,6 +119,7 @@ export function createIdempotencyMiddleware(store: IdempotencyStore) {
 
     res.on('finish', () => {
       if (res.statusCode >= 500) {
+        void store.releasePending(idempotencyKey);
         return;
       }
 
