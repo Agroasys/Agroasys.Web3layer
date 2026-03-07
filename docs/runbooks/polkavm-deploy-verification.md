@@ -4,6 +4,42 @@
 
 Provide deterministic compile evidence for PolkaVM-targeted artifacts and verify deployed contract bytecode on `polkadotTestnet` (Paseo Asset Hub RPC).
 
+## PolkaVM deploy script
+
+`contracts/scripts/deploy-polkavm.ts` is used instead of `hardhat ignition deploy` for PVM deployments.
+
+### Why not Hardhat Ignition?
+
+Hardhat Ignition routes all signed transactions through `LocalAccountsProvider` → `micro-eth-signer`, which enforces the EIP-3860 initcode size limit (49,152 bytes) **client-side**.
+
+PVM binaries produced by resolc are RISC-V executables and are larger than EVM bytecode.
+
+A contract that is ~20 KB as EVM bytecode becomes ~171 KB as a PVM binary, more than 3 times above the EIP-3860 limit. The Polkadot Hub testnet does **not** enforce EIP-3860 (it is a Substrate Contracts pallet accessed via an eth-rpc adapter, not a stock EVM). The rejection is purely client-side tooling.
+
+### How the script works
+
+The script creates its own `ethers.JsonRpcProvider` and `ethers.Wallet` directly. That signing path does not include the `micro-eth-signer` initcode size validation, so the PVM binary can be broadcast to the network without modification.
+
+Private keys are still read from `hre.network.config.accounts` (populated via `npx hardhat vars set PRIVATE_KEY`), so key management is unchanged.
+
+### Usage
+
+Compile to PVM, then deploy:
+
+```bash
+# Step 1 — compile
+npm run -w contracts compile:polkavm
+
+# Step 2 — deploy
+USE_POLKAVM_RESOLC=true npx hardhat run scripts/deploy-polkavm.ts --network polkadotTestnet
+```
+
+Or use the combined script (clean + compile + deploy):
+
+```bash
+npm run -w contracts deploy:polkavm
+```
+
 ## Compile Toolchain
 
 - Framework: Hardhat
@@ -21,6 +57,12 @@ Legacy fallback compile remains available:
 
 ```bash
 npm run -w contracts compile
+```
+
+Bytecode size report script:
+
+```bash
+node scripts/polkavm-bytecode-size.mjs
 ```
 
 ## resolc Binary Lookup Contract (Plugin Behavior)
@@ -152,8 +194,14 @@ Bundle fields include:
 Deployment verification remains a separate check:
 
 ```bash
+DEPLOY_VERIFY_RPC_URL=https://services.polkadothub-rpc.com/testnet \
+DEPLOY_VERIFY_NETWORK_NAME=polkadotTestnet \
 DEPLOY_VERIFY_RUNTIME_TARGET=paseo-asset-hub-revive \
 DEPLOY_VERIFY_EXPECTED_CHAIN_ID=0x190f1b41 \
+DEPLOY_VERIFY_COMPILER_NAME=resolc \
+DEPLOY_VERIFY_ARTIFACT_PATH=contracts/artifacts/src/AgroasysEscrow.sol/AgroasysEscrow.json \
+DEPLOY_VERIFY_CONTRACT_ADDRESS=[contract-address] \
+DEPLOY_VERIFY_TX_HASH=[tx-hash] \
 node scripts/polkavm-deploy-verify.mjs
 ```
 
