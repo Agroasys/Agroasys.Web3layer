@@ -1,0 +1,1510 @@
+openapi: 3.1.0
+info:
+  title: Web3layer Dashboard Gateway API
+  version: 0.1.0
+  summary: Contract-first admin/operator gateway for the CTSP dashboard.
+  description: |
+    Contract-first API specification for the CTSP admin/operator dashboard to interact with Agroasys Web3layer.
+
+    Discovery outcome:
+    - Dedicated in-repo dashboard gateway runtime: not implemented.
+    - Existing repo auth/session surface: `auth` service issues Bearer session tokens.
+    - Existing repo governance source of truth: `contracts/src/AgroasysEscrow.sol`, `sdk/src/modules/adminSDK.ts`, and governance runbooks.
+    - Existing repo compliance source of truth: policy/runbooks only; no dedicated compliance HTTP service exists yet.
+
+    This specification is therefore contract-first for the dashboard gateway, but it is grounded in existing repo truth.
+
+    UNRESOLVED DECISION: the current in-repo auth role model is `buyer | supplier | admin | oracle`. If CTSP requires distinct roles such as `compliance-reviewer`, `treasury-operator`, or `incident-commander`, the gateway must either extend the auth service role model or map session subjects to operator capabilities through a separate authorization layer.
+servers:
+  - url: http://127.0.0.1:3600/api/dashboard-gateway/v1
+    description: Local contract-first gateway base URL.
+  - url: https://gateway.agroasys.example/api/dashboard-gateway/v1
+    description: Production placeholder for future gateway deployment.
+tags:
+  - name: System
+  - name: Governance
+  - name: Compliance
+security:
+  - sessionBearer: []
+paths:
+  /healthz:
+    get:
+      tags: [System]
+      summary: Liveness probe
+      security: []
+      operationId: getHealthz
+      responses:
+        '200':
+          description: Process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /readyz:
+    get:
+      tags: [System]
+      summary: Readiness probe
+      security: []
+      operationId: getReadyz
+      responses:
+        '200':
+          description: Dependencies are ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+        '503':
+          description: Dependencies are not ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+  /version:
+    get:
+      tags: [System]
+      summary: Build and revision metadata
+      security: []
+      operationId: getVersion
+      responses:
+        '200':
+          description: Version metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResponse'
+  /governance/status:
+    get:
+      tags: [Governance]
+      summary: Current protocol governance status
+      operationId: getGovernanceStatus
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+      responses:
+        '200':
+          description: Snapshot of on-chain governance-relevant status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceStatusResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+  /governance/actions:
+    get:
+      tags: [Governance]
+      summary: List recent governance actions
+      operationId: listGovernanceActions
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - name: category
+          in: query
+          schema:
+            $ref: '#/components/schemas/GovernanceActionCategory'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/GovernanceActionStatus'
+        - name: tradeId
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Governance action history.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+  /governance/actions/{actionId}:
+    get:
+      tags: [Governance]
+      summary: Get governance action by id
+      operationId: getGovernanceAction
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - name: actionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Governance action detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /governance/pause:
+    post:
+      tags: [Governance]
+      summary: Pause protocol mutations
+      description: |
+        Maps to on-chain `pause()` through the AdminSDK.
+      operationId: pauseProtocol
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceMutationRequest'
+      responses:
+        '202':
+          description: Governance action accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /governance/unpause/proposal:
+    post:
+      tags: [Governance]
+      summary: Create the active unpause proposal
+      description: |
+        Maps to on-chain `proposeUnpause()`. The contract supports a single active unpause proposal rather than a proposal-id keyed collection.
+      operationId: proposeUnpause
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceMutationRequest'
+      responses:
+        '202':
+          description: Proposal accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /governance/unpause/proposal/approve:
+    post:
+      tags: [Governance]
+      summary: Approve the active unpause proposal
+      description: Maps to on-chain `approveUnpause()`.
+      operationId: approveUnpause
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceMutationRequest'
+      responses:
+        '202':
+          description: Approval accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /governance/unpause/proposal/cancel:
+    post:
+      tags: [Governance]
+      summary: Cancel the active unpause proposal
+      description: Maps to on-chain `cancelUnpauseProposal()`.
+      operationId: cancelUnpauseProposal
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceMutationRequest'
+      responses:
+        '202':
+          description: Cancellation accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /governance/claims/pause:
+    post:
+      tags: [Governance]
+      summary: Pause claim withdrawals
+      description: Maps to on-chain `pauseClaims()`.
+      operationId: pauseClaims
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceMutationRequest'
+      responses:
+        '202':
+          description: Claim pause accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /governance/claims/unpause:
+    post:
+      tags: [Governance]
+      summary: Unpause claim withdrawals
+      description: Maps to on-chain `unpauseClaims()`.
+      operationId: unpauseClaims
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceMutationRequest'
+      responses:
+        '202':
+          description: Claim unpause accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /governance/treasury/sweep:
+    post:
+      tags: [Governance]
+      summary: Trigger treasury sweep
+      description: |
+        Maps to on-chain `claimTreasury()`.
+
+        The contract allows any caller to trigger `claimTreasury()` as long as claim withdrawals are not paused. The gateway is expected to restrict this endpoint to authorized operator roles.
+      operationId: claimTreasury
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceMutationRequest'
+      responses:
+        '202':
+          description: Treasury sweep accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /governance/treasury/payout-receiver/proposals:
+    post:
+      tags: [Governance]
+      summary: Propose treasury payout receiver rotation
+      description: Maps to on-chain `proposeTreasuryPayoutAddressUpdate(address)`.
+      operationId: proposeTreasuryPayoutReceiverUpdate
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TreasuryPayoutReceiverProposalRequest'
+      responses:
+        '202':
+          description: Proposal accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /governance/treasury/payout-receiver/proposals/{proposalId}/approve:
+    post:
+      tags: [Governance]
+      summary: Approve treasury payout receiver rotation
+      operationId: approveTreasuryPayoutReceiverUpdate
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ProposalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceMutationRequest'
+      responses:
+        '202':
+          description: Approval accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /governance/treasury/payout-receiver/proposals/{proposalId}/execute:
+    post:
+      tags: [Governance]
+      summary: Execute treasury payout receiver rotation
+      operationId: executeTreasuryPayoutReceiverUpdate
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ProposalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceMutationRequest'
+      responses:
+        '202':
+          description: Execution accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /governance/treasury/payout-receiver/proposals/{proposalId}/cancel-expired:
+    post:
+      tags: [Governance]
+      summary: Cancel expired treasury payout receiver proposal
+      operationId: cancelExpiredTreasuryPayoutReceiverUpdate
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ProposalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceMutationRequest'
+      responses:
+        '202':
+          description: Cancellation accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /governance/oracle/disable-emergency:
+    post:
+      tags: [Governance]
+      summary: Emergency disable oracle and pause protocol
+      description: Maps to on-chain `disableOracleEmergency()`.
+      operationId: disableOracleEmergency
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceMutationRequest'
+      responses:
+        '202':
+          description: Emergency disable accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /governance/oracle/proposals:
+    post:
+      tags: [Governance]
+      summary: Propose oracle address update
+      description: |
+        Maps to on-chain `proposeOracleUpdate(address)`.
+        This is the supported recovery path after `disableOracleEmergency()`; there is no direct `enableOracle()` call in the current contract.
+      operationId: proposeOracleUpdate
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OracleUpdateProposalRequest'
+      responses:
+        '202':
+          description: Proposal accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /governance/oracle/proposals/{proposalId}/approve:
+    post:
+      tags: [Governance]
+      summary: Approve oracle update proposal
+      operationId: approveOracleUpdate
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ProposalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceMutationRequest'
+      responses:
+        '202':
+          description: Approval accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /governance/oracle/proposals/{proposalId}/execute:
+    post:
+      tags: [Governance]
+      summary: Execute oracle update proposal
+      operationId: executeOracleUpdate
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ProposalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceMutationRequest'
+      responses:
+        '202':
+          description: Execution accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /governance/oracle/proposals/{proposalId}/cancel-expired:
+    post:
+      tags: [Governance]
+      summary: Cancel expired oracle update proposal
+      operationId: cancelExpiredOracleUpdateProposal
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ProposalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceMutationRequest'
+      responses:
+        '202':
+          description: Cancellation accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /compliance/decisions:
+    post:
+      tags: [Compliance]
+      summary: Create compliance decision record
+      description: |
+        Contract-first endpoint for compliance decisioning that gates oracle progression.
+
+        This endpoint is grounded in `docs/runbooks/compliance-boundary-kyb-kyt-sanctions.md`, which defines fail-closed enforcement and audit requirements, but there is no in-repo compliance runtime yet.
+
+        UNRESOLVED DECISION: should the gateway own the compliance decision ledger directly, or should it persist an append-only mirror of an external compliance system of record?
+      operationId: createComplianceDecision
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceDecisionCreateRequest'
+      responses:
+        '201':
+          description: Decision recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceDecisionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /compliance/decisions/{decisionId}:
+    get:
+      tags: [Compliance]
+      summary: Get compliance decision by id
+      operationId: getComplianceDecision
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - name: decisionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Compliance decision detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceDecisionResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /compliance/trades/{tradeId}:
+    get:
+      tags: [Compliance]
+      summary: Get current compliance status for a trade
+      operationId: getTradeComplianceStatus
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/TradeId'
+      responses:
+        '200':
+          description: Current compliance state for the trade.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceTradeStatusResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /compliance/trades/{tradeId}/decisions:
+    get:
+      tags: [Compliance]
+      summary: List compliance decisions for a trade
+      operationId: listTradeComplianceDecisions
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/TradeId'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Compliance decision history.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceDecisionListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /compliance/trades/{tradeId}/block-oracle-progression:
+    post:
+      tags: [Compliance]
+      summary: Block oracle progression for a trade
+      description: |
+        Contract-first off-chain control that prevents the oracle worker from progressing a trade.
+
+        This does not change on-chain trade state directly. It is an operator/compliance control that must be consumed by the gateway/oracle orchestration path.
+
+        UNRESOLVED DECISION: should blocked-trade state live in the future gateway database, in the oracle service store, or in a separate control-plane store?
+      operationId: blockOracleProgression
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/TradeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceOperationalControlRequest'
+      responses:
+        '202':
+          description: Block accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceTradeStatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+  /compliance/trades/{tradeId}/resume-oracle-progression:
+    post:
+      tags: [Compliance]
+      summary: Resume oracle progression for a trade
+      description: |
+        Contract-first off-chain control that clears a prior oracle progression block.
+
+        UNRESOLVED DECISION: should resume require the same approval policy as emergency override, or is a single authorized operator sufficient when the most recent decision is `ALLOW`?
+      operationId: resumeOracleProgression
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/XCorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/TradeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceOperationalControlRequest'
+      responses:
+        '202':
+          description: Resume accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceTradeStatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+components:
+  securitySchemes:
+    sessionBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: session-id
+      description: |
+        Session bearer token issued by the in-repo auth service (`/api/auth/v1/login`) after wallet-signature login.
+
+        Repo evidence:
+        - `auth/src/api/controller.ts`
+        - `auth/src/middleware/middleware.ts`
+        - `auth/README.md`
+
+        The gateway must resolve the session subject and enforce endpoint-level role policy. Governance and compliance mutations require operator/admin authorization.
+  parameters:
+    XRequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Client-generated request identifier for end-to-end traceability. Gateway should generate one if absent.
+    XCorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Stable correlation identifier linking dashboard actions to downstream service logs, trade events, and incident artifacts.
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+      description: Required for all mutation endpoints to deduplicate repeated operator intent.
+    ProposalId:
+      name: proposalId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+      description: On-chain governance proposal identifier.
+    TradeId:
+      name: tradeId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Web3layer trade identifier used across chain events, indexer evidence, and operator workflows.
+  responses:
+    BadRequestError:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnauthorizedError:
+      description: Authentication failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ForbiddenError:
+      description: Authenticated subject lacks required role or scope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFoundError:
+      description: Requested resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ConflictError:
+      description: Request conflicts with current state or prior idempotent request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    HealthResponse:
+      type: object
+      required: [success, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          required: [service, status]
+          properties:
+            service:
+              type: string
+              const: dashboard-gateway
+            status:
+              type: string
+              const: ok
+        timestamp:
+          type: string
+          format: date-time
+    ReadyResponse:
+      type: object
+      required: [success, data, timestamp]
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          required: [service, ready]
+          properties:
+            service:
+              type: string
+              const: dashboard-gateway
+            ready:
+              type: boolean
+            dependencies:
+              type: array
+              items:
+                type: object
+                required: [name, status]
+                properties:
+                  name:
+                    type: string
+                  status:
+                    type: string
+                    enum: [ok, degraded, unavailable]
+                  detail:
+                    type: string
+        timestamp:
+          type: string
+          format: date-time
+    VersionResponse:
+      type: object
+      required: [success, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          required: [service, version, commitSha, buildTime]
+          properties:
+            service:
+              type: string
+              const: dashboard-gateway
+            version:
+              type: string
+            commitSha:
+              type: string
+            buildTime:
+              type: string
+              format: date-time
+            sourceRepo:
+              type: string
+              const: Agroasys.Web3layer
+        timestamp:
+          type: string
+          format: date-time
+    ErrorResponse:
+      type: object
+      required: [success, error, timestamp]
+      properties:
+        success:
+          type: boolean
+          const: false
+        error:
+          $ref: '#/components/schemas/ErrorObject'
+        timestamp:
+          type: string
+          format: date-time
+    ErrorObject:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          examples: [AUTH_UNAUTHORIZED, GOV_STATE_CONFLICT, CMP_PROVIDER_UNAVAILABLE]
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        traceId:
+          type: string
+        requestId:
+          type: string
+    EvidenceLink:
+      type: object
+      required: [kind, uri]
+      properties:
+        kind:
+          type: string
+          enum: [runbook, incident, ticket, tx, event, document, log, dashboard, other]
+        uri:
+          type: string
+        note:
+          type: string
+    MutationAuditInput:
+      type: object
+      required: [reason, evidenceLinks, ticketRef]
+      properties:
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 2000
+        evidenceLinks:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/EvidenceLink'
+        ticketRef:
+          type: string
+          minLength: 2
+          maxLength: 128
+    MutationAuditRecord:
+      allOf:
+        - $ref: '#/components/schemas/MutationAuditInput'
+        - type: object
+          required: [actorSessionId, actorWallet, actorRole, createdAt, requestedBy]
+          properties:
+            actorSessionId:
+              type: string
+            actorWallet:
+              type: string
+            actorRole:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+            requestedBy:
+              type: string
+            approvedBy:
+              type: array
+              items:
+                type: string
+    GovernanceActionCategory:
+      type: string
+      enum:
+        - pause
+        - unpause
+        - claims_pause
+        - claims_unpause
+        - treasury_sweep
+        - treasury_payout_receiver_update
+        - oracle_disable_emergency
+        - oracle_update
+    GovernanceActionStatus:
+      type: string
+      enum:
+        - requested
+        - pending_approvals
+        - approved
+        - executed
+        - cancelled
+        - expired
+        - failed
+    GovernanceStatus:
+      type: object
+      required:
+        - paused
+        - claimsPaused
+        - oracleActive
+        - oracleAddress
+        - treasuryAddress
+        - treasuryPayoutAddress
+        - governanceApprovalsRequired
+        - governanceTimelockSeconds
+      properties:
+        paused:
+          type: boolean
+        claimsPaused:
+          type: boolean
+        oracleActive:
+          type: boolean
+        oracleAddress:
+          type: string
+        treasuryAddress:
+          type: string
+        treasuryPayoutAddress:
+          type: string
+        governanceApprovalsRequired:
+          type: integer
+          minimum: 1
+        governanceTimelockSeconds:
+          type: integer
+          minimum: 0
+          description: Derived from on-chain `governanceTimelock`.
+        requiredAdminCount:
+          type: integer
+          minimum: 1
+          description: Current required admin quorum for unpause flow.
+        hasActiveUnpauseProposal:
+          type: boolean
+        activeUnpauseApprovals:
+          type: integer
+          minimum: 0
+        activeOracleProposalIds:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+        activeTreasuryPayoutReceiverProposalIds:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+    GovernanceStatusResponse:
+      type: object
+      required: [success, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/GovernanceStatus'
+        timestamp:
+          type: string
+          format: date-time
+    GovernanceAction:
+      type: object
+      required:
+        - actionId
+        - category
+        - status
+        - contractMethod
+        - audit
+        - createdAt
+      properties:
+        actionId:
+          type: string
+        proposalId:
+          type: integer
+          minimum: 0
+          nullable: true
+        category:
+          $ref: '#/components/schemas/GovernanceActionCategory'
+        status:
+          $ref: '#/components/schemas/GovernanceActionStatus'
+        contractMethod:
+          type: string
+        txHash:
+          type: string
+          nullable: true
+        extrinsicHash:
+          type: string
+          nullable: true
+        blockNumber:
+          type: integer
+          nullable: true
+        tradeId:
+          type: string
+          nullable: true
+        chainId:
+          type: string
+          nullable: true
+        targetAddress:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        executedAt:
+          type: string
+          format: date-time
+          nullable: true
+        audit:
+          $ref: '#/components/schemas/MutationAuditRecord'
+    GovernanceActionResponse:
+      type: object
+      required: [success, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/GovernanceAction'
+        timestamp:
+          type: string
+          format: date-time
+    GovernanceActionListResponse:
+      type: object
+      required: [success, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/GovernanceAction'
+            nextCursor:
+              type: string
+              nullable: true
+        timestamp:
+          type: string
+          format: date-time
+    GovernanceMutationRequest:
+      type: object
+      required: [audit]
+      properties:
+        audit:
+          $ref: '#/components/schemas/MutationAuditInput'
+    GovernanceActionAcceptedResponse:
+      type: object
+      required: [success, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          required: [actionId, category, status, acceptedAt]
+          properties:
+            actionId:
+              type: string
+            proposalId:
+              type: integer
+              minimum: 0
+              nullable: true
+            category:
+              $ref: '#/components/schemas/GovernanceActionCategory'
+            status:
+              $ref: '#/components/schemas/GovernanceActionStatus'
+            acceptedAt:
+              type: string
+              format: date-time
+        timestamp:
+          type: string
+          format: date-time
+    TreasuryPayoutReceiverProposalRequest:
+      type: object
+      required: [newPayoutReceiver, audit]
+      properties:
+        newPayoutReceiver:
+          type: string
+          description: Proposed new payout receiver address.
+        audit:
+          $ref: '#/components/schemas/MutationAuditInput'
+    OracleUpdateProposalRequest:
+      type: object
+      required: [newOracleAddress, audit]
+      properties:
+        newOracleAddress:
+          type: string
+        audit:
+          $ref: '#/components/schemas/MutationAuditInput'
+    ComplianceDecisionType:
+      type: string
+      enum: [KYB, KYT, SANCTIONS]
+    ComplianceDecisionResult:
+      type: string
+      enum: [ALLOW, DENY, HOLD, OVERRIDE]
+    ComplianceBlockState:
+      type: string
+      enum: [not_blocked, blocked, resume_pending]
+    ComplianceDecisionCreateRequest:
+      type: object
+      required:
+        - tradeId
+        - decisionType
+        - result
+        - reasonCode
+        - provider
+        - providerRef
+        - correlationId
+        - audit
+      properties:
+        tradeId:
+          type: string
+        decisionType:
+          $ref: '#/components/schemas/ComplianceDecisionType'
+        result:
+          $ref: '#/components/schemas/ComplianceDecisionResult'
+        reasonCode:
+          type: string
+          description: Stable code such as `CMP_PROVIDER_UNAVAILABLE` or `CMP_SANCTIONS_MATCH`.
+        provider:
+          type: string
+        providerRef:
+          type: string
+        subjectId:
+          type: string
+        subjectType:
+          type: string
+        riskLevel:
+          type: string
+          enum: [low, medium, high, critical]
+        overrideWindowEndsAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Required when `result=OVERRIDE`.
+        correlationId:
+          type: string
+        audit:
+          $ref: '#/components/schemas/MutationAuditInput'
+    ComplianceDecision:
+      type: object
+      required:
+        - decisionId
+        - tradeId
+        - decisionType
+        - result
+        - reasonCode
+        - provider
+        - providerRef
+        - correlationId
+        - decidedAt
+        - audit
+      properties:
+        decisionId:
+          type: string
+        tradeId:
+          type: string
+        decisionType:
+          $ref: '#/components/schemas/ComplianceDecisionType'
+        result:
+          $ref: '#/components/schemas/ComplianceDecisionResult'
+        reasonCode:
+          type: string
+        provider:
+          type: string
+        providerRef:
+          type: string
+        subjectId:
+          type: string
+          nullable: true
+        subjectType:
+          type: string
+          nullable: true
+        riskLevel:
+          type: string
+          nullable: true
+        correlationId:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+        overrideWindowEndsAt:
+          type: string
+          format: date-time
+          nullable: true
+        blockState:
+          $ref: '#/components/schemas/ComplianceBlockState'
+        audit:
+          $ref: '#/components/schemas/MutationAuditRecord'
+    ComplianceDecisionResponse:
+      type: object
+      required: [success, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/ComplianceDecision'
+        timestamp:
+          type: string
+          format: date-time
+    ComplianceDecisionListResponse:
+      type: object
+      required: [success, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/ComplianceDecision'
+            nextCursor:
+              type: string
+              nullable: true
+        timestamp:
+          type: string
+          format: date-time
+    ComplianceTradeStatus:
+      type: object
+      required:
+        - tradeId
+        - currentResult
+        - oracleProgressionBlocked
+        - latestDecisionId
+        - updatedAt
+      properties:
+        tradeId:
+          type: string
+        currentResult:
+          $ref: '#/components/schemas/ComplianceDecisionResult'
+        oracleProgressionBlocked:
+          type: boolean
+        blockState:
+          $ref: '#/components/schemas/ComplianceBlockState'
+        latestDecisionId:
+          type: string
+        latestReasonCode:
+          type: string
+        latestProvider:
+          type: string
+        latestCorrelationId:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    ComplianceTradeStatusResponse:
+      type: object
+      required: [success, data, timestamp]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/ComplianceTradeStatus'
+        timestamp:
+          type: string
+          format: date-time
+    ComplianceOperationalControlRequest:
+      type: object
+      required: [reasonCode, audit]
+      properties:
+        reasonCode:
+          type: string
+        audit:
+          $ref: '#/components/schemas/MutationAuditInput'
+        decisionId:
+          type: string
+          nullable: true
+          description: Associated decision record when one exists.

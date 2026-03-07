@@ -188,6 +188,11 @@ Program and governance:
 - `docs/runbooks/non-custodial-pilot-user-guide.md`
 - `docs/runbooks/pilot-kpi-report-template.md`
 
+Dashboard / Ops API:
+
+- `docs/api/web3layer-dashboard-gateway.openapi.yml`
+- `docs/runbooks/dashboard-api-gateway-boundary.md`
+
 Community demo:
 
 - `docs/runbooks/demo/community-demo-checklist.md`
