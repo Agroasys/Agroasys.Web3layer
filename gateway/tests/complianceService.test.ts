@@ -17,7 +17,7 @@ import { RequestContext } from '../src/middleware/requestContext';
 
 function buildPrincipal(): GatewayPrincipal {
   return {
-    sessionId: 'sess-admin',
+    sessionReference: 'sha256:sess-admin',
     gatewayRoles: ['operator:read', 'operator:write'],
     writeEnabled: true,
     session: {
@@ -123,6 +123,41 @@ describe('compliance service', () => {
       'compliance.decision.recorded',
       'compliance.decision.recorded',
     ]);
+  });
+
+  test('assigns monotonic decision timestamps for same-trade writes', async () => {
+    const { service } = buildService();
+    const principal = buildPrincipal();
+    const requestContext = buildRequestContext();
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+
+    try {
+      const first = await service.createDecision({
+        ...validateComplianceDecisionCreateRequest(buildDecisionInput({
+          tradeId: 'TRD-2',
+          correlationId: 'corr-a',
+        })),
+        principal,
+        requestContext,
+        routePath: '/api/dashboard-gateway/v1/compliance/decisions',
+        idempotencyKey: 'idem-a',
+      });
+
+      const second = await service.createDecision({
+        ...validateComplianceDecisionCreateRequest(buildDecisionInput({
+          tradeId: 'TRD-2',
+          correlationId: 'corr-b',
+        })),
+        principal,
+        requestContext: { ...requestContext, requestId: 'req-b', correlationId: 'corr-b' },
+        routePath: '/api/dashboard-gateway/v1/compliance/decisions',
+        idempotencyKey: 'idem-b',
+      });
+
+      expect(Date.parse(second.decidedAt)).toBeGreaterThan(Date.parse(first.decidedAt));
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   test('requires an ALLOW decision before resuming oracle progression', async () => {

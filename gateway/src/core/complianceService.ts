@@ -141,7 +141,7 @@ function buildAuditRecord(
     reason: audit.reason,
     evidenceLinks: audit.evidenceLinks,
     ticketRef: audit.ticketRef,
-    actorSessionId: principal.sessionId,
+    actorSessionId: principal.sessionReference,
     actorWallet: principal.session.walletAddress,
     actorRole: principal.session.role,
     createdAt,
@@ -282,6 +282,19 @@ export class ComplianceService {
     private readonly writeStore: ComplianceWriteStore,
   ) {}
 
+  private async nextDecisionTimestamp(tradeId: string): Promise<string> {
+    const latestDecision = await this.store.getLatestDecision(tradeId);
+    const nowMs = Date.now();
+
+    if (!latestDecision) {
+      return new Date(nowMs).toISOString();
+    }
+
+    const latestMs = Date.parse(latestDecision.decidedAt);
+    const decidedAtMs = Number.isNaN(latestMs) ? nowMs : Math.max(nowMs, latestMs + 1);
+    return new Date(decidedAtMs).toISOString();
+  }
+
   async getDecision(decisionId: string): Promise<ComplianceDecisionRecord | null> {
     return this.store.getDecision(decisionId);
   }
@@ -295,7 +308,11 @@ export class ComplianceService {
   }
 
   async createDecision(input: ComplianceDecisionCreateInput): Promise<ComplianceDecisionRecord> {
-    const decidedAt = new Date().toISOString();
+    const [decidedAt, existingBlock] = await Promise.all([
+      this.nextDecisionTimestamp(input.tradeId),
+      this.store.getOracleProgressionBlock(input.tradeId),
+    ]);
+
     const decision: ComplianceDecisionRecord = {
       decisionId: randomUUID(),
       tradeId: input.tradeId,
@@ -310,7 +327,7 @@ export class ComplianceService {
       correlationId: input.correlationId,
       decidedAt,
       overrideWindowEndsAt: input.overrideWindowEndsAt,
-      blockState: (await this.store.getOracleProgressionBlock(input.tradeId))?.blockState ?? 'not_blocked',
+      blockState: existingBlock?.blockState ?? 'not_blocked',
       audit: buildAuditRecord(input.audit, input.principal, decidedAt),
     };
 
