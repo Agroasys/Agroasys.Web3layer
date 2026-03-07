@@ -60,6 +60,7 @@ function createReadStore(): GovernanceActionStore {
     get: jest.fn(),
     save: jest.fn(),
     list: jest.fn(),
+    listActiveProposalIds: jest.fn(),
   };
 }
 

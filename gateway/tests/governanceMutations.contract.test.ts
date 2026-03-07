@@ -20,7 +20,6 @@ import {
   GovernanceStatusSnapshot,
   UnpauseProposalState,
 } from '../src/core/governanceStatusService';
-import { createAuthenticationMiddleware } from '../src/middleware/auth';
 import { loadOpenApiSpec } from '../src/openapi/spec';
 import { createSchemaValidator, hasOperation } from '../src/openapi/contract';
 import { createGovernanceMutationRouter } from '../src/routes/governanceMutations';

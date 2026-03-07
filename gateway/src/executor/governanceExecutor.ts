@@ -13,7 +13,6 @@ import {
 import {
   GovernanceMutationPreflightReader,
   GovernanceProposalState,
-  UnpauseProposalState,
 } from '../core/governanceStatusService';
 import { GovernanceWriteStore } from '../core/governanceWriteStore';
 

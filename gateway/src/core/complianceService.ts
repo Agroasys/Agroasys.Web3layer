@@ -20,7 +20,7 @@ import { GovernanceMutationAuditInput } from './governanceMutationService';
 import { GatewayPrincipal } from '../middleware/auth';
 import { RequestContext } from '../middleware/requestContext';
 import { GatewayError } from '../errors';
-import { GovernanceActionAuditRecord, EvidenceLink } from './governanceStore';
+import { EvidenceLink } from './governanceStore';
 import { ComplianceWriteStore } from './complianceWriteStore';
 
 const VALID_EVIDENCE_KINDS = new Set<EvidenceLink['kind']>([
