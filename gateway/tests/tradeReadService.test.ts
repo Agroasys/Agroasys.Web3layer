@@ -192,4 +192,20 @@ describe('trade read service', () => {
       message: 'Indexer returned invalid event.arrivalTimestamp timestamp',
     });
   });
+
+  test('fails readiness when the indexer readiness payload is malformed', async () => {
+    const complianceStore = createInMemoryComplianceStore([]);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { trades: { tradeId: 'TRD-9003' } } }),
+    } as Response);
+
+    const service = new TradeReadService('http://127.0.0.1:4350/graphql', 5000, complianceStore);
+
+    await expect(service.checkReadiness()).rejects.toMatchObject({
+      code: 'UPSTREAM_UNAVAILABLE',
+      statusCode: 502,
+      message: 'Indexer returned an invalid GraphQL payload',
+    });
+  });
 });

@@ -362,7 +362,11 @@ export class TradeReadService implements TradeReadReader {
   ) {}
 
   async checkReadiness(): Promise<void> {
-    await this.executeQuery('DashboardGatewayTradeReadiness', 'query DashboardGatewayTradeReadiness { trades(limit: 1) { tradeId } }');
+    const response = await this.executeQuery(
+      'DashboardGatewayTradeReadiness',
+      'query DashboardGatewayTradeReadiness { trades(limit: 1) { tradeId } }',
+    );
+    readTradesArray(response);
   }
 
   async listTrades(limit = 100, offset = 0): Promise<DashboardTradeRecord[]> {
