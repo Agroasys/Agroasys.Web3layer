@@ -88,6 +88,26 @@ function assertIsoTimestamp(value: string, field: string): string {
   return new Date(value).toISOString();
 }
 
+function assertUnixSecondsTimestamp(value: string, field: string): string {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds)) {
+    throw new GatewayError(502, 'UPSTREAM_UNAVAILABLE', `Indexer returned invalid ${field} timestamp`, {
+      field,
+      value,
+    });
+  }
+
+  const timestamp = new Date(seconds * 1000);
+  if (Number.isNaN(timestamp.getTime())) {
+    throw new GatewayError(502, 'UPSTREAM_UNAVAILABLE', `Indexer returned invalid ${field} timestamp`, {
+      field,
+      value,
+    });
+  }
+
+  return timestamp.toISOString();
+}
+
 function parseHash(txHash?: string | null, extrinsicHash?: string | null): string | undefined {
   const candidate = txHash ?? extrinsicHash ?? undefined;
   return candidate && candidate.trim().length > 0 ? candidate : undefined;
@@ -196,7 +216,9 @@ function mapEventDetail(event: TradeEventGraphQlRecord): string | undefined {
     case 'PlatformFeesPaidStage1':
       return `Platform fees settled: ${asUsdcNumber(event.paidPlatformFees ?? '0', 'event.paidPlatformFees').toLocaleString()} USDC.`;
     case 'ArrivalConfirmed':
-      return event.arrivalTimestamp ? `Arrival confirmed at ${new Date(Number(event.arrivalTimestamp) * 1000).toISOString()}.` : 'Arrival milestone confirmed by oracle.';
+      return event.arrivalTimestamp
+        ? `Arrival confirmed at ${assertUnixSecondsTimestamp(event.arrivalTimestamp, 'event.arrivalTimestamp')}.`
+        : 'Arrival milestone confirmed by oracle.';
     case 'FinalTrancheReleased':
       return `Final tranche released to ${event.finalRecipient ?? 'supplier'} for ${asUsdcNumber(event.finalTranche ?? '0', 'event.finalTranche').toLocaleString()} USDC.`;
     case 'DisputeOpenedByBuyer':
@@ -238,6 +260,14 @@ function parseGraphQlResponse(payload: unknown): TradesGraphQlResponse {
   }
 
   return payload as TradesGraphQlResponse;
+}
+
+function readTradesArray(payload: TradesGraphQlResponse): TradeGraphQlRecord[] {
+  if (!payload.data || typeof payload.data !== 'object' || !('trades' in payload.data) || !Array.isArray(payload.data.trades)) {
+    throw new GatewayError(502, 'UPSTREAM_UNAVAILABLE', 'Indexer returned an invalid GraphQL payload');
+  }
+
+  return payload.data.trades;
 }
 
 const listTradesQuery = `
@@ -337,13 +367,13 @@ export class TradeReadService implements TradeReadReader {
 
   async listTrades(limit = 100, offset = 0): Promise<DashboardTradeRecord[]> {
     const response = await this.executeQuery('DashboardTrades', listTradesQuery, { limit, offset });
-    const trades = response.data?.trades ?? [];
+    const trades = readTradesArray(response);
     return Promise.all(trades.map((trade) => this.mapTradeRecord(trade)));
   }
 
   async getTrade(tradeId: string): Promise<DashboardTradeRecord | null> {
     const response = await this.executeQuery('DashboardTradeDetail', tradeDetailQuery, { tradeId });
-    const trade = response.data?.trades?.[0];
+    const trade = readTradesArray(response)[0];
     if (!trade) {
       return null;
     }

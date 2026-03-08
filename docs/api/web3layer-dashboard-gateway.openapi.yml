@@ -112,6 +112,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TradeListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '403':
@@ -132,6 +134,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TradeResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '403':

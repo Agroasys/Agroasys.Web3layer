@@ -135,4 +135,61 @@ describe('trade read service', () => {
       statusCode: 502,
     });
   });
+
+  test('treats malformed trade arrays as upstream unavailability', async () => {
+    const complianceStore = createInMemoryComplianceStore([]);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { trades: { tradeId: 'TRD-9001' } } }),
+    } as Response);
+
+    const service = new TradeReadService('http://127.0.0.1:4350/graphql', 5000, complianceStore);
+
+    await expect(service.listTrades()).rejects.toMatchObject({
+      code: 'UPSTREAM_UNAVAILABLE',
+      statusCode: 502,
+      message: 'Indexer returned an invalid GraphQL payload',
+    });
+  });
+
+  test('treats invalid arrival timestamps as upstream unavailability', async () => {
+    const complianceStore = createInMemoryComplianceStore([]);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          trades: [
+            {
+              tradeId: 'TRD-9002',
+              buyer: 'buyer@demo',
+              supplier: 'supplier@demo',
+              status: 'ARRIVAL_CONFIRMED',
+              totalAmountLocked: '125000000000',
+              logisticsAmount: '3000000000',
+              platformFeesAmount: '1250000000',
+              ricardianHash: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+              createdAt: '2026-03-07T09:00:00.000Z',
+              events: [
+                {
+                  eventName: 'ArrivalConfirmed',
+                  timestamp: '2026-03-07T10:00:00.000Z',
+                  txHash: null,
+                  extrinsicHash: '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+                  arrivalTimestamp: 'invalid-seconds',
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    } as Response);
+
+    const service = new TradeReadService('http://127.0.0.1:4350/graphql', 5000, complianceStore);
+
+    await expect(service.listTrades()).rejects.toMatchObject({
+      code: 'UPSTREAM_UNAVAILABLE',
+      statusCode: 502,
+      message: 'Indexer returned invalid event.arrivalTimestamp timestamp',
+    });
+  });
 });
