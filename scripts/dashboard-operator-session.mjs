@@ -1,9 +1,16 @@
 #!/usr/bin/env node
 import process from "node:process";
 import { Wallet } from "ethers";
+import {
+  assertExpectedSession,
+  DEFAULT_SESSION_OUTPUT_FILE,
+  DEFAULT_TIMEOUT_MS,
+  maskSessionId,
+  normalizeTimeoutMs,
+  writeSessionArtifact,
+} from "./lib/dashboard-operator-session.mjs";
 
 const DEFAULT_AUTH_BASE_URL = "http://127.0.0.1:3005/api/auth/v1";
-const DEFAULT_TIMEOUT_MS = 8000;
 
 function fail(message) {
   console.error(`ERROR: ${message}`);
@@ -41,7 +48,7 @@ function buildUrl(baseUrl, pathname, query = {}) {
 
 async function fetchJson(url, options = {}) {
   const controller = new AbortController();
-  const timeoutMs = Number(optionalEnv("DASHBOARD_SMOKE_REQUEST_TIMEOUT_MS", String(DEFAULT_TIMEOUT_MS)));
+  const timeoutMs = normalizeTimeoutMs(optionalEnv("DASHBOARD_SMOKE_REQUEST_TIMEOUT_MS", String(DEFAULT_TIMEOUT_MS)));
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
@@ -72,6 +79,7 @@ async function fetchJson(url, options = {}) {
 
 async function main() {
   const authBaseUrl = optionalEnv("DASHBOARD_SMOKE_AUTH_BASE_URL", DEFAULT_AUTH_BASE_URL);
+  const outputPath = optionalEnv("DASHBOARD_SMOKE_SESSION_OUTPUT_FILE", DEFAULT_SESSION_OUTPUT_FILE);
   const privateKey = requiredEnv("DASHBOARD_SMOKE_PRIVATE_KEY");
   const role = optionalEnv("DASHBOARD_SMOKE_ROLE", "admin");
   const orgId = optionalEnv("DASHBOARD_SMOKE_ORG_ID", "");
@@ -109,16 +117,30 @@ async function main() {
     },
   });
   const session = sessionEnvelope?.data;
-  if (!session?.walletAddress || !session?.role) {
-    fail(`auth session payload missing required fields: ${JSON.stringify(sessionEnvelope)}`);
+  try {
+    assertExpectedSession({ session, walletAddress, role });
+  } catch (error) {
+    fail(`${error instanceof Error ? error.message : String(error)}: ${JSON.stringify(sessionEnvelope)}`);
   }
+
+  writeSessionArtifact({
+    outputPath,
+    artifact: {
+      authBaseUrl,
+      walletAddress,
+      sessionId: login.sessionId,
+      expiresAt: login.expiresAt,
+      session,
+    },
+  });
 
   process.stdout.write(
     `${JSON.stringify(
       {
         authBaseUrl,
         walletAddress,
-        sessionId: login.sessionId,
+        sessionFile: outputPath,
+        sessionIdPreview: maskSessionId(login.sessionId),
         expiresAt: login.expiresAt,
         session,
       },
