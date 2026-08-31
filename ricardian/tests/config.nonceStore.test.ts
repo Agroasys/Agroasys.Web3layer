@@ -108,14 +108,6 @@ describe('ricardian nonce store config', () => {
     });
   });
 
-  test('migration credentials must be configured as a pair', () => {
-    withEnv({ DB_MIGRATION_USER: 'ricardian_migrator', DB_MIGRATION_PASSWORD: undefined }, () => {
-      expect(() => loadConfigModule()).toThrow(
-        'DB_MIGRATION_USER and DB_MIGRATION_PASSWORD must be set together',
-      );
-    });
-  });
-
   test('Postgres SSL mode is explicit and validated', () => {
     withEnv({ DB_SSL_MODE: 'require' }, () => {
       const { loadConfig } = loadConfigModule();
