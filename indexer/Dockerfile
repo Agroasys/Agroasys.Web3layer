@@ -24,6 +24,7 @@ COPY treasury/package.json treasury/package.json
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
 COPY indexer indexer
+COPY shared-db shared-db
 
 RUN pnpm --filter indexer run build
 
@@ -71,7 +72,9 @@ RUN apk add --no-cache --virtual .build-deps python3 make g++ \
 COPY --from=builder /app/indexer/package.json /app/indexer/package.json
 COPY --from=builder /app/indexer/lib /app/indexer/lib
 COPY --from=builder /app/indexer/db /app/indexer/db
+COPY --from=builder /app/indexer/migrate.js /app/indexer/migrate.js
 COPY --from=builder /app/indexer/schema.graphql /app/indexer/schema.graphql
+COPY --from=builder /app/shared-db /app/shared-db
 
 RUN addgroup -S agro && adduser -S agro -G agro \
   && chown -R agro:agro /app
