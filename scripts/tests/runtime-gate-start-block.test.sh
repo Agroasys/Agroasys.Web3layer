@@ -11,6 +11,8 @@ bin_dir="$tmp_dir/bin"
 
 mkdir -p "$workspace_dir/scripts" "$bin_dir"
 cp "$ROOT_DIR/scripts/tests/fixtures/runtime.env" "$workspace_dir/.env.runtime"
+sed -i.bak 's|^STAGING_E2E_REAL_GATE_RPC_URL=.*|STAGING_E2E_REAL_GATE_RPC_URL=http://rpc.mock|' "$workspace_dir/.env.runtime"
+rm -f "$workspace_dir/.env.runtime.bak"
 
 cat > "$workspace_dir/scripts/cotsel.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -42,7 +44,6 @@ output="$(
   cd "$workspace_dir"
   PATH="$bin_dir:$PATH" \
     STAGING_E2E_REAL_GATE_ASSERT_CONFIG_ONLY=true \
-    STAGING_E2E_REAL_GATE_RPC_URL=http://rpc.mock \
     "$SCRIPT"
 )"
 

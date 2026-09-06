@@ -9,7 +9,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 cp "$ROOT_DIR/scripts/tests/fixtures/runtime.env" "$tmp_dir/.env.runtime"
 
-sed -i.bak '/^ORACLE_RATE_LIMIT_REDIS_URL=/d' "$tmp_dir/.env.runtime"
+sed -i.bak 's|^ORACLE_RATE_LIMIT_REDIS_URL=.*|ORACLE_RATE_LIMIT_REDIS_URL=|' "$tmp_dir/.env.runtime"
 rm -f "$tmp_dir/.env.runtime.bak"
 
 if (
@@ -26,7 +26,8 @@ if ! grep -q 'ORACLE_RATE_LIMIT_REDIS_URL is required when ORACLE_RATE_LIMIT_ENA
   exit 1
 fi
 
-echo 'ORACLE_RATE_LIMIT_REDIS_URL=redis://redis:6379' >> "$tmp_dir/.env.runtime"
+sed -i.bak 's|^ORACLE_RATE_LIMIT_REDIS_URL=.*|ORACLE_RATE_LIMIT_REDIS_URL=redis://redis:6379|' "$tmp_dir/.env.runtime"
+rm -f "$tmp_dir/.env.runtime.bak"
 
 (
   cd "$tmp_dir" &&

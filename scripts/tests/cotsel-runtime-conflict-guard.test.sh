@@ -34,9 +34,7 @@ chmod +x "$tmp_dir/scripts/cotsel.sh" \
   "$tmp_dir/scripts/validate-env.sh" \
   "$tmp_dir/scripts/runtime-gate.sh"
 
-cat > "$tmp_dir/.env.runtime" <<'EOF'
-POSTGRES_USER=postgres
-EOF
+cp "$ROOT_DIR/scripts/tests/fixtures/runtime.env" "$tmp_dir/.env.runtime"
 
 cat > "$tmp_dir/.env.infra" <<'EOF'
 POSTGRES_USER=infra
