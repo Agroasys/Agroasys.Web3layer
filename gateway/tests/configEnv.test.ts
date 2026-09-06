@@ -21,6 +21,7 @@ describe('gateway runtime env config', () => {
     withEnv(
       {
         NODE_ENV: 'production',
+        GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH: 'false',
         GATEWAY_SETTLEMENT_RUNTIME: 'base-sepolia',
         GATEWAY_RPC_URL: undefined,
         GATEWAY_CHAIN_ID: undefined,
@@ -135,6 +136,7 @@ describe('gateway runtime env config', () => {
     withEnv(
       {
         NODE_ENV: 'production',
+        GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH: 'false',
         GATEWAY_CONTRACT_ADDRESS_REQUIRED: 'false',
         GATEWAY_SETTLEMENT_RUNTIME: 'base-sepolia',
         GATEWAY_ESCROW_ADDRESS: undefined,
@@ -179,10 +181,10 @@ describe('gateway runtime env config', () => {
     withEnv(
       {
         NODE_ENV: 'production',
+        GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH: 'false',
         GATEWAY_SETTLEMENT_RUNTIME: 'base-sepolia',
         GATEWAY_RPC_URL: undefined,
         GATEWAY_CHAIN_ID: undefined,
-        GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH: 'false',
         GATEWAY_TREASURY_BASE_URL: 'http://127.0.0.1:3200',
         GATEWAY_TREASURY_SERVICE_API_KEY: undefined,
         GATEWAY_TREASURY_SERVICE_API_SECRET: undefined,
@@ -200,6 +202,7 @@ describe('gateway runtime env config', () => {
     withEnv(
       {
         NODE_ENV: 'production',
+        GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH: 'false',
         GATEWAY_SETTLEMENT_RUNTIME: 'base-sepolia',
         GATEWAY_RPC_URL: undefined,
         GATEWAY_RPC_FALLBACK_URLS: 'https://fallback.example.test',
@@ -248,6 +251,7 @@ describe('gateway runtime env config', () => {
     withEnv(
       {
         NODE_ENV: 'production',
+        GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH: 'false',
         GATEWAY_SETTLEMENT_RUNTIME: 'base-sepolia',
         GATEWAY_RPC_URL: undefined,
         GATEWAY_RPC_FALLBACK_URLS: 'https://fallback.example.test',
