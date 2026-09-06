@@ -12,4 +12,5 @@ contracts/foundry/out
 sdk/src/types/typechain-types
 indexer/src/model/generated
 docs/api/cotsel-dashboard-gateway.openapi.yml
+docs/api/cotsel-dashboard-gateway.bundled.openapi.yml
 .husky

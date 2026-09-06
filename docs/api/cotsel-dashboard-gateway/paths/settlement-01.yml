@@ -204,11 +204,13 @@ paths:
               $ref: '#/components/schemas/SettlementGaslessCreateTradeExecutionRequest'
       responses:
         '202':
-          description: Gasless create-trade execution submitted by Cotsel.
+          description: Gasless create-trade execution submitted, or the durable outcome of an earlier ambiguous attempt returned for the same idempotency key.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SettlementGaslessCreateTradeExecutionResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/SettlementGaslessCreateTradeExecutionResponse'
+                  - $ref: '#/components/schemas/GaslessFinancialOutcomeRecoveryResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -250,7 +252,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SettlementGaslessCreateTradeExecutionResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/SettlementGaslessCreateTradeExecutionResponse'
+                  - $ref: '#/components/schemas/GaslessFinancialOutcomeRecoveryResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -288,11 +292,13 @@ paths:
               $ref: '#/components/schemas/SettlementGaslessUserActionExecutionRequest'
       responses:
         '202':
-          description: Gasless user-action execution submitted by Cotsel.
+          description: Gasless user-action execution submitted, or the durable outcome of an earlier ambiguous attempt returned for the same idempotency key.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SettlementGaslessUserActionExecutionResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/SettlementGaslessUserActionExecutionResponse'
+                  - $ref: '#/components/schemas/GaslessFinancialOutcomeRecoveryResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -330,11 +336,13 @@ paths:
               $ref: '#/components/schemas/SettlementGaslessOperatorActionExecutionRequest'
       responses:
         '202':
-          description: Gasless operator-action execution submitted by Cotsel.
+          description: Gasless operator-action execution submitted, or the durable outcome of an earlier ambiguous attempt returned for the same idempotency key.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SettlementGaslessOperatorActionExecutionResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/SettlementGaslessOperatorActionExecutionResponse'
+                  - $ref: '#/components/schemas/GaslessFinancialOutcomeRecoveryResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -372,11 +380,13 @@ paths:
               $ref: '#/components/schemas/SponsoredWalletUsdcTransferRequest'
       responses:
         '202':
-          description: The sponsored USDC transfer was confirmed and receipt evidence was returned.
+          description: The sponsored USDC transfer was confirmed, or the durable outcome of an earlier ambiguous attempt was returned for the same idempotency key.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SponsoredWalletUsdcTransferResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/SponsoredWalletUsdcTransferResponse'
+                  - $ref: '#/components/schemas/GaslessFinancialOutcomeRecoveryResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
