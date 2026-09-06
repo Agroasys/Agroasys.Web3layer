@@ -13,7 +13,11 @@ const repositoryRoot = path.resolve(scriptDirectory, '../../..');
 const sourceDirectory = path.join(repositoryRoot, 'docs/api/cotsel-dashboard-gateway');
 const manifestPath = path.join(sourceDirectory, 'manifest.json');
 const indexPath = path.join(repositoryRoot, 'docs/api/cotsel-dashboard-gateway.openapi.yml');
-const bundlePath = path.join(
+const committedBundlePath = path.join(
+  repositoryRoot,
+  'docs/api/cotsel-dashboard-gateway.bundled.openapi.yml',
+);
+const runtimeBundlePath = path.join(
   repositoryRoot,
   'gateway/.generated/openapi/cotsel-dashboard-gateway.openapi.yml',
 );
@@ -188,10 +192,12 @@ function run() {
   }
   if (mode === '--write-bundle') {
     const rendered = renderDashboardGatewaySpec();
-    fs.mkdirSync(path.dirname(bundlePath), { recursive: true });
-    fs.writeFileSync(bundlePath, rendered);
+    fs.mkdirSync(path.dirname(runtimeBundlePath), { recursive: true });
+    fs.writeFileSync(committedBundlePath, rendered);
+    fs.writeFileSync(runtimeBundlePath, rendered);
     process.stdout.write(
-      `Wrote ${path.relative(repositoryRoot, bundlePath)} sha256=${digest(rendered)}\n`,
+      `Wrote ${path.relative(repositoryRoot, committedBundlePath)} and ` +
+        `${path.relative(repositoryRoot, runtimeBundlePath)} sha256=${digest(rendered)}\n`,
     );
     return;
   }
@@ -204,6 +210,13 @@ function run() {
   if (existingIndex !== expectedIndex) {
     throw new Error(
       'Dashboard gateway OpenAPI index is stale; run pnpm --filter gateway run openapi:index',
+    );
+  }
+  const expectedBundle = renderDashboardGatewaySpec();
+  const existingBundle = fs.readFileSync(committedBundlePath, 'utf8');
+  if (existingBundle !== expectedBundle) {
+    throw new Error(
+      'Committed dashboard gateway OpenAPI bundle is stale; run pnpm --filter gateway run openapi:bundle',
     );
   }
   const assembled = assembleDashboardGatewaySpec();

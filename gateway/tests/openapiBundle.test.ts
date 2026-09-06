@@ -28,14 +28,19 @@ describe('dashboard gateway OpenAPI bundle', () => {
     expect(index.startsWith('# MODULAR OPENAPI INDEX.')).toBe(true);
     expect(index.split('\n').length).toBeLessThanOrEqual(500);
 
-    const bundle = fs.readFileSync(
+    const committedBundle = fs.readFileSync(
+      path.join(repositoryRoot, 'docs/api/cotsel-dashboard-gateway.bundled.openapi.yml'),
+      'utf8',
+    );
+    const runtimeBundle = fs.readFileSync(
       path.join(repositoryRoot, 'gateway/.generated/openapi/cotsel-dashboard-gateway.openapi.yml'),
       'utf8',
     );
-    expect(bundle.startsWith('# GENERATED FILE. DO NOT EDIT DIRECTLY.')).toBe(true);
+    expect(committedBundle.startsWith('# GENERATED FILE. DO NOT EDIT DIRECTLY.')).toBe(true);
+    expect(runtimeBundle).toBe(committedBundle);
 
     const spec = loadOpenApiSpec();
     expect(Object.keys(spec.paths)).toHaveLength(60);
-    expect(Object.keys(spec.components?.schemas ?? {})).toHaveLength(207);
+    expect(Object.keys(spec.components?.schemas ?? {})).toHaveLength(208);
   });
 });

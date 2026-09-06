@@ -6,8 +6,12 @@ components:
         - pending
         - accepted
         - queued
+        - broadcast_unknown
+        - confirmation_pending
         - submitted
         - confirmed
+        - reverted
+        - replaced
         - failed
         - rejected
     SettlementReconciliationStatus:
@@ -31,8 +35,12 @@ components:
         - accepted
         - queued
         - simulation_completed
+        - broadcast_unknown
+        - confirmation_pending
         - submitted
         - confirmed
+        - reverted
+        - replaced
         - failed
         - rejected
         - reconciled

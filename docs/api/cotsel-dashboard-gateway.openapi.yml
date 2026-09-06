@@ -298,6 +298,7 @@ components:
     SettlementRicardianDocumentRegistrationRequest: {$ref: ./cotsel-dashboard-gateway/components/schemas-settlement-03.yml#/components/schemas/SettlementRicardianDocumentRegistrationRequest}
     SettlementRicardianDocumentRegistration: {$ref: ./cotsel-dashboard-gateway/components/schemas-settlement-03.yml#/components/schemas/SettlementRicardianDocumentRegistration}
     SettlementRicardianDocumentRegistrationResponse: {$ref: ./cotsel-dashboard-gateway/components/schemas-settlement-03.yml#/components/schemas/SettlementRicardianDocumentRegistrationResponse}
+    GaslessFinancialOutcomeRecoveryResponse: {$ref: ./cotsel-dashboard-gateway/components/schemas-settlement-04.yml#/components/schemas/GaslessFinancialOutcomeRecoveryResponse}
     ReconciliationRecord: {$ref: ./cotsel-dashboard-gateway/components/schemas-reconciliation-01.yml#/components/schemas/ReconciliationRecord}
     ReconciliationPagination: {$ref: ./cotsel-dashboard-gateway/components/schemas-reconciliation-01.yml#/components/schemas/ReconciliationPagination}
     ReconciliationListPayload: {$ref: ./cotsel-dashboard-gateway/components/schemas-reconciliation-01.yml#/components/schemas/ReconciliationListPayload}
