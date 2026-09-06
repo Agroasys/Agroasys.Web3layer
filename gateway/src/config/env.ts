@@ -268,12 +268,10 @@ export function loadConfig(): GatewayConfig {
     nodeEnv !== 'production',
   );
 
-  if (nodeEnv === 'production') {
-    assert(
-      !allowInsecureDownstreamAuth,
-      'GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH=true is not allowed when NODE_ENV=production',
-    );
-  }
+  assert(
+    nodeEnv !== 'production' || !allowInsecureDownstreamAuth,
+    'GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH=true is not allowed when NODE_ENV=production',
+  );
 
   assert(
     authBaseUrl.startsWith('http://') || authBaseUrl.startsWith('https://'),
