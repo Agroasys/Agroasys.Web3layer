@@ -116,6 +116,15 @@ test('rejects an unknown job result', () => {
   assert.match(result.failures[0].reason, /invalid or missing result/);
 });
 
+test('rejects every release-gate dependency that is not evaluated', () => {
+  const needs = makeNeeds();
+  needs['new-required-job'] = { result: 'failure' };
+  assert.throws(
+    () => evaluateReleaseGateNeeds(needs),
+    /release gate needs contains unevaluated jobs: new-required-job/,
+  );
+});
+
 test('command writes the release-gate report', () => {
   const reportPath = path.join(os.tmpdir(), `cotsel-release-gate-${process.pid}.txt`);
   const scriptPath = fileURLToPath(new URL('../evaluate-release-gate.mjs', import.meta.url));
