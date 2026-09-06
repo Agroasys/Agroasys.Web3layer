@@ -10,13 +10,10 @@ trap 'rm -rf "$tmp_dir"' EXIT
 state_dir="$tmp_dir/state"
 mkdir -p "$state_dir"
 
-# Hermetic workdir: a copy of the compose file plus a minimal .env.runtime with
-# notifications disabled, so the run does not depend on the ambient environment.
+# Hermetic workdir: a copy of the compose file plus the complete known-good
+# runtime fixture, so the run does not depend on the ambient environment.
 cp "$ROOT_DIR/docker-compose.services.yml" "$tmp_dir/docker-compose.services.yml"
-cat > "$tmp_dir/.env.runtime" <<'ENV'
-ORACLE_NOTIFICATIONS_ENABLED=false
-RECONCILIATION_NOTIFICATIONS_ENABLED=false
-ENV
+cp "$ROOT_DIR/scripts/tests/fixtures/runtime.env" "$tmp_dir/.env.runtime"
 
 cat > "$tmp_dir/docker" <<'EOF'
 #!/usr/bin/env bash

@@ -542,10 +542,7 @@ jobs:
       - name: Prepare CI gate env file
         run: |
           cp scripts/tests/fixtures/runtime.env .env.runtime
-          cat <<'EOF' >> .env.runtime
-          STAGING_E2E_REAL_DYNAMIC_START_BLOCK=false
-          STAGING_E2E_REAL_GATE_RPC_URL=
-          EOF
+          sed -i 's/^STAGING_E2E_REAL_DYNAMIC_START_BLOCK=.*/STAGING_E2E_REAL_DYNAMIC_START_BLOCK=false/' .env.runtime
 
       - name: Run staging gate path (CI-safe config mode)
         shell: bash
