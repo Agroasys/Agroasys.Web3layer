@@ -15,6 +15,19 @@ const developmentAuditAllowlist = new Map([
         'No patched release exists. The affected path is limited to development-only Hardhat tooling.',
     },
   ],
+  [
+    'GHSA-528h-pc64-c93x',
+    {
+      moduleName: 'stream-json',
+      severity: 'moderate',
+      versions: new Set(['1.9.1']),
+      patchedVersions: '>=3.5.0',
+      owner: 'Cotsel security maintainers',
+      expiresOn: '2026-10-31',
+      reason:
+        'The production audit is clean. This path is limited to the SDK development-only Web3Auth compatibility suite, and upstream jayson still requires stream-json 1.x.',
+    },
+  ],
 ]);
 
 function runPnpm(args) {
