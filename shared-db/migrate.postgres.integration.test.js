@@ -170,7 +170,13 @@ test(
       await pool.query(`CREATE ROLE cotsel_adoption_runtime NOLOGIN`);
       const baselineSql =
         'CREATE TABLE adoption_proof (id BIGINT PRIMARY KEY, value TEXT NOT NULL);';
+      const laterVersion = '202608310002';
+      const laterSql = "ALTER TABLE adoption_proof ADD COLUMN note TEXT DEFAULT 'preserved-note';";
       const expectedFingerprint = await fingerprintAfterSql(pool, baselineSql);
+      const expectedPrefixFingerprint = await fingerprintAfterSql(
+        pool,
+        `${baselineSql} ${laterSql}`,
+      );
       const fixture = createMigrationFixture(
         baselineSql,
         '202608310001',
@@ -178,9 +184,20 @@ test(
         true,
         true,
       );
+      const manifest = JSON.parse(fs.readFileSync(fixture.manifestPath, 'utf8'));
+      fs.writeFileSync(path.join(fixture.directory, `${laterVersion}.sql`), laterSql);
+      manifest.migrations.push({
+        version: laterVersion,
+        name: 'add_adoption_note',
+        file: `${laterVersion}.sql`,
+        sha256: sha256(laterSql),
+        schema_sha256: expectedPrefixFingerprint,
+      });
+      fs.writeFileSync(fixture.manifestPath, JSON.stringify(manifest));
 
       try {
         await pool.query(baselineSql);
+        await pool.query(laterSql);
         await pool.query(`INSERT INTO adoption_proof (id, value) VALUES (1, 'preserved')`);
         const relationBefore = await pool.query(
           `SELECT 'public.adoption_proof'::regclass::oid AS oid`,
@@ -218,11 +235,16 @@ test(
             trim(migration.schema_checksum) AS schema_checksum
           FROM cotsel_schema_migrations migration
           WHERE migration.service_name = 'adoption-test'
+          ORDER BY migration.version
         `);
+        assert.equal(proof.rows.length, 2);
         assert.equal(proof.rows[0].oid, relationBefore.rows[0].oid);
         assert.equal(proof.rows[0].value, 'preserved');
-        assert.equal(proof.rows[0].application_mode, 'adopted');
-        assert.equal(proof.rows[0].schema_checksum, expectedFingerprint);
+        assert.ok(proof.rows.every((row) => row.application_mode === 'adopted'));
+        assert.deepEqual(
+          proof.rows.map((row) => row.schema_checksum),
+          [expectedFingerprint, expectedPrefixFingerprint],
+        );
       } finally {
         await pool.end();
         fs.rmSync(fixture.directory, { recursive: true, force: true });

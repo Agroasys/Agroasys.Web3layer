@@ -346,6 +346,52 @@ test('baseline adoption records an equivalent existing schema without executing 
   assert.ok(!calls.some(({ sql }) => sql === 'CREATE TABLE example (id INTEGER PRIMARY KEY);'));
 });
 
+test('baseline adoption records the highest matching manifest prefix without executing DDL', async (t) => {
+  const fixture = createManifest();
+  t.after(() => fs.rmSync(fixture.directory, { recursive: true, force: true }));
+  const manifest = JSON.parse(fs.readFileSync(fixture.manifestPath, 'utf8'));
+  const laterVersion = '202608310002';
+  const laterSql = 'ALTER TABLE example ADD COLUMN value TEXT;';
+  fs.writeFileSync(path.join(fixture.directory, `${laterVersion}.sql`), laterSql);
+  manifest.migrations[0].adopt_existing_schema = true;
+  manifest.migrations[0].schema_sha256 = '0'.repeat(64);
+  manifest.migrations.push({
+    version: laterVersion,
+    name: 'add_value',
+    file: `${laterVersion}.sql`,
+    sha256: sha256(laterSql),
+    schema_sha256: schemaChecksum,
+  });
+  fs.writeFileSync(fixture.manifestPath, JSON.stringify(manifest));
+  const { calls, pool } = createPool({
+    existingObject: { object_type: 'relation', object_name: 'example' },
+  });
+
+  const result = await runVersionedMigrations({
+    pool,
+    serviceName: 'gateway',
+    manifestPath: fixture.manifestPath,
+    runtimeDbUser: 'cotsel_gateway_runtime',
+  });
+
+  assert.deepEqual(
+    result.applied.map(({ version, applicationMode }) => ({ version, applicationMode })),
+    [
+      { version: '202608310001', applicationMode: 'adopted' },
+      { version: laterVersion, applicationMode: 'adopted' },
+    ],
+  );
+  const ledgerInserts = calls.filter(({ sql }) =>
+    sql.includes('INSERT INTO cotsel_schema_migrations'),
+  );
+  assert.deepEqual(
+    ledgerInserts.map(({ parameters }) => parameters[4]),
+    ['0'.repeat(64), schemaChecksum],
+  );
+  assert.equal(calls.filter(({ sql }) => sql === 'BEGIN').length, 1);
+  assert.ok(!calls.some(({ sql }) => sql === laterSql));
+});
+
 test('baseline adoption rejects schema drift before creating its ledger', async (t) => {
   const fixture = createManifest();
   t.after(() => fs.rmSync(fixture.directory, { recursive: true, force: true }));
