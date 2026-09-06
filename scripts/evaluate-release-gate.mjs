@@ -125,6 +125,14 @@ export function evaluateReleaseGateNeeds(needs) {
     throw new Error('release gate needs must be an object');
   }
 
+  const evaluatedJobs = new Set(RELEASE_GATE_CHECKS.map(({ job }) => job));
+  const unevaluatedJobs = Object.keys(needs)
+    .filter((job) => job !== 'changes' && !evaluatedJobs.has(job))
+    .sort();
+  if (unevaluatedJobs.length > 0) {
+    throw new Error(`release gate needs contains unevaluated jobs: ${unevaluatedJobs.join(', ')}`);
+  }
+
   const selected = parseSelection(needs.changes?.outputs);
   const evaluations = RELEASE_GATE_CHECKS.map((check) => {
     const status = needs[check.job]?.result;
