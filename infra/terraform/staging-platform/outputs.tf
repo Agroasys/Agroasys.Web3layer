@@ -38,14 +38,15 @@ output "gateway_edge" {
 output "gateway_runtime" {
   description = "Bundled Cotsel ECS runtime metadata. Contains no secret values."
   value = {
-    execution_role_arn = aws_iam_role.gateway_execution.arn
-    image_digests      = { for service, image in data.aws_ecr_image.release : service => image.image_digest }
-    image_tag          = var.gateway_image_tag
-    service_arn        = aws_ecs_service.gateway.id
-    service_name       = aws_ecs_service.gateway.name
-    task_family        = aws_ecs_task_definition.gateway.family
-    task_revision      = aws_ecs_task_definition.gateway.revision
-    task_role_arn      = aws_iam_role.gateway_task.arn
+    execution_role_arn     = aws_iam_role.gateway_execution.arn
+    image_digests          = { for service, image in data.aws_ecr_image.release : service => image.image_digest }
+    image_tag              = var.gateway_image_tag
+    reviewed_config_sha256 = local.gateway_reviewed_config_sha256
+    service_arn            = aws_ecs_service.gateway.id
+    service_name           = aws_ecs_service.gateway.name
+    task_family            = aws_ecs_task_definition.gateway.family
+    task_revision          = aws_ecs_task_definition.gateway.revision
+    task_role_arn          = aws_iam_role.gateway_task.arn
   }
 }
 
@@ -53,13 +54,14 @@ output "private_runtime" {
   description = "Private Treasury and Ricardian runtime metadata. Desired count remains zero until database bootstrap evidence is accepted."
   value = {
     for name, service in aws_ecs_service.private_runtime : name => {
-      desired_count      = service.desired_count
-      execution_role_arn = aws_iam_role.private_runtime_execution[name].arn
-      service_arn        = service.id
-      service_name       = service.name
-      task_family        = aws_ecs_task_definition.private_runtime[name].family
-      task_revision      = aws_ecs_task_definition.private_runtime[name].revision
-      task_role_arn      = aws_iam_role.private_runtime_task[name].arn
+      desired_count          = service.desired_count
+      execution_role_arn     = aws_iam_role.private_runtime_execution[name].arn
+      reviewed_config_sha256 = local.private_runtime_reviewed_config_sha256[name]
+      service_arn            = service.id
+      service_name           = service.name
+      task_family            = aws_ecs_task_definition.private_runtime[name].family
+      task_revision          = aws_ecs_task_definition.private_runtime[name].revision
+      task_role_arn          = aws_iam_role.private_runtime_task[name].arn
     }
   }
 }

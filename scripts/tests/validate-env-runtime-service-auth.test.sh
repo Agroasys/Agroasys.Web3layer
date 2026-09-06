@@ -6,37 +6,19 @@ SCRIPT="$ROOT_DIR/scripts/validate-env.sh"
 
 make_runtime_fixture() {
   local target="$1"
-  cp "$ROOT_DIR/.env.runtime.example" "$target"
-  cat >> "$target" <<'EOF'
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres-password
-AUTH_DB_NAME=auth_db
-GATEWAY_DB_NAME=gateway_db
-RICARDIAN_DB_NAME=ricardian_db
-TREASURY_DB_NAME=treasury_db
-ORACLE_DB_NAME=oracle_db
-RECONCILIATION_DB_NAME=reconciliation_db
-INDEXER_DB_NAME=indexer_db
-ORACLE_PRIVATE_KEY=0xabc123
-ORACLE_API_KEY=runtime-service-auth-test-key
-ORACLE_HMAC_SECRET=runtime-service-auth-test-hmac-secret
-ORACLE_RPC_URL=https://rpc.example/oracle
-RECONCILIATION_RPC_URL=https://rpc.example/reconciliation
-GATEWAY_RPC_URL=https://rpc.example/gateway
-INDEXER_RPC_ENDPOINT=https://rpc.example/indexer
-INDEXER_START_BLOCK=1
-ORACLE_ESCROW_ADDRESS=0x1111111111111111111111111111111111111111
-RECONCILIATION_ESCROW_ADDRESS=0x1111111111111111111111111111111111111111
-GATEWAY_ESCROW_ADDRESS=0x1111111111111111111111111111111111111111
-INDEXER_CONTRACT_ADDRESS=0x1111111111111111111111111111111111111111
-ORACLE_USDC_ADDRESS=0x2222222222222222222222222222222222222222
-RECONCILIATION_USDC_ADDRESS=0x2222222222222222222222222222222222222222
-GATEWAY_USDC_ADDRESS=0x2222222222222222222222222222222222222222
-TRUSTED_SESSION_EXCHANGE_ENABLED=false
-AUTH_ADMIN_CONTROL_ENABLED=false
-GATEWAY_SETTLEMENT_INGRESS_ENABLED=false
-GATEWAY_SETTLEMENT_CALLBACK_ENABLED=false
-EOF
+  cp "$ROOT_DIR/scripts/tests/fixtures/runtime.env" "$target"
+}
+
+set_env_value() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+  if grep -q "^${key}=" "$file"; then
+    sed -i.bak "s|^${key}=.*|${key}=${value}|" "$file"
+    rm -f "${file}.bak"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$file"
+  fi
 }
 
 tmp_dir="$(mktemp -d)"
@@ -44,9 +26,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 session_fixture="$tmp_dir/session.env.runtime"
 make_runtime_fixture "$session_fixture"
-cat >> "$session_fixture" <<'EOF'
-TRUSTED_SESSION_EXCHANGE_ENABLED=true
-EOF
+set_env_value "$session_fixture" TRUSTED_SESSION_EXCHANGE_ENABLED true
 if (
   cd "$tmp_dir" &&
   cp "$session_fixture" .env.runtime &&
@@ -63,9 +43,7 @@ fi
 
 settlement_fixture="$tmp_dir/settlement.env.runtime"
 make_runtime_fixture "$settlement_fixture"
-cat >> "$settlement_fixture" <<'EOF'
-GATEWAY_SETTLEMENT_INGRESS_ENABLED=true
-EOF
+set_env_value "$settlement_fixture" GATEWAY_SETTLEMENT_INGRESS_ENABLED true
 if (
   cd "$tmp_dir" &&
   cp "$settlement_fixture" .env.runtime &&
@@ -82,9 +60,7 @@ fi
 
 admin_fixture="$tmp_dir/admin.env.runtime"
 make_runtime_fixture "$admin_fixture"
-cat >> "$admin_fixture" <<'EOF'
-AUTH_ADMIN_CONTROL_ENABLED=true
-EOF
+set_env_value "$admin_fixture" AUTH_ADMIN_CONTROL_ENABLED true
 if (
   cd "$tmp_dir" &&
   cp "$admin_fixture" .env.runtime &&

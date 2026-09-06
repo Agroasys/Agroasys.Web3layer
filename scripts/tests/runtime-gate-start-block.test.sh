@@ -42,8 +42,6 @@ output="$(
   cd "$workspace_dir"
   PATH="$bin_dir:$PATH" \
     STAGING_E2E_REAL_GATE_ASSERT_CONFIG_ONLY=true \
-    STAGING_E2E_REAL_DYNAMIC_START_BLOCK=true \
-    STAGING_E2E_REAL_START_BLOCK_BACKOFF=250 \
     STAGING_E2E_REAL_GATE_RPC_URL=http://rpc.mock \
     "$SCRIPT"
 )"

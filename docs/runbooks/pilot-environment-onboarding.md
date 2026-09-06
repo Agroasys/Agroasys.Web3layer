@@ -101,7 +101,8 @@ addresses in the live pilot profile.
 
 Expected result:
 
-- `.env` and `.env.runtime` exist with pilot-specific values.
+- `.env.runtime` exists with pilot-specific values. No sibling `.env` file is
+  used by the runtime profile.
 
 If not:
 
@@ -165,13 +166,14 @@ If not:
 
 ### 5. Verify DB population and reconciliation evidence
 
-Load env values into shell:
+Load env values through the non-executable strict parser:
 
 ```bash
-set -a
-source .env
-source .env.runtime
-set +a
+source scripts/lib/strict-runtime-env.sh
+strict_runtime_env_load \
+  .env.runtime \
+  .env.runtime.example \
+  scripts/lib/strict-runtime-env.mjs
 ```
 
 Check indexer trade events are present:

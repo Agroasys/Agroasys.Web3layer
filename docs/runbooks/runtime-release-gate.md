@@ -23,6 +23,10 @@ The `runtime` profile uses the real indexer pipeline:
 
 - Docker Engine + Compose plugin installed.
 - `.env.runtime` created from `.env.runtime.example` with every value filled in.
+- No runtime key is inherited from the invoking shell. The strict loader rejects
+  ambient overrides, duplicate or unknown keys, and shell expressions.
+- Staging sets `COTSEL_ENVIRONMENT=staging` with `NODE_ENV=production`; local
+  Compose sets `COTSEL_ENVIRONMENT=local` with `NODE_ENV=development`.
 - The `runtime` profile must be Base Sepolia only:
   - `STAGING_E2E_REAL_NETWORK_NAME=Base Sepolia`
   - `STAGING_E2E_REAL_CHAIN_ID=84532`
@@ -83,6 +87,8 @@ CI also runs deterministic notification-path verification and uploads `ci-report
 ## Expected output
 
 - `scripts/cotsel.sh health` reports required services running and healthy.
+- `scripts/validate-env.sh runtime` reports the reviewed
+  `redacted_config_sha256`; record it with the candidate evidence.
 - `scripts/runtime-gate.sh` reports:
   - schema parity result
   - indexer head + lag metrics

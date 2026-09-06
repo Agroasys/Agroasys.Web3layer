@@ -2,6 +2,10 @@
 set -euo pipefail
 
 PROFILE="${1:-runtime}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=scripts/lib/strict-runtime-env.sh
+source "$SCRIPT_DIR/lib/strict-runtime-env.sh"
 
 usage() {
   echo "Usage: scripts/notifications-gate.sh [runtime]" >&2
@@ -13,19 +17,12 @@ if [[ "$PROFILE" != "runtime" ]]; then
   exit 1
 fi
 
-load_env_file() {
-  local file="$1"
-  if [[ -f "$file" ]]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$file"
-    set +a
-  fi
-}
+strict_runtime_env_load \
+  ".env.runtime" \
+  "$SCRIPT_DIR/../.env.runtime.example" \
+  "$SCRIPT_DIR/lib/strict-runtime-env.mjs"
 
-load_env_file ".env.runtime"
-
-scripts/notifications-wiring-health.sh "$PROFILE"
+"$SCRIPT_DIR/notifications-wiring-health.sh" "$PROFILE"
 
 if [[ ! -f "notifications/dist/index.js" ]]; then
   echo "Missing notifications build output (notifications/dist/index.js). Run: pnpm --filter ./notifications run build" >&2

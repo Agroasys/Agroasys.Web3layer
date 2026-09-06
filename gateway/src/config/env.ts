@@ -21,12 +21,10 @@ function env(name: string): string {
   assert(value, `${name} is missing`);
   return value;
 }
-
 function optionalEnv(name: string): string | undefined {
   const value = process.env[name]?.trim();
   return value ? value : undefined;
 }
-
 function envNumber(name: string, fallback?: number): number {
   const raw = process.env[name];
   if ((raw === undefined || raw === '') && fallback !== undefined) {
@@ -38,7 +36,6 @@ function envNumber(name: string, fallback?: number): number {
   assert(!Number.isNaN(parsed), `${name} must be a number`);
   return parsed;
 }
-
 function envPositiveInteger(name: string, fallback?: number): number {
   const raw = process.env[name];
   if ((raw === undefined || raw === '') && fallback !== undefined) {
@@ -50,7 +47,6 @@ function envPositiveInteger(name: string, fallback?: number): number {
   assert(Number.isInteger(parsed) && parsed > 0, `${name} must be a positive integer`);
   return parsed;
 }
-
 function envBool(name: string, fallback: boolean): boolean {
   const raw = process.env[name];
   if (raw === undefined || raw === '') {
@@ -67,7 +63,6 @@ function envBool(name: string, fallback: boolean): boolean {
 
   throw new Error(`${name} must be true or false`);
 }
-
 function envBigInt(name: string, fallback: bigint): bigint {
   const raw = process.env[name]?.trim();
   if (!raw) {
@@ -77,7 +72,6 @@ function envBigInt(name: string, fallback: bigint): bigint {
   assert(/^\d+$/.test(raw), `${name} must be a non-negative integer`);
   return BigInt(raw);
 }
-
 function parseAllowlist(raw: string | undefined): string[] {
   if (!raw) {
     return [];
@@ -273,6 +267,13 @@ export function loadConfig(): GatewayConfig {
     'GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH',
     nodeEnv !== 'production',
   );
+
+  if (nodeEnv === 'production') {
+    assert(
+      !allowInsecureDownstreamAuth,
+      'GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH=true is not allowed when NODE_ENV=production',
+    );
+  }
 
   assert(
     authBaseUrl.startsWith('http://') || authBaseUrl.startsWith('https://'),

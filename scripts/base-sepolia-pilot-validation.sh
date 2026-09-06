@@ -2,6 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# shellcheck source=scripts/lib/strict-runtime-env.sh
+source "$ROOT_DIR/scripts/lib/strict-runtime-env.sh"
 MODE="live"
 BRING_UP_PROFILE="false"
 WINDOW_ID=""
@@ -390,31 +393,6 @@ cleanup_temp_env() {
 
 trap cleanup_temp_env EXIT
 
-load_env_file() {
-  local file="$1"
-  if [[ -f "$file" ]]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$file"
-    set +a
-  fi
-}
-
-ORIGINAL_ENV_KEYS=()
-ORIGINAL_ENV_VALUES=()
-while IFS='=' read -r key value; do
-  ORIGINAL_ENV_KEYS+=("$key")
-  ORIGINAL_ENV_VALUES+=("$value")
-done < <(env)
-
-restore_external_environment_overrides() {
-  local idx=0
-  for key in "${ORIGINAL_ENV_KEYS[@]}"; do
-    export "$key=${ORIGINAL_ENV_VALUES[$idx]}"
-    idx=$((idx + 1))
-  done
-}
-
 contains_retired_runtime_marker() {
   local value
   value="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
@@ -447,8 +425,10 @@ fail_live_preflight() {
 }
 
 validate_pilot_profile_truth() {
-  load_env_file "$ROOT_DIR/.env.runtime"
-  restore_external_environment_overrides
+  strict_runtime_env_load \
+    "$ROOT_DIR/.env.runtime" \
+    "$ROOT_DIR/.env.runtime.example" \
+    "$ROOT_DIR/scripts/lib/strict-runtime-env.mjs"
 
   if [[ "${STAGING_E2E_REAL_NETWORK_NAME:-}" != "Base Sepolia" ]]; then
     fail_live_preflight "PILOT_PROFILE_NOT_BASE_SEPOLIA" "pilot-profile-truth" "STAGING_E2E_REAL_NETWORK_NAME must be 'Base Sepolia'."

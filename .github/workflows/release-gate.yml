@@ -417,7 +417,7 @@ jobs:
           run_check base-mainnet-governance scripts/tests/base-mainnet-governance-guard.sh
           run_check data-classification-guard node scripts/tests/data-classification-guard.mjs
           run_check runtime-rds-ca-trust node --test scripts/tests/runtime-rds-ca-trust.test.mjs
-          run_check runtime-migration-boundary node --test scripts/tests/runtime-migration-boundary.test.mjs
+          run_check runtime-configuration node --test scripts/tests/runtime-migration-boundary.test.mjs scripts/tests/staging-production-config.test.mjs
           run_check monitoring-baseline-validator node scripts/monitoring-baseline-validate.mjs --runbook docs/runbooks/monitoring-alerting-baseline.md --out ci-reports/monitoring-baseline-validation.json
           if [[ "$fail" -ne 0 ]]; then
             exit 1
@@ -470,14 +470,14 @@ jobs:
           run_check cotsel-args scripts/tests/cotsel-args.test.sh
           run_check cotsel-health scripts/tests/cotsel-health.test.sh
           run_check cotsel-env-preflight scripts/tests/cotsel-env-preflight.test.sh
-          run_check cotsel-runtime-env scripts/tests/cotsel-runtime-env.test.sh
+          run_check cotsel-runtime-env bash -lc "scripts/tests/cotsel-runtime-env.test.sh && node --test scripts/tests/strict-runtime-env.test.mjs"
           run_check cotsel-runtime-conflict-guard scripts/tests/cotsel-runtime-conflict-guard.test.sh
           run_check runtime-gate-start-block scripts/tests/runtime-gate-start-block.test.sh
           run_check notifications-wiring-health scripts/tests/notifications-wiring-health.test.sh
           run_check validate-env-rate-limit-redis scripts/tests/validate-env-rate-limit-redis.test.sh
           run_check validate-env-gateway-db-name scripts/tests/validate-env-gateway-db-name.test.sh
           run_check validate-env-runtime-placeholders scripts/tests/validate-env-runtime-placeholders.test.sh
-          run_check validate-env-runtime-service-auth scripts/tests/validate-env-runtime-service-auth.test.sh
+          run_check validate-env-runtime-service-auth bash -lc "scripts/tests/validate-env-runtime-service-auth.test.sh && scripts/tests/validate-env-production-auth.test.sh"
           run_check compose-rate-limit-wiring scripts/tests/compose-rate-limit-wiring.test.sh
 
           if [[ "$fail" -ne 0 ]]; then

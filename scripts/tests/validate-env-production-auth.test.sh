@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT="$ROOT_DIR/scripts/validate-env.sh"
+
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT
+
+set_env_value() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+  if grep -q "^${key}=" "$file"; then
+    sed -i.bak "s|^${key}=.*|${key}=${value}|" "$file"
+    rm -f "${file}.bak"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$file"
+  fi
+}
+
+assert_rejected() {
+  local expected="$1"
+  if (cd "$tmp_dir" && bash "$SCRIPT" runtime >out.log 2>err.log); then
+    echo "expected production-like configuration to be rejected: $expected" >&2
+    exit 1
+  fi
+  if ! grep -Fq "$expected" "$tmp_dir/err.log"; then
+    echo "expected rejection was not reported: $expected" >&2
+    cat "$tmp_dir/err.log" >&2
+    exit 1
+  fi
+}
+
+cp "$ROOT_DIR/scripts/tests/fixtures/runtime.env" "$tmp_dir/.env.runtime"
+set_env_value "$tmp_dir/.env.runtime" COTSEL_ENVIRONMENT staging
+assert_rejected 'NODE_ENV must be production when COTSEL_ENVIRONMENT=staging'
+
+set_env_value "$tmp_dir/.env.runtime" NODE_ENV production
+assert_rejected 'RICARDIAN_AUTH_ENABLED must be true when COTSEL_ENVIRONMENT=staging'
+
+set_env_value "$tmp_dir/.env.runtime" RICARDIAN_AUTH_ENABLED true
+assert_rejected 'TREASURY_AUTH_ENABLED must be true when COTSEL_ENVIRONMENT=staging'
+
+set_env_value "$tmp_dir/.env.runtime" TREASURY_AUTH_ENABLED true
+set_env_value "$tmp_dir/.env.runtime" GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH true
+assert_rejected 'GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH must be false when COTSEL_ENVIRONMENT=staging'
+
+set_env_value "$tmp_dir/.env.runtime" GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH false
+(cd "$tmp_dir" && bash "$SCRIPT" runtime >out.log 2>err.log)
+grep -Fq 'env validation passed for profile: runtime' "$tmp_dir/out.log"
+
+echo 'validate-env production auth guards: pass'

@@ -12,9 +12,9 @@ const BASE_ENV: Record<string, string> = {
   INDEXER_GRAPHQL_URL: 'http://localhost:4350/graphql',
   TREASURY_INGEST_BATCH_SIZE: '100',
   TREASURY_INGEST_MAX_EVENTS: '2000',
-  AUTH_ENABLED: 'false',
-  API_KEYS_JSON: '[]',
-  HMAC_SECRET: '',
+  AUTH_ENABLED: 'true',
+  API_KEYS_JSON: '[{"id":"gateway-internal","secret":"test-shared-secret","active":true}]',
+  HMAC_SECRET: 'test-shared-secret',
   AUTH_MAX_SKEW_SECONDS: '300',
   AUTH_NONCE_TTL_SECONDS: '600',
 };
@@ -91,6 +91,14 @@ describe('treasury nonce store config', () => {
         expect(config.authEnabled).toBe(true);
       },
     );
+  });
+
+  test('production cannot explicitly disable service authentication', () => {
+    withEnv({ NODE_ENV: 'production', AUTH_ENABLED: 'false', NONCE_STORE: 'postgres' }, () => {
+      expect(() => loadConfigModule()).toThrow(
+        'AUTH_ENABLED=false is not allowed when NODE_ENV=production',
+      );
+    });
   });
 
   test('redis mode requires REDIS_URL', () => {

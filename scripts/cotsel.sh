@@ -26,6 +26,9 @@ PROFILE="runtime"
 RUNTIME_ENV=".env.runtime"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# shellcheck source=scripts/lib/strict-runtime-env.sh
+source "$SCRIPT_DIR/lib/strict-runtime-env.sh"
+
 HEALTH_RETRIES="${DOCKER_SERVICES_HEALTH_RETRIES:-15}"
 HEALTH_RETRY_DELAY_SECONDS="${DOCKER_SERVICES_HEALTH_RETRY_DELAY_SECONDS:-2}"
 WAIT_TIMEOUT_SECONDS="${DOCKER_SERVICES_WAIT_TIMEOUT_SECONDS:-120}"
@@ -94,16 +97,6 @@ if [[ "$SKIP_BUILD" == "true" && "$GATE" != "true" ]]; then
   exit 1
 fi
 
-load_env_file() {
-  local file="$1"
-  if [[ -f "$file" ]]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$file"
-    set +a
-  fi
-}
-
 run_env_preflight() {
   if [[ "${DOCKER_SERVICES_SKIP_ENV_PRECHECK:-false}" == "true" ]]; then
     return 0
@@ -116,25 +109,11 @@ run_env_preflight() {
   esac
 }
 
-# Preserve any externally-exported overrides so they win over file values.
-ORIGINAL_ENV_KEYS=()
-ORIGINAL_ENV_VALUES=()
-while IFS='=' read -r key value; do
-  ORIGINAL_ENV_KEYS+=("$key")
-  ORIGINAL_ENV_VALUES+=("$value")
-done < <(env)
-
-restore_external_environment_overrides() {
-  local idx=0
-  for key in "${ORIGINAL_ENV_KEYS[@]}"; do
-    export "$key=${ORIGINAL_ENV_VALUES[$idx]}"
-    idx=$((idx + 1))
-  done
-}
-
 load_runtime_env() {
-  load_env_file "$RUNTIME_ENV"
-  restore_external_environment_overrides
+  strict_runtime_env_load \
+    "$RUNTIME_ENV" \
+    "$SCRIPT_DIR/../.env.runtime.example" \
+    "$SCRIPT_DIR/lib/strict-runtime-env.mjs"
 }
 
 run_compose() {

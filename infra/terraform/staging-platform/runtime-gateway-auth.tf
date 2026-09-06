@@ -1,6 +1,7 @@
 locals {
   gateway_environment = [
     { name = "AWS_REGION", value = var.region },
+    { name = "COTSEL_ENVIRONMENT", value = "staging" },
     { name = "DB_HOST", value = local.postgres_host },
     { name = "DB_AUTO_MIGRATE", value = "false" },
     { name = "DB_NAME", value = "cotsel_gateway" },
@@ -29,7 +30,7 @@ locals {
     { name = "GATEWAY_SETTLEMENT_SERVICE_AUTH_NONCE_TTL_SECONDS", value = "600" },
     { name = "GATEWAY_TREASURY_BASE_URL", value = "http://treasury.cotsel-staging.internal:3200" },
     { name = "GATEWAY_USDC_ADDRESS", value = var.base_sepolia_usdc_address },
-    { name = "NODE_ENV", value = "staging" },
+    { name = "NODE_ENV", value = "production" },
     { name = "PORT", value = "3600" },
   ]
 
@@ -73,12 +74,13 @@ locals {
     { name = "AUTH_CORS_ALLOWED_ORIGINS", value = "https://agroasys.com,https://app.agroasys.com" },
     { name = "AUTH_CORS_ALLOW_NO_ORIGIN", value = "false" },
     { name = "AUTH_RATE_LIMIT_ENABLED", value = "false" },
+    { name = "COTSEL_ENVIRONMENT", value = "staging" },
     { name = "DB_HOST", value = local.postgres_host },
     { name = "DB_AUTO_MIGRATE", value = "false" },
     { name = "DB_NAME", value = "cotsel_auth" },
     { name = "DB_PORT", value = "5432" },
     { name = "DB_SSL_MODE", value = "verify-full" },
-    { name = "NODE_ENV", value = "staging" },
+    { name = "NODE_ENV", value = "production" },
     { name = "PGSSLMODE", value = "verify-full" },
     { name = "PORT", value = "3005" },
     { name = "SESSION_TTL_SECONDS", value = "3600" },

@@ -215,6 +215,10 @@ export function loadConfig(): TreasuryConfig {
     );
   }
 
+  if (nodeEnv === 'production' && !authEnabled) {
+    throw new Error('AUTH_ENABLED=false is not allowed when NODE_ENV=production');
+  }
+
   if (nodeEnv === 'production' && nonceStore === 'inmemory') {
     throw new Error('NONCE_STORE=inmemory is not allowed when NODE_ENV=production');
   }

@@ -4,6 +4,10 @@ set -euo pipefail
 # Single profile: `runtime`. The argument is accepted for backward-compatible
 # call sites but only `runtime` is valid.
 PROFILE="${1:-runtime}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=scripts/lib/strict-runtime-env.sh
+source "$SCRIPT_DIR/lib/strict-runtime-env.sh"
 
 usage() {
   echo "Usage: scripts/validate-env.sh [runtime]" >&2
@@ -14,16 +18,6 @@ if [[ "$PROFILE" != "runtime" ]]; then
   usage
   exit 1
 fi
-
-load_env_file() {
-  local file="$1"
-  if [[ -f "$file" ]]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$file"
-    set +a
-  fi
-}
 
 count_placeholder_assignments() {
   local file="$1"
@@ -44,21 +38,6 @@ require_boolean_env() {
   fi
 }
 
-ORIGINAL_ENV_KEYS=()
-ORIGINAL_ENV_VALUES=()
-while IFS='=' read -r key value; do
-  ORIGINAL_ENV_KEYS+=("$key")
-  ORIGINAL_ENV_VALUES+=("$value")
-done < <(env)
-
-restore_external_environment_overrides() {
-  local idx=0
-  for key in "${ORIGINAL_ENV_KEYS[@]}"; do
-    export "$key=${ORIGINAL_ENV_VALUES[$idx]}"
-    idx=$((idx + 1))
-  done
-}
-
 if [[ ! -f ".env.runtime" ]]; then
   echo "Missing required env file: .env.runtime" >&2
   echo "Create it from the checked-in template: cp .env.runtime.example .env.runtime" >&2
@@ -72,8 +51,40 @@ if [[ "$runtime_placeholder_count" -gt 0 ]]; then
   exit 1
 fi
 
-load_env_file ".env.runtime"
-restore_external_environment_overrides
+strict_runtime_env_load \
+  ".env.runtime" \
+  "$SCRIPT_DIR/../.env.runtime.example" \
+  "$SCRIPT_DIR/lib/strict-runtime-env.mjs"
+
+case "${COTSEL_ENVIRONMENT:-}" in
+  local|staging|production) ;;
+  *)
+    echo "COTSEL_ENVIRONMENT must be one of: local, staging, production" >&2
+    exit 1
+    ;;
+esac
+
+if [[ "$COTSEL_ENVIRONMENT" != "local" ]]; then
+  if [[ "${NODE_ENV:-}" != "production" ]]; then
+    echo "NODE_ENV must be production when COTSEL_ENVIRONMENT=$COTSEL_ENVIRONMENT" >&2
+    exit 1
+  fi
+
+  if [[ "${RICARDIAN_AUTH_ENABLED:-}" != "true" ]]; then
+    echo "RICARDIAN_AUTH_ENABLED must be true when COTSEL_ENVIRONMENT=$COTSEL_ENVIRONMENT" >&2
+    exit 1
+  fi
+
+  if [[ "${TREASURY_AUTH_ENABLED:-}" != "true" ]]; then
+    echo "TREASURY_AUTH_ENABLED must be true when COTSEL_ENVIRONMENT=$COTSEL_ENVIRONMENT" >&2
+    exit 1
+  fi
+
+  if [[ "${GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH:-}" != "false" ]]; then
+    echo "GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH must be false when COTSEL_ENVIRONMENT=$COTSEL_ENVIRONMENT" >&2
+    exit 1
+  fi
+fi
 
 required_groups=(
   # shared compose/database inputs
@@ -181,7 +192,7 @@ if [[ "${#missing_groups[@]}" -gt 0 ]]; then
   for group in "${missing_groups[@]}"; do
     echo "  - ${group//|/ or }" >&2
   done
-  echo "Review .env.runtime; external environment variables may override file values." >&2
+  echo "Review .env.runtime; every template key must be present explicitly." >&2
   exit 1
 fi
 
@@ -343,4 +354,4 @@ if true; then
   done
 fi
 
-echo "env validation passed for profile: $PROFILE"
+echo "env validation passed for profile: $PROFILE (redacted_config_sha256=$COTSEL_REDACTED_CONFIG_SHA256)"
