@@ -55,6 +55,11 @@ Open `.env.runtime` and fill in every value. Required fields include:
 
 All fields are documented inline in `.env.runtime.example`.
 
+For this production-like runtime, set `NODE_ENV=production` and set
+`COTSEL_ENVIRONMENT` to the actual environment (`staging` for the current Base
+Sepolia lane). The validator rejects disabled Ricardian or Treasury
+authentication and insecure gateway downstream authentication in this mode.
+
 **Create only `.env.runtime`.** Do not create `.env` or any other sibling `.env*` file.  
 The deploy script will refuse to run if any conflicting env file exists alongside `.env.runtime`.
 
@@ -70,7 +75,8 @@ The script runs fully automated:
 
 1. Checks `.env.runtime` exists and contains no placeholder markers
 2. Rejects any conflicting `.env.*` files
-3. Validates every required env var
+3. Parses the file without shell execution; rejects duplicate, unknown, inherited,
+   or cross-environment values; and prints a redacted configuration digest
 4. Builds all container images
 5. Starts all services in detached mode
 6. Waits for every service to become healthy

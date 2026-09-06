@@ -3,6 +3,7 @@ locals {
   base_sepolia_explorer_url = "https://sepolia.basescan.org"
 
   oracle_environment = [
+    { name = "COTSEL_ENVIRONMENT", value = "staging" },
     { name = "CHAIN_ID", value = tostring(local.base_sepolia_chain_id) },
     { name = "DB_HOST", value = local.postgres_host },
     { name = "DB_AUTO_MIGRATE", value = "false" },
@@ -14,7 +15,7 @@ locals {
     { name = "HMAC_NONCE_TTL_SECONDS", value = "600" },
     { name = "INDEXER_GQL_TIMEOUT_MS", value = "10000" },
     { name = "INDEXER_GRAPHQL_URL", value = "http://127.0.0.1:4350/graphql" },
-    { name = "NODE_ENV", value = "staging" },
+    { name = "NODE_ENV", value = "production" },
     { name = "NOTIFICATIONS_COOLDOWN_MS", value = "300000" },
     { name = "NOTIFICATIONS_ENABLED", value = "false" },
     { name = "NOTIFICATIONS_REQUEST_TIMEOUT_MS", value = "5000" },
@@ -66,6 +67,7 @@ locals {
   }
 
   reconciliation_environment = [
+    { name = "COTSEL_ENVIRONMENT", value = "staging" },
     { name = "CHAIN_ID", value = tostring(local.base_sepolia_chain_id) },
     { name = "DB_HOST", value = local.postgres_host },
     { name = "DB_AUTO_MIGRATE", value = "false" },
@@ -76,7 +78,7 @@ locals {
     { name = "EXPLORER_BASE_URL", value = local.base_sepolia_explorer_url },
     { name = "INDEXER_GQL_TIMEOUT_MS", value = "10000" },
     { name = "INDEXER_GRAPHQL_URL", value = "http://127.0.0.1:4350/graphql" },
-    { name = "NODE_ENV", value = "staging" },
+    { name = "NODE_ENV", value = "production" },
     { name = "NOTIFICATIONS_COOLDOWN_MS", value = "300000" },
     { name = "NOTIFICATIONS_ENABLED", value = "false" },
     { name = "NOTIFICATIONS_REQUEST_TIMEOUT_MS", value = "5000" },

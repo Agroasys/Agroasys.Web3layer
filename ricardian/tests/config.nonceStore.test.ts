@@ -9,9 +9,9 @@ const BASE_ENV: Record<string, string> = {
   DB_SSL_MODE: 'disable',
   DB_MIGRATION_USER: '',
   DB_MIGRATION_PASSWORD: '',
-  AUTH_ENABLED: 'false',
+  AUTH_ENABLED: 'true',
   API_KEYS_JSON: '[]',
-  HMAC_SECRET: '',
+  HMAC_SECRET: 'test-shared-secret',
   AUTH_MAX_SKEW_SECONDS: '300',
   AUTH_NONCE_TTL_SECONDS: '600',
   RATE_LIMIT_ENABLED: 'false',
@@ -92,6 +92,14 @@ describe('ricardian nonce store config', () => {
         expect(config.rateLimitEnabled).toBe(true);
       },
     );
+  });
+
+  test('production cannot explicitly disable service authentication', () => {
+    withEnv({ NODE_ENV: 'production', AUTH_ENABLED: 'false', NONCE_STORE: 'postgres' }, () => {
+      expect(() => loadConfigModule()).toThrow(
+        'AUTH_ENABLED=false is not allowed when NODE_ENV=production',
+      );
+    });
   });
 
   test('redis mode requires REDIS_URL', () => {

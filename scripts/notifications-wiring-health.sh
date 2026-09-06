@@ -3,6 +3,10 @@ set -euo pipefail
 
 PROFILE="${1:-runtime}"
 COMPOSE_FILE="docker-compose.services.yml"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=scripts/lib/strict-runtime-env.sh
+source "$SCRIPT_DIR/lib/strict-runtime-env.sh"
 
 usage() {
   echo "Usage: scripts/notifications-wiring-health.sh [runtime]" >&2
@@ -13,16 +17,6 @@ if [[ "$PROFILE" != "runtime" ]]; then
   usage
   exit 1
 fi
-
-load_env_file() {
-  local file="$1"
-  if [[ -f "$file" ]]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$file"
-    set +a
-  fi
-}
 
 require_compose_mapping() {
   local env_var="$1"
@@ -97,7 +91,10 @@ require_timeout_milliseconds() {
   return 0
 }
 
-load_env_file ".env.runtime"
+strict_runtime_env_load \
+  ".env.runtime" \
+  "$SCRIPT_DIR/../.env.runtime.example" \
+  "$SCRIPT_DIR/lib/strict-runtime-env.mjs"
 
 oracle_enabled="${ORACLE_NOTIFICATIONS_ENABLED:-false}"
 oracle_webhook="${ORACLE_NOTIFICATIONS_WEBHOOK_URL:-}"

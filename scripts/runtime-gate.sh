@@ -17,33 +17,10 @@ DEFAULT_MAX_INDEXER_LAG_BLOCKS=500
 # in reconciliation run and drift summary queries below. Any text field returned by those
 # queries must sanitize chr(31) (for example via replace(..., chr(31), ' ')) before output.
 RECONCILIATION_SUMMARY_FIELD_DELIM=$'\x1f'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-load_env_file() {
-  local file="$1"
-  if [[ -f "$file" ]]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$file"
-    set +a
-  else
-    echo "Warning: environment file not found, skipping: $file" >&2
-  fi
-}
-
-ORIGINAL_ENV_KEYS=()
-ORIGINAL_ENV_VALUES=()
-while IFS='=' read -r key value; do
-  ORIGINAL_ENV_KEYS+=("$key")
-  ORIGINAL_ENV_VALUES+=("$value")
-done < <(env)
-
-restore_external_environment_overrides() {
-  local idx=0
-  for key in "${ORIGINAL_ENV_KEYS[@]}"; do
-    export "$key=${ORIGINAL_ENV_VALUES[$idx]}"
-    idx=$((idx + 1))
-  done
-}
+# shellcheck source=scripts/lib/strict-runtime-env.sh
+source "$SCRIPT_DIR/lib/strict-runtime-env.sh"
 
 # Normalize URLs that use Docker's internal hostname so they work from the host,
 # by converting host.docker.internal to 127.0.0.1 for host-side access.
@@ -496,8 +473,10 @@ else:
     sys.stdout.write("0")'
 }
 
-load_env_file ".env.runtime"
-restore_external_environment_overrides
+strict_runtime_env_load \
+  ".env.runtime" \
+  "$SCRIPT_DIR/../.env.runtime.example" \
+  "$SCRIPT_DIR/lib/strict-runtime-env.mjs"
 
 INDEXER_GRAPHQL_DEFAULT_URL="http://127.0.0.1:${INDEXER_GRAPHQL_PORT:-4350}/graphql"
 INDEXER_GATEWAY_URL_HOST="${STAGING_E2E_REAL_GATE_INDEXER_GRAPHQL_URL:-$INDEXER_GRAPHQL_DEFAULT_URL}"

@@ -9,8 +9,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
-mkdir -p "$tmp_dir/scripts"
+mkdir -p "$tmp_dir/scripts/lib"
 cp "$ROOT_DIR/scripts/cotsel.sh" "$tmp_dir/scripts/cotsel.sh"
+cp "$ROOT_DIR/scripts/lib/strict-runtime-env.sh" "$tmp_dir/scripts/lib/strict-runtime-env.sh"
+cp "$ROOT_DIR/scripts/lib/strict-runtime-env.mjs" "$tmp_dir/scripts/lib/strict-runtime-env.mjs"
+cp "$ROOT_DIR/.env.runtime.example" "$tmp_dir/.env.runtime.example"
 
 # Mock the downstream helpers so we can prove they never run once the guard trips.
 cat > "$tmp_dir/scripts/validate-env.sh" <<'EOF'

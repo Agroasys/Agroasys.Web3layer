@@ -1,3 +1,20 @@
+locals {
+  gateway_reviewed_config_sha256 = sha256(jsonencode([
+    for container in [
+      local.gateway_container,
+      local.auth_container,
+      local.indexer_pipeline_container,
+      local.indexer_graphql_container,
+      local.oracle_container,
+      local.reconciliation_container,
+      ] : {
+      name              = container.name
+      environment       = try(container.environment, [])
+      secret_references = try(container.secrets, [])
+    }
+  ]))
+}
+
 resource "aws_ecs_task_definition" "gateway" {
   family                   = "${local.name_prefix}-gateway"
   requires_compatibilities = ["FARGATE"]
@@ -38,6 +55,10 @@ resource "aws_ecs_task_definition" "gateway" {
 
   lifecycle {
     create_before_destroy = true
+  }
+
+  tags = {
+    ReviewedConfigSha256 = local.gateway_reviewed_config_sha256
   }
 }
 

@@ -8,6 +8,11 @@ There is a single compose profile (`runtime`) and a single env file
 only the values in `.env.runtime` differ. Production launch criteria are defined
 in `docs/runbooks/production-readiness-checklist.md`.
 
+The loader treats `.env.runtime` as data, never shell code. It rejects duplicate
+or unknown keys, shell expansion syntax, and inherited overrides. Successful
+validation prints a SHA-256 identity of the sorted, redacted configuration.
+Secret values are represented only as present or empty in that identity.
+
 ## Services
 
 The `runtime` profile starts the full protocol: `postgres`, `redis`, the split
@@ -19,6 +24,10 @@ indexer pipeline (`indexer-migrate`, `indexer-pipeline`, `indexer-graphql`),
 ```bash
 cp .env.runtime.example .env.runtime   # then fill in every value
 ```
+
+Keep `NODE_ENV=development` and `COTSEL_ENVIRONMENT=local` for local Compose.
+AWS staging uses `NODE_ENV=production` and `COTSEL_ENVIRONMENT=staging` so that
+production security defaults remain active without mislabeling the environment.
 
 `scripts/cotsel.sh build|up|health|config` runs `scripts/validate-env.sh`
 before invoking Docker Compose. If `.env.runtime` is missing or incomplete,
@@ -53,6 +62,8 @@ scripts/cotsel.sh up --gate
 - `indexer graphql endpoint failed`: indexer service not ready.
 - `reconciliation healthcheck` failure: DB/auth/config mismatch.
 - `notifications wiring health` failure: notification runtime keys are missing/invalid in `.env.runtime`.
+- `strict runtime environment rejected`: remove the reported duplicate, unknown,
+  executable, or inherited value. Do not work around it with an exported override.
 
 ## Rollback
 
@@ -62,7 +73,8 @@ scripts/cotsel.sh up --gate
 scripts/cotsel.sh down
 ```
 
-2. Restore last known-good `.env.runtime` values.
+2. Restore the last reviewed `.env.runtime` file and verify its recorded redacted
+   configuration digest.
 3. Re-run `scripts/cotsel.sh up` and `scripts/cotsel.sh health`.
 
 ## Related

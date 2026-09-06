@@ -29,12 +29,13 @@ locals {
       { name = "AUTH_ENABLED", value = "true" },
       { name = "AUTH_MAX_SKEW_SECONDS", value = "300" },
       { name = "AUTH_NONCE_TTL_SECONDS", value = "600" },
+      { name = "COTSEL_ENVIRONMENT", value = "staging" },
       { name = "DB_HOST", value = local.postgres_host },
       { name = "DB_AUTO_MIGRATE", value = "false" },
       { name = "DB_NAME", value = local.private_runtime_services.ricardian.db_name },
       { name = "DB_PORT", value = "5432" },
       { name = "DB_SSL_MODE", value = "verify-full" },
-      { name = "NODE_ENV", value = "staging" },
+      { name = "NODE_ENV", value = "production" },
       { name = "NONCE_STORE", value = "postgres" },
       { name = "NONCE_TTL_SECONDS", value = "600" },
       { name = "PGSSLMODE", value = "verify-full" },
@@ -45,13 +46,14 @@ locals {
       { name = "AUTH_ENABLED", value = "true" },
       { name = "AUTH_MAX_SKEW_SECONDS", value = "300" },
       { name = "AUTH_NONCE_TTL_SECONDS", value = "600" },
+      { name = "COTSEL_ENVIRONMENT", value = "staging" },
       { name = "DB_HOST", value = local.postgres_host },
       { name = "DB_AUTO_MIGRATE", value = "false" },
       { name = "DB_NAME", value = local.private_runtime_services.treasury.db_name },
       { name = "DB_PORT", value = "5432" },
       { name = "DB_SSL_MODE", value = "verify-full" },
       { name = "INDEXER_GRAPHQL_URL", value = "http://indexer-graphql.cotsel-staging.internal:4350/graphql" },
-      { name = "NODE_ENV", value = "staging" },
+      { name = "NODE_ENV", value = "production" },
       { name = "NONCE_STORE", value = "postgres" },
       { name = "NONCE_TTL_SECONDS", value = "600" },
       { name = "PGSSLMODE", value = "verify-full" },
@@ -75,6 +77,13 @@ locals {
       { name = "DB_PASSWORD", valueFrom = "${aws_secretsmanager_secret.platform["database/treasury/runtime"].arn}:password::" },
       { name = "DB_USER", valueFrom = "${aws_secretsmanager_secret.platform["database/treasury/runtime"].arn}:username::" },
     ]
+  }
+
+  private_runtime_reviewed_config_sha256 = {
+    for service in keys(local.private_runtime_services) : service => sha256(jsonencode({
+      environment       = local.private_runtime_environment[service]
+      secret_references = local.private_runtime_secrets[service]
+    }))
   }
 }
 
@@ -208,6 +217,10 @@ resource "aws_ecs_task_definition" "private_runtime" {
 
   lifecycle {
     create_before_destroy = true
+  }
+
+  tags = {
+    ReviewedConfigSha256 = local.private_runtime_reviewed_config_sha256[each.key]
   }
 }
 
