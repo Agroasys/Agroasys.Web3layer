@@ -465,12 +465,15 @@ describe('gateway operations summary route contract', () => {
       replay: jest.fn(),
     } as unknown as GatewayFailedOperationReplayer;
     const idempotencyStore = {
+      leaseDurationMs: 300_000,
       get: jest.fn(),
+      getFinancialOutcome: jest.fn(),
       createPending: jest.fn(),
       complete: jest.fn(),
       releasePending: jest.fn(),
       markReplay: jest.fn(),
-    } as unknown as IdempotencyStore;
+      renewLease: jest.fn().mockResolvedValue(true),
+    } satisfies IdempotencyStore;
     const writeConfig = {
       ...config,
       enableMutations: true,
@@ -549,7 +552,9 @@ describe('gateway operations summary route contract', () => {
       replay: jest.fn(),
     } as unknown as GatewayFailedOperationReplayer;
     const idempotencyStore = {
+      leaseDurationMs: 300_000,
       get: jest.fn(),
+      getFinancialOutcome: jest.fn(),
       createPending: jest.fn().mockResolvedValue({
         created: true,
         record: {
@@ -570,7 +575,8 @@ describe('gateway operations summary route contract', () => {
       complete: jest.fn().mockResolvedValue(undefined),
       releasePending: jest.fn().mockResolvedValue(undefined),
       markReplay: jest.fn().mockResolvedValue(undefined),
-    } as unknown as IdempotencyStore;
+      renewLease: jest.fn().mockResolvedValue(true),
+    } satisfies IdempotencyStore;
     const writeConfig = {
       ...config,
       enableMutations: true,
@@ -648,7 +654,9 @@ describe('gateway operations summary route contract', () => {
       replay: jest.fn(),
     } as unknown as GatewayFailedOperationReplayer;
     const idempotencyStore = {
+      leaseDurationMs: 300_000,
       get: jest.fn(),
+      getFinancialOutcome: jest.fn(),
       createPending: jest.fn().mockResolvedValue({
         created: true,
         record: {
@@ -670,7 +678,8 @@ describe('gateway operations summary route contract', () => {
       complete: jest.fn().mockResolvedValue(undefined),
       releasePending: jest.fn().mockResolvedValue(undefined),
       markReplay: jest.fn().mockResolvedValue(undefined),
-    } as unknown as IdempotencyStore;
+      renewLease: jest.fn().mockResolvedValue(true),
+    } satisfies IdempotencyStore;
     const writeConfig = {
       ...config,
       enableMutations: true,
@@ -755,7 +764,9 @@ describe('gateway operations summary route contract', () => {
       replay: jest.fn().mockResolvedValue(openOperationTemplate),
     } as unknown as GatewayFailedOperationReplayer;
     const idempotencyStore = {
+      leaseDurationMs: 300_000,
       get: jest.fn(),
+      getFinancialOutcome: jest.fn(),
       createPending: jest.fn().mockResolvedValue({
         created: true,
         record: {
@@ -776,7 +787,8 @@ describe('gateway operations summary route contract', () => {
       complete: jest.fn().mockResolvedValue(undefined),
       releasePending: jest.fn().mockResolvedValue(undefined),
       markReplay: jest.fn().mockResolvedValue(undefined),
-    } as unknown as IdempotencyStore;
+      renewLease: jest.fn().mockResolvedValue(true),
+    } satisfies IdempotencyStore;
     const writeConfig = {
       ...config,
       enableMutations: true,
