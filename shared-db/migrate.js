@@ -276,7 +276,7 @@ async function runVersionedMigrations({
     const ledgerResult = await client.query(
       `SELECT to_regclass('public.cotsel_schema_migrations')::text AS ledger`,
     );
-    let prevalidatedAdoptionChecksum;
+    let prevalidatedAdoptionIndex = -1;
     if (!ledgerResult.rows[0]?.ledger && migrations[0].baseline) {
       const existingObject = await findExistingApplicationObject(client);
       if (existingObject) {
@@ -285,10 +285,13 @@ async function runVersionedMigrations({
             `Baseline migration ${migrations[0].version} requires an empty public schema; found ${existingObject.object_type} ${existingObject.object_name}; stop and create a reviewed adoption design`,
           );
         }
-        prevalidatedAdoptionChecksum = await computePublicSchemaFingerprint(client);
-        if (prevalidatedAdoptionChecksum !== migrations[0].schemaChecksum) {
+        const observedSchemaChecksum = await computePublicSchemaFingerprint(client);
+        prevalidatedAdoptionIndex = migrations.findLastIndex(
+          (migration) => migration.schemaChecksum === observedSchemaChecksum,
+        );
+        if (prevalidatedAdoptionIndex === -1) {
           throw new Error(
-            `Existing schema does not match the adoption fingerprint for baseline migration ${migrations[0].version}`,
+            'Existing schema does not match the adoption fingerprint of any migration manifest prefix',
           );
         }
       }
@@ -319,6 +322,38 @@ async function runVersionedMigrations({
     const appliedVersions = new Set(appliedResult.rows.map((migration) => migration.version));
     await client.query(`GRANT SELECT ON TABLE cotsel_schema_migrations TO ${quotedRuntimeDbUser}`);
     const appliedNow = [];
+    if (prevalidatedAdoptionIndex >= 0) {
+      await client.query('BEGIN');
+      try {
+        for (const migration of migrations.slice(0, prevalidatedAdoptionIndex + 1)) {
+          await client.query(
+            `INSERT INTO cotsel_schema_migrations
+               (service_name, version, name, checksum, schema_checksum, application_mode, execution_ms)
+             VALUES ($1, $2, $3, $4, $5, 'adopted', 0)`,
+            [
+              serviceName,
+              migration.version,
+              migration.name,
+              migration.checksum,
+              migration.schemaChecksum ?? null,
+            ],
+          );
+          appliedVersions.add(migration.version);
+          appliedNow.push({
+            version: migration.version,
+            name: migration.name,
+            checksum: migration.checksum,
+            schemaChecksum: migration.schemaChecksum,
+            applicationMode: 'adopted',
+            executionMs: 0,
+          });
+        }
+        await client.query('COMMIT');
+      } catch (error) {
+        connectionReusable = await rollbackQuietly(client);
+        throw error;
+      }
+    }
 
     for (const migration of migrations) {
       if (appliedVersions.has(migration.version)) {
@@ -329,40 +364,9 @@ async function runVersionedMigrations({
         ? await findExistingApplicationObject(client)
         : undefined;
       if (existingObject) {
-        if (!migration.adoptExistingSchema) {
-          throw new Error(
-            `Baseline migration ${migration.version} requires an empty public schema; found ${existingObject.object_type} ${existingObject.object_name}; stop and create a reviewed adoption design`,
-          );
-        }
-        const schemaChecksum =
-          prevalidatedAdoptionChecksum ?? (await computePublicSchemaFingerprint(client));
-        if (schemaChecksum !== migration.schemaChecksum) {
-          throw new Error(
-            `Existing schema does not match the adoption fingerprint for baseline migration ${migration.version}`,
-          );
-        }
-        await client.query('BEGIN');
-        try {
-          await client.query(
-            `INSERT INTO cotsel_schema_migrations
-               (service_name, version, name, checksum, schema_checksum, application_mode, execution_ms)
-             VALUES ($1, $2, $3, $4, $5, 'adopted', 0)`,
-            [serviceName, migration.version, migration.name, migration.checksum, schemaChecksum],
-          );
-          await client.query('COMMIT');
-          appliedNow.push({
-            version: migration.version,
-            name: migration.name,
-            checksum: migration.checksum,
-            schemaChecksum,
-            applicationMode: 'adopted',
-            executionMs: 0,
-          });
-        } catch (error) {
-          connectionReusable = await rollbackQuietly(client);
-          throw error;
-        }
-        continue;
+        throw new Error(
+          `Baseline migration ${migration.version} requires an empty public schema; found ${existingObject.object_type} ${existingObject.object_name}; stop and create a reviewed adoption design`,
+        );
       }
 
       const startedAt = Date.now();
