@@ -184,7 +184,7 @@ test('indexer manifest binds every checksum to its TypeORM timestamp and class n
   const migrations = loadIndexerMigrationManifest(
     fileURLToPath(new URL('../db/migrations.json', import.meta.url)),
   );
-  assert.equal(migrations.length, 17);
+  assert.equal(migrations.length, 18);
   for (const migration of migrations) {
     assert.equal(migration.typeormName.slice(-13), migration.version);
   }
