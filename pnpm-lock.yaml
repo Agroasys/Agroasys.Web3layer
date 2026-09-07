@@ -302,6 +302,9 @@ importers:
 
   indexer:
     dependencies:
+      '@agroasys/notifications':
+        specifier: workspace:*
+        version: link:../notifications
       '@agroasys/shared-db':
         specifier: workspace:*
         version: link:../shared-db
@@ -345,6 +348,9 @@ importers:
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0
+      '@types/pg':
+        specifier: ^8.20.0
+        version: 8.20.0
       typescript:
         specifier: '>=6.0.2 <6.1.0'
         version: 6.0.3

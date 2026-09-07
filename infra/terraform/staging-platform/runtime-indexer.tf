@@ -5,8 +5,12 @@ locals {
     { name = "DB_HOST", value = local.postgres_host },
     { name = "DB_NAME", value = "cotsel_indexer" },
     { name = "DB_PORT", value = "5432" },
+    { name = "DB_SSL_MODE", value = "verify-full" },
     { name = "FINALITY_CONFIRMATION_BLOCKS", value = "1" },
     { name = "GRAPHQL_PORT", value = "4350" },
+    { name = "NOTIFICATIONS_COOLDOWN_MS", value = "300000" },
+    { name = "NOTIFICATIONS_ENABLED", value = "false" },
+    { name = "NOTIFICATIONS_REQUEST_TIMEOUT_MS", value = "5000" },
     { name = "PGSSLMODE", value = "verify-full" },
     { name = "RATE_LIMIT", value = "10" },
     { name = "RPC_CAPACITY", value = "1" },
@@ -15,6 +19,7 @@ locals {
     { name = "RPC_RETRY_ATTEMPTS", value = "5" },
     { name = "START_BLOCK", value = tostring(var.base_sepolia_contract_start_block) },
     { name = "SUBSQUID_EVM_RPC_SPLIT_SIZE", value = "10" },
+    { name = "VERIFY_START_BLOCK_CODE", value = "true" },
   ]
 
   indexer_pipeline_secrets = [

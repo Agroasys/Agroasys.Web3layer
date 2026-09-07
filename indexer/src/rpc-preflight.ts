@@ -34,7 +34,7 @@ export function redactRpcUrlForLogs(rpcUrl: string): string {
   }
 }
 
-async function callRpc(
+export async function callRpc(
   rpcUrl: string,
   method: string,
   params: unknown[],

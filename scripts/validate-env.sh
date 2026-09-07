@@ -166,6 +166,7 @@ if true; then
     FINALITY_CONFIRMATION_BLOCKS
     INDEXER_GRAPHQL_PORT\|GRAPHQL_PORT
     INDEXER_CONTRACT_ADDRESS\|CONTRACT_ADDRESS
+    INDEXER_CHAIN_ID\|CHAIN_ID
   )
 fi
 
@@ -210,6 +211,16 @@ if true; then
 
   if [[ "${RECONCILIATION_NOTIFICATIONS_ENABLED:-}" != "true" && "${RECONCILIATION_NOTIFICATIONS_ENABLED:-}" != "false" ]]; then
     echo "RECONCILIATION_NOTIFICATIONS_ENABLED must be true or false" >&2
+    exit 1
+  fi
+
+  if [[ "${INDEXER_NOTIFICATIONS_ENABLED:-}" != "true" && "${INDEXER_NOTIFICATIONS_ENABLED:-}" != "false" ]]; then
+    echo "INDEXER_NOTIFICATIONS_ENABLED must be true or false" >&2
+    exit 1
+  fi
+
+  if [[ "${INDEXER_NOTIFICATIONS_ENABLED:-false}" == "true" && -z "${INDEXER_NOTIFICATIONS_WEBHOOK_URL:-}" ]]; then
+    echo "INDEXER_NOTIFICATIONS_WEBHOOK_URL is required when INDEXER_NOTIFICATIONS_ENABLED=true" >&2
     exit 1
   fi
 

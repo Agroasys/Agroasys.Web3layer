@@ -34,6 +34,16 @@ Severity route policy:
 - `warning` -> `operations`
 - `critical` -> `pager`
 
+Registered producer event types:
+
+| `type`                                   | Source         | Severity | Meaning                                                                                                                                  |
+| ---------------------------------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `ORACLE_TRIGGER_TERMINAL_FAILURE`        | oracle         | critical | Settlement trigger failed terminally.                                                                                                    |
+| `ORACLE_TRIGGER_EXHAUSTED_NEEDS_REDRIVE` | oracle         | critical | Trigger retries exhausted; needs redrive.                                                                                                |
+| `ORACLE_CONFIRMATION_TIMEOUT`            | oracle         | warning  | Broadcast confirmation timed out.                                                                                                        |
+| `RECONCILIATION_CRITICAL_DRIFT`          | reconciliation | critical | On-chain and indexed trade state disagree.                                                                                               |
+| `INDEXER_POISON_LOG`                     | indexer        | critical | An escrow log could not be projected; the indexer quarantined it and is holding its checkpoint. Follow `indexer-poison-log-recovery.md`. |
+
 ## Retry, Cooldown, And Dedup Behavior
 
 - Delivery attempts are bounded:
