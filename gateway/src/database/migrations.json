@@ -15,6 +15,13 @@
       "file": "schema/003_gasless_transaction_outcomes.sql",
       "sha256": "3a55ed5e75fe4c42388018f99d244730d3c301a27ee92a719ce7c38bb8021103",
       "schema_sha256": "d12dc43382bc123833a83e3145802c670de206b6ad9c5e6c4dceb1eef14a1829"
+    },
+    {
+      "version": "202608310004",
+      "name": "settlement_callback_delivery_leases",
+      "file": "schema/004_settlement_callback_delivery_leases.sql",
+      "sha256": "196991bb5968163f69245ba517d5c5e14ce544fe309a25403422afffa2297f70",
+      "schema_sha256": "7d0f9328b33490c625f76bbddcf74c9a816620eb20f46e18811fbbc698de7493"
     }
   ]
 }
