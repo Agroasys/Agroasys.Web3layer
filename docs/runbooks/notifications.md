@@ -34,6 +34,14 @@ Severity route policy:
 - `warning` -> `operations`
 - `critical` -> `pager`
 
+Reconciliation coverage event types (WP-3, see `reconciliation-chain-coverage.md`):
+
+| `type`                            | Severity | Meaning                                                                                                             |
+| --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `RECONCILIATION_CRITICAL_DRIFT`   | critical | On-chain and indexed state disagree for a trade both sides hold.                                                    |
+| `RECONCILIATION_COVERAGE_GAP`     | critical | A chain trade is absent from the indexer projection, or the indexer holds more trades than the chain allocated ids. |
+| `RECONCILIATION_COVERAGE_BACKLOG` | critical | The uncovered trade tail has breached its age SLA; reconciliation can no longer keep up with the chain range.       |
+
 ## Retry, Cooldown, And Dedup Behavior
 
 - Delivery attempts are bounded:

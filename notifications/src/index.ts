@@ -9,6 +9,8 @@ export const NOTIFICATION_TEMPLATE_VERSIONS: Record<string, string> = {
   ORACLE_TRIGGER_EXHAUSTED_NEEDS_REDRIVE: 'oracle-redrive-v1',
   ORACLE_CONFIRMATION_TIMEOUT: 'oracle-confirmation-timeout-v1',
   RECONCILIATION_CRITICAL_DRIFT: 'reconciliation-critical-drift-v1',
+  RECONCILIATION_COVERAGE_GAP: 'reconciliation-coverage-gap-v1',
+  RECONCILIATION_COVERAGE_BACKLOG: 'reconciliation-coverage-backlog-v1',
 };
 
 export interface NotificationEvent {
