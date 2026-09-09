@@ -47,6 +47,24 @@ set_env_value "$tmp_dir/.env.runtime" GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH tru
 assert_rejected 'GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH must be false when COTSEL_ENVIRONMENT=staging'
 
 set_env_value "$tmp_dir/.env.runtime" GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH false
+assert_rejected 'INDEXER_EXPECTED_CONTRACT_CODEHASH is required when COTSEL_ENVIRONMENT=staging'
+
+# Unpinned, the indexer preflight degrades to "is there any code at this
+# address", so a redeploy at the same address would start cleanly.
+set_env_value "$tmp_dir/.env.runtime" INDEXER_EXPECTED_CONTRACT_CODEHASH \
+  0xabababababababababababababababababababababababababababababababab
+assert_rejected 'INDEXER_EXPECTED_ABI_FINGERPRINT is required when COTSEL_ENVIRONMENT=staging'
+
+set_env_value "$tmp_dir/.env.runtime" INDEXER_EXPECTED_ABI_FINGERPRINT \
+  cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+assert_rejected 'INDEXER_NOTIFICATIONS_ENABLED must be true when COTSEL_ENVIRONMENT=staging'
+
+# A poison log holds the checkpoint; without a webhook it holds silently.
+set_env_value "$tmp_dir/.env.runtime" INDEXER_NOTIFICATIONS_ENABLED true
+assert_rejected 'INDEXER_NOTIFICATIONS_WEBHOOK_URL is required when COTSEL_ENVIRONMENT=staging'
+
+set_env_value "$tmp_dir/.env.runtime" INDEXER_NOTIFICATIONS_WEBHOOK_URL \
+  https://alerts.example.invalid/hook
 (cd "$tmp_dir" && bash "$SCRIPT" runtime >out.log 2>err.log)
 grep -Fq 'env validation passed for profile: runtime' "$tmp_dir/out.log"
 

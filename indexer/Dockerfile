@@ -24,9 +24,11 @@ COPY treasury/package.json treasury/package.json
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
 COPY indexer indexer
+COPY notifications notifications
 COPY shared-db shared-db
 
-RUN pnpm --filter indexer run build
+RUN pnpm --filter @agroasys/notifications run build \
+  && pnpm --filter indexer run build
 
 FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS runtime
 ENV NODE_ENV=production
@@ -73,7 +75,9 @@ COPY --from=builder /app/indexer/package.json /app/indexer/package.json
 COPY --from=builder /app/indexer/lib /app/indexer/lib
 COPY --from=builder /app/indexer/db /app/indexer/db
 COPY --from=builder /app/indexer/migrate.js /app/indexer/migrate.js
+COPY --from=builder /app/indexer/quarantine.js /app/indexer/quarantine.js
 COPY --from=builder /app/indexer/schema.graphql /app/indexer/schema.graphql
+COPY --from=builder /app/notifications/dist /app/notifications/dist
 COPY --from=builder /app/shared-db /app/shared-db
 
 RUN addgroup -S agro && adduser -S agro -G agro \

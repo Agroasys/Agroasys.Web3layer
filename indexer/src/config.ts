@@ -1,15 +1,21 @@
 import dotenv from 'dotenv';
 import { strict as assert } from 'assert';
+import { parsePostgresSslMode, type PostgresSslMode } from '@agroasys/shared-db';
+import { assertDeploymentPins, type DeploymentProfile } from './preflight';
 
 dotenv.config();
 
 export interface IndexerConfig {
+  // profile
+  cotselEnvironment: DeploymentProfile;
+
   // db
   dbHost: string;
   dbPort: number;
   dbName: string;
   dbUser: string;
   dbPassword: string;
+  dbSslMode: PostgresSslMode;
 
   // network
   gatewayUrl: string | null;
@@ -29,6 +35,15 @@ export interface IndexerConfig {
 
   // contract
   contractAddress: string;
+  expectedContractCodehash: string | null;
+  expectedAbiFingerprint: string | null;
+  verifyStartBlockCode: boolean;
+
+  // poison-log alerting
+  notificationsEnabled: boolean;
+  notificationsWebhookUrl: string | null;
+  notificationsCooldownMs: number;
+  notificationsRequestTimeoutMs: number;
 }
 
 function validateEnv(name: string): string {
@@ -82,14 +97,28 @@ function parseUrlList(raw: string | undefined): string[] {
     .map((value) => value.replace(/\/$/, ''));
 }
 
+function deploymentProfile(): DeploymentProfile {
+  const raw = process.env.COTSEL_ENVIRONMENT?.trim().toLowerCase();
+  if (!raw) {
+    return 'local';
+  }
+  assert(
+    raw === 'local' || raw === 'staging' || raw === 'production',
+    'COTSEL_ENVIRONMENT must be one of: local, staging, production',
+  );
+  return raw;
+}
+
 export function loadConfig(): IndexerConfig {
   try {
     const config: IndexerConfig = {
+      cotselEnvironment: deploymentProfile(),
       dbHost: validateEnv('DB_HOST'),
       dbPort: validateEnvNumber('DB_PORT'),
       dbName: validateEnv('DB_NAME'),
       dbUser: validateEnv('DB_USER'),
       dbPassword: validateEnv('DB_PASSWORD'),
+      dbSslMode: parsePostgresSslMode(process.env.DB_SSL_MODE),
       gatewayUrl: optionalEnv('GATEWAY_URL'),
       rpcEndpoint: validateEnv('RPC_ENDPOINT'),
       rpcFallbackEndpoints: parseUrlList(process.env.RPC_FALLBACK_ENDPOINTS),
@@ -105,7 +134,37 @@ export function loadConfig(): IndexerConfig {
       finalityConfirmationBlocks: validateEnvNumber('FINALITY_CONFIRMATION_BLOCKS'),
       prometheusPort: optionalEnvNumber('PROMETHEUS_PORT'),
       contractAddress: validateEnv('CONTRACT_ADDRESS').toLowerCase(),
+      expectedContractCodehash: optionalEnv('EXPECTED_CONTRACT_CODEHASH'),
+      expectedAbiFingerprint: optionalEnv('EXPECTED_ABI_FINGERPRINT'),
+      verifyStartBlockCode: optionalEnvBoolean('VERIFY_START_BLOCK_CODE') ?? true,
+      notificationsEnabled: optionalEnvBoolean('NOTIFICATIONS_ENABLED') ?? false,
+      notificationsWebhookUrl: optionalEnv('NOTIFICATIONS_WEBHOOK_URL'),
+      notificationsCooldownMs: optionalEnvNumber('NOTIFICATIONS_COOLDOWN_MS') ?? 300000,
+      notificationsRequestTimeoutMs: optionalEnvNumber('NOTIFICATIONS_REQUEST_TIMEOUT_MS') ?? 5000,
     };
+
+    assert(
+      !config.notificationsEnabled || config.notificationsWebhookUrl,
+      'NOTIFICATIONS_WEBHOOK_URL is required when NOTIFICATIONS_ENABLED is true',
+    );
+    assert(
+      config.expectedContractCodehash === null ||
+        /^0x[0-9a-fA-F]{64}$/.test(config.expectedContractCodehash),
+      'EXPECTED_CONTRACT_CODEHASH must be a 32-byte hex string',
+    );
+    assert(
+      config.expectedAbiFingerprint === null ||
+        /^[0-9a-f]{64}$/.test(config.expectedAbiFingerprint),
+      'EXPECTED_ABI_FINGERPRINT must be a sha256 hex digest',
+    );
+
+    assertDeploymentPins({
+      profile: config.cotselEnvironment,
+      expectedContractCodehash: config.expectedContractCodehash,
+      expectedAbiFingerprint: config.expectedAbiFingerprint,
+      notificationsEnabled: config.notificationsEnabled,
+      notificationsWebhookUrl: config.notificationsWebhookUrl,
+    });
 
     return config;
   } catch (error) {

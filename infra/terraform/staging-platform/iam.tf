@@ -86,6 +86,7 @@ data "aws_iam_policy_document" "gateway_execution" {
       aws_secretsmanager_secret.platform["gateway-to-oracle-auth"].arn,
       aws_secretsmanager_secret.platform["gateway-to-ricardian-auth"].arn,
       aws_secretsmanager_secret.platform["gateway-to-treasury-auth"].arn,
+      aws_secretsmanager_secret.platform["notifications-webhook"].arn,
       aws_secretsmanager_secret.platform["rpc-base-sepolia-fallback"].arn,
       aws_secretsmanager_secret.platform["rpc-base-sepolia-primary"].arn,
       data.aws_secretsmanager_secret.oracle_wallet.arn,

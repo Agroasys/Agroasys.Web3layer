@@ -107,6 +107,12 @@
       "name": "processor_state_schema",
       "file": "migrations/1785100000000-ProcessorStateSchema.js",
       "sha256": "1f2c08fa1b4cab464d08acb5d3271e1e9d81f6015569c6244aa6c35783da1459"
+    },
+    {
+      "version": "1785600000000",
+      "name": "indexer_quarantine",
+      "file": "migrations/1785600000000-IndexerQuarantine.js",
+      "sha256": "12b742a6487ccaa2a7095cc01061838c01206e4b21aef11e1c8cb4d96b04bdcd"
     }
   ]
 }
