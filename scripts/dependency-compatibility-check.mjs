@@ -88,9 +88,9 @@ const Pick = require(path.join(streamJsonPath, 'filters', 'Pick.js'));
 await new Promise((resolve, reject) => {
   const depth = 50;
   const input = '{"a":'.repeat(depth) + '1' + '}'.repeat(depth);
-  const pipeline = Readable.from([input]).pipe(
-    Pick.withParser({ filter: 'missing', maxDepth: 10 }),
-  );
+  const source = Readable.from([input]);
+  const pipeline = source.pipe(Pick.withParser({ filter: 'missing', maxDepth: 10 }));
+  source.on('error', reject);
   pipeline.on('data', () => {});
   pipeline.on('error', (error) => {
     if (error instanceof RangeError) resolve();
