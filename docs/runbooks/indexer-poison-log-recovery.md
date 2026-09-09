@@ -67,12 +67,21 @@ Record `blockNumber`, `txHash`, `logIndex`, `reason`, `eventName`, and
 
 A correction is not complete until the new image is the one that will restart.
 
-### 3. Pin the new contract identity (recommended)
+### 3. Re-pin the contract identity (required outside local)
 
-Set `INDEXER_EXPECTED_CONTRACT_CODEHASH` and `INDEXER_EXPECTED_ABI_FINGERPRINT`
+Update `INDEXER_EXPECTED_CONTRACT_CODEHASH` and `INDEXER_EXPECTED_ABI_FINGERPRINT`
 so the next drift fails at startup rather than at the first affected log. The
 values are printed by the passing preflight as `codehash` and `abiFingerprint`
 in the `contract.preflight_passed` log line.
+
+These are **not optional** when `COTSEL_ENVIRONMENT` is `staging` or
+`production`: the indexer refuses to start without both, and without
+`INDEXER_NOTIFICATIONS_ENABLED=true` plus a webhook. Unpinned, the preflight
+degrades to "is there any code at this address", so a redeploy at the same
+address would start cleanly; unrouted, a poison log holds the checkpoint
+without paging anyone. In staging both come from Terraform —
+`base_sepolia_escrow_codehash`, `escrow_abi_fingerprint`, and the
+`notifications-webhook` secret.
 
 ### 4. Release the hold
 

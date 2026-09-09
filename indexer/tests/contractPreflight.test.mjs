@@ -5,9 +5,11 @@ import { keccak256 } from 'ethers';
 
 import {
   assertContractPreflight,
+  assertDeploymentPins,
   assertNoUnresolvedQuarantine,
   ContractPreflightError,
   ESCROW_ABI_FINGERPRINT,
+  MissingDeploymentPinError,
   UnresolvedQuarantineError,
 } from '../lib/preflight.js';
 
@@ -245,5 +247,87 @@ test('an alert failure cannot soften the startup gate', async () => {
         logger: { error: () => {} },
       }),
     UnresolvedQuarantineError,
+  );
+});
+
+const PINNED = {
+  expectedContractCodehash: `0x${'ab'.repeat(32)}`,
+  expectedAbiFingerprint: 'c'.repeat(64),
+  notificationsEnabled: true,
+  notificationsWebhookUrl: 'https://alerts.example.invalid/hook',
+};
+
+test('a local profile may run without reviewed pins', () => {
+  assertDeploymentPins({
+    profile: 'local',
+    expectedContractCodehash: null,
+    expectedAbiFingerprint: null,
+    notificationsEnabled: false,
+    notificationsWebhookUrl: null,
+  });
+});
+
+test('a fully pinned deployed profile starts', () => {
+  assertDeploymentPins({ profile: 'staging', ...PINNED });
+  assertDeploymentPins({ profile: 'production', ...PINNED });
+});
+
+test('a deployed profile without a pinned codehash fails closed', () => {
+  // Otherwise the preflight degrades to "is there any code at this address",
+  // and a redeploy at the same address starts cleanly.
+  assert.throws(
+    () =>
+      assertDeploymentPins({
+        profile: 'staging',
+        ...PINNED,
+        expectedContractCodehash: null,
+      }),
+    (error) => {
+      assert.ok(error instanceof MissingDeploymentPinError);
+      assert.deepEqual(error.missing, ['EXPECTED_CONTRACT_CODEHASH']);
+      return true;
+    },
+  );
+});
+
+test('a deployed profile without a pinned ABI fingerprint fails closed', () => {
+  assert.throws(
+    () => assertDeploymentPins({ profile: 'production', ...PINNED, expectedAbiFingerprint: null }),
+    /EXPECTED_ABI_FINGERPRINT/,
+  );
+});
+
+test('a deployed profile that cannot page anyone fails closed', () => {
+  // A poison log holds the checkpoint; without a webhook it holds silently.
+  assert.throws(
+    () => assertDeploymentPins({ profile: 'staging', ...PINNED, notificationsEnabled: false }),
+    /NOTIFICATIONS_ENABLED=true/,
+  );
+
+  assert.throws(
+    () => assertDeploymentPins({ profile: 'staging', ...PINNED, notificationsWebhookUrl: null }),
+    /NOTIFICATIONS_WEBHOOK_URL/,
+  );
+});
+
+test('every missing control is reported at once, not one restart at a time', () => {
+  assert.throws(
+    () =>
+      assertDeploymentPins({
+        profile: 'staging',
+        expectedContractCodehash: null,
+        expectedAbiFingerprint: null,
+        notificationsEnabled: false,
+        notificationsWebhookUrl: null,
+      }),
+    (error) => {
+      assert.deepEqual(error.missing, [
+        'EXPECTED_CONTRACT_CODEHASH',
+        'EXPECTED_ABI_FINGERPRINT',
+        'NOTIFICATIONS_ENABLED=true',
+      ]);
+      assert.match(error.message, /COTSEL_ENVIRONMENT=staging/);
+      return true;
+    },
   );
 });

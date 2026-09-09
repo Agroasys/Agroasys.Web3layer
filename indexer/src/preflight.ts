@@ -128,6 +128,61 @@ export async function assertContractPreflight(
   return { codehash, abiFingerprint, startBlockVerified };
 }
 
+export type DeploymentProfile = 'local' | 'staging' | 'production';
+
+export interface DeploymentPinInput {
+  profile: DeploymentProfile;
+  expectedContractCodehash: string | null;
+  expectedAbiFingerprint: string | null;
+  notificationsEnabled: boolean;
+  notificationsWebhookUrl: string | null;
+}
+
+export class MissingDeploymentPinError extends Error {
+  readonly missing: string[];
+
+  constructor(profile: DeploymentProfile, missing: string[]) {
+    super(
+      `COTSEL_ENVIRONMENT=${profile} requires reviewed poison-log controls; missing: ${missing.join(', ')}`,
+    );
+    this.name = 'MissingDeploymentPinError';
+    this.missing = missing;
+  }
+}
+
+/**
+ * Outside a local profile the poison-log control is only as strong as its
+ * inputs.
+ *
+ * Without a pinned codehash and ABI fingerprint the preflight degrades to "is
+ * there any code at this address", so a redeploy at the same address starts
+ * cleanly and the drift it introduces is only caught one poison log at a time.
+ * Without a notification endpoint the halt is silent: the checkpoint holds and
+ * nobody is paged. Both are therefore required to start a deployed indexer.
+ */
+export function assertDeploymentPins(input: DeploymentPinInput): void {
+  if (input.profile === 'local') {
+    return;
+  }
+
+  const missing: string[] = [];
+  if (!input.expectedContractCodehash) {
+    missing.push('EXPECTED_CONTRACT_CODEHASH');
+  }
+  if (!input.expectedAbiFingerprint) {
+    missing.push('EXPECTED_ABI_FINGERPRINT');
+  }
+  if (!input.notificationsEnabled) {
+    missing.push('NOTIFICATIONS_ENABLED=true');
+  } else if (!input.notificationsWebhookUrl) {
+    missing.push('NOTIFICATIONS_WEBHOOK_URL');
+  }
+
+  if (missing.length > 0) {
+    throw new MissingDeploymentPinError(input.profile, missing);
+  }
+}
+
 export interface QuarantineGateDeps {
   quarantine: { countUnresolved(): Promise<number> };
   alerts: { unresolvedQuarantineOnStartup(count: number): Promise<void> };

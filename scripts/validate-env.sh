@@ -84,6 +84,29 @@ if [[ "$COTSEL_ENVIRONMENT" != "local" ]]; then
     echo "GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH must be false when COTSEL_ENVIRONMENT=$COTSEL_ENVIRONMENT" >&2
     exit 1
   fi
+
+  # Without pinned contract identity the indexer preflight degrades to "is there
+  # any code at this address", so a redeploy at the same address starts cleanly.
+  if [[ -z "${INDEXER_EXPECTED_CONTRACT_CODEHASH:-}" ]]; then
+    echo "INDEXER_EXPECTED_CONTRACT_CODEHASH is required when COTSEL_ENVIRONMENT=$COTSEL_ENVIRONMENT" >&2
+    exit 1
+  fi
+
+  if [[ -z "${INDEXER_EXPECTED_ABI_FINGERPRINT:-}" ]]; then
+    echo "INDEXER_EXPECTED_ABI_FINGERPRINT is required when COTSEL_ENVIRONMENT=$COTSEL_ENVIRONMENT" >&2
+    exit 1
+  fi
+
+  # A poison log holds the checkpoint; without a webhook it holds silently.
+  if [[ "${INDEXER_NOTIFICATIONS_ENABLED:-}" != "true" ]]; then
+    echo "INDEXER_NOTIFICATIONS_ENABLED must be true when COTSEL_ENVIRONMENT=$COTSEL_ENVIRONMENT" >&2
+    exit 1
+  fi
+
+  if [[ -z "${INDEXER_NOTIFICATIONS_WEBHOOK_URL:-}" ]]; then
+    echo "INDEXER_NOTIFICATIONS_WEBHOOK_URL is required when COTSEL_ENVIRONMENT=$COTSEL_ENVIRONMENT" >&2
+    exit 1
+  fi
 fi
 
 required_groups=(

@@ -89,6 +89,29 @@ variable "gateway_image_tag" {
   }
 }
 
+variable "base_sepolia_escrow_codehash" {
+  description = "Reviewed keccak256 of the deployed escrow runtime bytecode. The indexer refuses to start when the address serves different code."
+  type        = string
+
+  validation {
+    condition = (
+      can(regex("^0x[0-9a-fA-F]{64}$", var.base_sepolia_escrow_codehash)) &&
+      lower(var.base_sepolia_escrow_codehash) != "0x0000000000000000000000000000000000000000000000000000000000000000"
+    )
+    error_message = "base_sepolia_escrow_codehash must be a non-zero 32-byte hex string."
+  }
+}
+
+variable "escrow_abi_fingerprint" {
+  description = "Reviewed sha256 over the sorted escrow event signature set. The indexer refuses to start when its built ABI differs."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9a-f]{64}$", var.escrow_abi_fingerprint))
+    error_message = "escrow_abi_fingerprint must be a lowercase sha256 hex digest."
+  }
+}
+
 variable "base_sepolia_escrow_address" {
   description = "Reviewed Base Sepolia escrow deployment consumed by the staging runtime."
   type        = string

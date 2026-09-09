@@ -1,10 +1,14 @@
 import dotenv from 'dotenv';
 import { strict as assert } from 'assert';
 import { parsePostgresSslMode, type PostgresSslMode } from '@agroasys/shared-db';
+import { assertDeploymentPins, type DeploymentProfile } from './preflight';
 
 dotenv.config();
 
 export interface IndexerConfig {
+  // profile
+  cotselEnvironment: DeploymentProfile;
+
   // db
   dbHost: string;
   dbPort: number;
@@ -93,9 +97,22 @@ function parseUrlList(raw: string | undefined): string[] {
     .map((value) => value.replace(/\/$/, ''));
 }
 
+function deploymentProfile(): DeploymentProfile {
+  const raw = process.env.COTSEL_ENVIRONMENT?.trim().toLowerCase();
+  if (!raw) {
+    return 'local';
+  }
+  assert(
+    raw === 'local' || raw === 'staging' || raw === 'production',
+    'COTSEL_ENVIRONMENT must be one of: local, staging, production',
+  );
+  return raw;
+}
+
 export function loadConfig(): IndexerConfig {
   try {
     const config: IndexerConfig = {
+      cotselEnvironment: deploymentProfile(),
       dbHost: validateEnv('DB_HOST'),
       dbPort: validateEnvNumber('DB_PORT'),
       dbName: validateEnv('DB_NAME'),
@@ -140,6 +157,14 @@ export function loadConfig(): IndexerConfig {
         /^[0-9a-f]{64}$/.test(config.expectedAbiFingerprint),
       'EXPECTED_ABI_FINGERPRINT must be a sha256 hex digest',
     );
+
+    assertDeploymentPins({
+      profile: config.cotselEnvironment,
+      expectedContractCodehash: config.expectedContractCodehash,
+      expectedAbiFingerprint: config.expectedAbiFingerprint,
+      notificationsEnabled: config.notificationsEnabled,
+      notificationsWebhookUrl: config.notificationsWebhookUrl,
+    });
 
     return config;
   } catch (error) {
