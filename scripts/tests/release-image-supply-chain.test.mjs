@@ -44,3 +44,13 @@ test('pull request image builds remain credential-free', async () => {
   );
   assert.doesNotMatch(workflow, /pull_request_target:/);
 });
+
+test('supersedes candidate images without cancelling mainline releases', async () => {
+  const workflow = await readFile(workflowPath, 'utf8');
+
+  assert.match(
+    workflow,
+    /group: release-images-\$\{\{ github\.workflow \}\}-\$\{\{ github\.event_name == 'pull_request' && github\.ref \|\| github\.sha \}\}/,
+  );
+  assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
+});
