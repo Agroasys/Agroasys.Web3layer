@@ -44,6 +44,14 @@ on:
         description: Required for plan. Reviewed Base Sepolia USDC address.
         required: false
         type: string
+      base_sepolia_escrow_codehash:
+        description: Required for plan. Reviewed keccak256 of the deployed escrow runtime bytecode.
+        required: false
+        type: string
+      escrow_abi_fingerprint:
+        description: Required for plan. Reviewed sha256 over the sorted escrow event signature set.
+        required: false
+        type: string
       plan_run_id:
         description: Required for apply. Run ID of the approved plan.
         required: false
@@ -154,6 +162,8 @@ jobs:
           BASE_SEPOLIA_ESCROW_ADDRESS: ${{ github.event.inputs.base_sepolia_escrow_address }}
           BASE_SEPOLIA_CONTRACT_START_BLOCK: ${{ github.event.inputs.base_sepolia_contract_start_block }}
           BASE_SEPOLIA_USDC_ADDRESS: ${{ github.event.inputs.base_sepolia_usdc_address }}
+          BASE_SEPOLIA_ESCROW_CODEHASH: ${{ github.event.inputs.base_sepolia_escrow_codehash }}
+          ESCROW_ABI_FINGERPRINT: ${{ github.event.inputs.escrow_abi_fingerprint }}
         run: |
           test -n "$ORIGIN_CERTIFICATE_ARN" || {
             echo "origin_certificate_arn is required for plan." >&2
@@ -177,6 +187,14 @@ jobs:
           }
           test -n "$BASE_SEPOLIA_USDC_ADDRESS" || {
             echo "base_sepolia_usdc_address is required for plan." >&2
+            exit 1
+          }
+          test -n "$BASE_SEPOLIA_ESCROW_CODEHASH" || {
+            echo "base_sepolia_escrow_codehash is required for plan." >&2
+            exit 1
+          }
+          test -n "$ESCROW_ABI_FINGERPRINT" || {
+            echo "escrow_abi_fingerprint is required for plan." >&2
             exit 1
           }
 
@@ -225,6 +243,8 @@ jobs:
           BASE_SEPOLIA_ESCROW_ADDRESS: ${{ github.event.inputs.base_sepolia_escrow_address }}
           BASE_SEPOLIA_CONTRACT_START_BLOCK: ${{ github.event.inputs.base_sepolia_contract_start_block }}
           BASE_SEPOLIA_USDC_ADDRESS: ${{ github.event.inputs.base_sepolia_usdc_address }}
+          BASE_SEPOLIA_ESCROW_CODEHASH: ${{ github.event.inputs.base_sepolia_escrow_codehash }}
+          ESCROW_ABI_FINGERPRINT: ${{ github.event.inputs.escrow_abi_fingerprint }}
         run: |
           set -euo pipefail
           terraform plan \
@@ -238,7 +258,9 @@ jobs:
             -var="gateway_image_tag=$GATEWAY_IMAGE_TAG" \
             -var="base_sepolia_escrow_address=$BASE_SEPOLIA_ESCROW_ADDRESS" \
             -var="base_sepolia_contract_start_block=$BASE_SEPOLIA_CONTRACT_START_BLOCK" \
-            -var="base_sepolia_usdc_address=$BASE_SEPOLIA_USDC_ADDRESS"
+            -var="base_sepolia_usdc_address=$BASE_SEPOLIA_USDC_ADDRESS" \
+            -var="base_sepolia_escrow_codehash=$BASE_SEPOLIA_ESCROW_CODEHASH" \
+            -var="escrow_abi_fingerprint=$ESCROW_ABI_FINGERPRINT"
           terraform show -no-color tfplan > plan.txt
           terraform show -json tfplan > plan.json
 
