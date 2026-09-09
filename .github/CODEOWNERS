@@ -1,4 +1,5 @@
-# Settlement and infrastructure changes use the two-person programme control.
-# GitHub excludes the pull-request author from approving their own change, so
-# either programme owner must obtain approval from the other owner.
+# Astton and czpyioe own settlement and infrastructure changes for ordinary
+# contributions. Organization administrators retain the owner-approved right
+# to bypass review and checks. A bypass is recorded as evidence; it is not a
+# green check or release acceptance.
 * @Astton @czpyioe
