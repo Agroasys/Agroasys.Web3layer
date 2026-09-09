@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { Readable } from 'node:stream';
 
 const require = createRequire(import.meta.url);
 const virtualStore = path.resolve('node_modules/.pnpm');
@@ -60,6 +61,44 @@ assert.equal(braceExpansion('{1..200000}').length, braceExpansion.EXPANSION_MAX)
 const lengthCapped = braceExpansion('{a,b}'.repeat(1500), { maxLength: 100 });
 assert.ok(lengthCapped.reduce((total, value) => total + value.length, 0) <= 100);
 
+const jaysonPath = packagePath('jayson', '4.3.0');
+const streamJsonPath = fs.realpathSync(path.join(path.dirname(jaysonPath), 'stream-json'));
+assert.match(
+  streamJsonPath,
+  /stream-json@1\.9\.1_patch_hash=/,
+  'jayson must resolve the security-patched legacy stream-json release',
+);
+
+const jaysonUtils = require(path.join(jaysonPath, 'lib', 'utils.js'));
+const nestedRequest = {
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'health',
+  params: { payload: Array.from({ length: 250 }, (_, index) => ({ index })) },
+};
+const parsedRequest = await new Promise((resolve, reject) => {
+  jaysonUtils.parseStream(Readable.from([JSON.stringify(nestedRequest)]), {}, (error, request) => {
+    if (error) reject(error);
+    else resolve(request);
+  });
+});
+assert.deepEqual(parsedRequest, nestedRequest);
+
+const Pick = require(path.join(streamJsonPath, 'filters', 'Pick.js'));
+await new Promise((resolve, reject) => {
+  const depth = 50;
+  const input = '{"a":'.repeat(depth) + '1' + '}'.repeat(depth);
+  const source = Readable.from([input]);
+  const pipeline = source.pipe(Pick.withParser({ filter: 'missing', maxDepth: 10 }));
+  source.on('error', reject);
+  pipeline.on('data', () => {});
+  pipeline.on('error', (error) => {
+    if (error instanceof RangeError) resolve();
+    else reject(error);
+  });
+  pipeline.on('end', () => reject(new Error('Expected an over-depth JSON error')));
+});
+
 console.log(
-  `Dependency compatibility check passed: minimatch ${minimatchVersions.join(', ')} -> patched brace-expansion 5.0.9`,
+  `Dependency compatibility check passed: minimatch ${minimatchVersions.join(', ')} -> patched brace-expansion 5.0.9; jayson 4.3.0 -> security-patched stream-json 1.9.1`,
 );

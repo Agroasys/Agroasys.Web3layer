@@ -16,19 +16,6 @@ const developmentAuditAllowlist = new Map([
     },
   ],
   [
-    'GHSA-528h-pc64-c93x',
-    {
-      moduleName: 'stream-json',
-      severity: 'moderate',
-      versions: new Set(['1.9.1']),
-      patchedVersions: '>=3.5.0',
-      owner: 'Cotsel security maintainers',
-      expiresOn: '2026-10-31',
-      reason:
-        'The production audit is clean. This path is limited to the SDK development-only Web3Auth compatibility suite, and upstream jayson still requires stream-json 1.x.',
-    },
-  ],
-  [
     'GHSA-vwc7-r8mq-g2x9',
     {
       moduleName: 'adm-zip',
@@ -39,6 +26,19 @@ const developmentAuditAllowlist = new Map([
       expiresOn: '2026-10-31',
       reason:
         'No patched release exists. The production audit is clean, and the affected path is limited to development-only Hardhat tooling.',
+    },
+  ],
+]);
+
+const locallyPatchedAdvisories = new Map([
+  [
+    'GHSA-528h-pc64-c93x',
+    {
+      moduleName: 'stream-json',
+      severity: 'moderate',
+      versions: new Set(['1.9.1']),
+      patchedVersions: '>=3.5.0',
+      upstreamCommit: 'a869fb98aaef9225556f49901a8f55954ff856e6',
     },
   ],
 ]);
@@ -113,6 +113,20 @@ function matchesDevelopmentAllowlist(advisory, currentDate = new Date()) {
   );
 }
 
+function matchesLocalPatch(advisory) {
+  const allowed = locallyPatchedAdvisories.get(advisoryId(advisory));
+  if (!allowed) return false;
+
+  const findingVersions = (advisory.findings ?? []).map((finding) => finding.version);
+  return (
+    advisory.module_name === allowed.moduleName &&
+    advisory.severity === allowed.severity &&
+    advisory.patched_versions === allowed.patchedVersions &&
+    findingVersions.length > 0 &&
+    findingVersions.every((version) => allowed.versions.has(version))
+  );
+}
+
 function auditDescription(advisory) {
   const versions = [...new Set((advisory.findings ?? []).map((finding) => finding.version))];
   return `${advisoryId(advisory)} ${advisory.module_name ?? 'unknown-package'}@${versions.join(',') || 'unknown'} (${advisory.severity ?? 'unknown-severity'})`;
@@ -152,8 +166,9 @@ if (
 if (auditAllReport) {
   const allAdvisories = advisories(auditAllReport);
   const acceptedAdvisories = allAdvisories.filter(matchesDevelopmentAllowlist);
+  const patchedAdvisories = allAdvisories.filter(matchesLocalPatch);
   const unexpectedAdvisories = allAdvisories.filter(
-    (advisory) => !matchesDevelopmentAllowlist(advisory),
+    (advisory) => !matchesDevelopmentAllowlist(advisory) && !matchesLocalPatch(advisory),
   );
 
   if (allSummary.total > 0 && allAdvisories.length === 0) {
@@ -165,6 +180,13 @@ if (auditAllReport) {
     const allowed = developmentAuditAllowlist.get(advisoryId(advisory));
     console.log(
       `Accepted development advisory: ${auditDescription(advisory)}; owner=${allowed.owner}; expires=${allowed.expiresOn}; reason=${allowed.reason}`,
+    );
+  }
+
+  for (const advisory of patchedAdvisories) {
+    const patch = locallyPatchedAdvisories.get(advisoryId(advisory));
+    console.log(
+      `Accepted locally patched advisory: ${auditDescription(advisory)}; upstream-commit=${patch.upstreamCommit}; compatibility-check=passed`,
     );
   }
 

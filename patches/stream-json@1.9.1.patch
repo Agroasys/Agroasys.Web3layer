@@ -1,0 +1,31 @@
+diff --git a/filters/FilterBase.js b/filters/FilterBase.js
+index 2e96d1581e8ca67ca600ab9228ec7a4a1c84d4af..cfc877722853960184be79568f002c25de499f05 100644
+--- a/filters/FilterBase.js
++++ b/filters/FilterBase.js
+@@ -2,6 +2,8 @@
+ 
+ const {Transform} = require('stream');
+ 
++const DEFAULT_MAX_DEPTH = 1024;
++
+ class FilterBase extends Transform {
+   static stringFilter(string, separator) {
+     return stack => {
+@@ -52,6 +54,7 @@ class FilterBase extends Transform {
+ 
+     this._once = options && options.once;
+     this._previousToken = '';
++    this._maxDepth = options && options.maxDepth !== undefined ? options.maxDepth : DEFAULT_MAX_DEPTH;
+   }
+ 
+   _check(chunk, _, callback) {
+@@ -86,6 +89,9 @@ class FilterBase extends Transform {
+         break;
+     }
+     this._previousToken = chunk.name;
++    if (this._stack.length > this._maxDepth) {
++      return callback(new RangeError(`filter: JSON nesting depth exceeds maxDepth (${this._maxDepth})`));
++    }
+     // check, if we allow a chunk
+     if (this._checkChunk(chunk)) {
+       return callback(null);
