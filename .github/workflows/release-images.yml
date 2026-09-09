@@ -82,7 +82,7 @@ jobs:
 
       - name: Assume the Cotsel image-publish role
         if: steps.kind.outputs.publish == 'true'
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
         with:
           role-to-assume: ${{ env.PUSH_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}

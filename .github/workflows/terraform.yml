@@ -206,7 +206,7 @@ jobs:
           terraform_wrapper: false
 
       - name: Assume the main-branch plan role
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
         with:
           role-to-assume: ${{ env.PLAN_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -395,7 +395,7 @@ jobs:
           terraform_wrapper: false
 
       - name: Assume the protected apply role
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
         with:
           role-to-assume: ${{ env.APPLY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
