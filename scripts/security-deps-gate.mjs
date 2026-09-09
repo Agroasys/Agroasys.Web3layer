@@ -28,6 +28,19 @@ const developmentAuditAllowlist = new Map([
         'The production audit is clean. This path is limited to the SDK development-only Web3Auth compatibility suite, and upstream jayson still requires stream-json 1.x.',
     },
   ],
+  [
+    'GHSA-vwc7-r8mq-g2x9',
+    {
+      moduleName: 'adm-zip',
+      severity: 'moderate',
+      versions: new Set(['0.6.0']),
+      patchedVersions: '<0.0.0',
+      owner: 'Cotsel security maintainers',
+      expiresOn: '2026-10-31',
+      reason:
+        'No patched release exists. The production audit is clean, and the affected path is limited to development-only Hardhat tooling.',
+    },
+  ],
 ]);
 
 function runPnpm(args) {
