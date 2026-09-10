@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import hre, { ethers } from 'hardhat';
+import { resolveAwsKmsContractDeployer } from './lib/awsKmsContractDeployer';
 import { loadBaseDeploymentConfig } from './lib/baseDeploymentConfig';
 import { getDeploymentSourceIdentity } from './lib/deploymentSourceIdentity';
 
@@ -169,14 +170,16 @@ async function main(): Promise<void> {
       sha256Hex(source.content),
     ]),
   );
-  const [deployer] = await ethers.getSigners();
-
-  if (!deployer) {
-    throw new Error(
-      `No deployer account configured for ${hre.network.name}. Set Hardhat vars PRIVATE_KEY/PRIVATE_KEY2.`,
-    );
-  }
-  assertDeployerHasNoRuntimeRole(deployer.address, [
+  const hardhatSigners = await ethers.getSigners();
+  const {
+    signer: deployer,
+    address: deployerAddress,
+    keyId: deployerKeyId,
+  } = await resolveAwsKmsContractDeployer({
+    provider: ethers.provider,
+    hardhatSigners,
+  });
+  assertDeployerHasNoRuntimeRole(deployerAddress, [
     config.oracleAddress,
     config.treasuryAddress,
     config.relayerAddress,
@@ -194,7 +197,8 @@ async function main(): Promise<void> {
 
   console.log('=== AgroasysEscrow Base deploy ===');
   console.log(`Network           : ${config.target.networkName} (${config.target.chainId})`);
-  console.log(`Deployer          : ${deployer.address}`);
+  console.log(`Deployer          : ${deployerAddress}`);
+  console.log(`Deployer KMS key  : ${deployerKeyId}`);
   console.log(`USDC              : ${config.usdcAddress}`);
   console.log(`Oracle            : ${config.oracleAddress}`);
   console.log(`Treasury          : ${config.treasuryAddress}`);
@@ -203,7 +207,7 @@ async function main(): Promise<void> {
   console.log(`Required approvals: ${config.requiredApprovals}`);
   console.log(`Verify            : ${config.verify}`);
 
-  const balance = await ethers.provider.getBalance(deployer.address);
+  const balance = await ethers.provider.getBalance(deployerAddress);
   if (balance === 0n) {
     throw new Error(
       `Deployer balance is 0 on ${config.target.networkName}. Fund the account before deployment.`,
@@ -314,7 +318,8 @@ async function main(): Promise<void> {
         admins: config.admins,
         requiredApprovals: config.requiredApprovals,
       },
-      deployerAddress: deployer.address,
+      deployerAddress,
+      deployerKmsKeyId: deployerKeyId,
       roleAttestation,
     },
     verification: {

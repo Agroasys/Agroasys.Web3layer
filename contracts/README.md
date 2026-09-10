@@ -57,6 +57,8 @@ Set the required environment values through the protected deployment environment
 ```text
 BASE_SEPOLIA_RPC_URL
 BASESCAN_API_KEY
+DEPLOY_KMS_KEY_ID=alias/cotsel-staging-deployer-signer
+DEPLOY_KMS_EXPECTED_ADDRESS
 DEPLOY_ORACLE_ADDRESS
 DEPLOY_TREASURY_ADDRESS
 DEPLOY_RELAYER_ADDRESS
@@ -70,6 +72,14 @@ DEPLOY_VERIFY=true
 ```bash
 pnpm --dir contracts deploy:base-sepolia
 ```
+
+The canonical deployer is an AWS KMS secp256k1 key. The script rejects configured Hardhat
+private-key accounts. It resolves the KMS public key and requires an exact match with the
+independently reviewed deployer address before it checks the balance or broadcasts.
+
+Use the protected `Contract Deploy` workflow for a shared deployment. Select `main` and
+enter its exact reviewed commit. The staging environment requires another participant to
+approve the job. The workflow verifies all seven KMS role addresses before deployment.
 
 The deployment script requires a clean Git commit. It records compiler settings and source hashes.
 It verifies the explorer source and constructor arguments. It compares local and live runtime bytecode.
