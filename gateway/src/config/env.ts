@@ -200,6 +200,8 @@ export function loadConfig(): GatewayConfig {
       process.env.GATEWAY_EXECUTOR_PRIVATE_KEY?.trim() ||
       undefined,
   );
+  const gaslessKmsKeyId = optionalEnv('GATEWAY_GASLESS_KMS_KEY_ID');
+  const gaslessKmsExpectedAddress = optionalEnv('GATEWAY_GASLESS_KMS_EXPECTED_ADDRESS');
   const gaslessManagedSignerUrl =
     process.env.GATEWAY_GASLESS_MANAGED_SIGNER_URL?.trim()?.replace(/\/$/, '') || undefined;
   const gaslessManagedSignerApiKey =
@@ -503,19 +505,34 @@ export function loadConfig(): GatewayConfig {
   }
 
   if (gaslessExecutionEnabled) {
+    if (gaslessSignerCustodyMode !== 'raw_private_key') {
+      assert(
+        !gaslessExecutorPrivateKey,
+        'GATEWAY_GASLESS_EXECUTOR_PRIVATE_KEY must not be set when GATEWAY_GASLESS_SIGNER_CUSTODY_MODE is kms or mpc',
+      );
+    }
     if (gaslessSignerCustodyMode === 'raw_private_key') {
       assert(
         gaslessExecutorPrivateKey,
         'GATEWAY_GASLESS_EXECUTION_ENABLED requires GATEWAY_GASLESS_EXECUTOR_PRIVATE_KEY or GATEWAY_EXECUTOR_PRIVATE_KEY when GATEWAY_GASLESS_SIGNER_CUSTODY_MODE=raw_private_key',
       );
+    } else if (gaslessSignerCustodyMode === 'kms') {
+      assert(
+        gaslessKmsKeyId,
+        'GATEWAY_GASLESS_KMS_KEY_ID is required when GATEWAY_GASLESS_SIGNER_CUSTODY_MODE is kms',
+      );
+      assert(
+        gaslessKmsExpectedAddress && isAddress(gaslessKmsExpectedAddress),
+        'GATEWAY_GASLESS_KMS_EXPECTED_ADDRESS must be a valid EVM address when GATEWAY_GASLESS_SIGNER_CUSTODY_MODE is kms',
+      );
+      assert(
+        !gaslessManagedSignerUrl && !gaslessManagedSignerApiKey,
+        'KMS custody uses direct IAM authentication; managed signer URL and API key must not be set',
+      );
     } else {
       assert(
         gaslessManagedSignerUrl,
-        'GATEWAY_GASLESS_EXECUTION_ENABLED requires GATEWAY_GASLESS_MANAGED_SIGNER_URL when GATEWAY_GASLESS_SIGNER_CUSTODY_MODE is kms or mpc',
-      );
-      assert(
-        !gaslessExecutorPrivateKey,
-        'GATEWAY_GASLESS_EXECUTOR_PRIVATE_KEY must not be set when GATEWAY_GASLESS_SIGNER_CUSTODY_MODE is kms or mpc',
+        'GATEWAY_GASLESS_MANAGED_SIGNER_URL is required when GATEWAY_GASLESS_SIGNER_CUSTODY_MODE is mpc',
       );
       assert(
         gaslessManagedSignerUrl?.startsWith('https://'),
@@ -650,6 +667,10 @@ export function loadConfig(): GatewayConfig {
     gaslessExecutionEnabled,
     gaslessExecutorPrivateKey,
     gaslessSignerCustodyMode,
+    gaslessKmsKeyId,
+    gaslessKmsExpectedAddress: gaslessKmsExpectedAddress
+      ? getAddress(gaslessKmsExpectedAddress)
+      : undefined,
     gaslessManagedSignerUrl,
     gaslessManagedSignerApiKey,
     gaslessManagedSignerRequestTimeoutMs: envNumber(

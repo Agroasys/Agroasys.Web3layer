@@ -54,9 +54,23 @@ identity. ECS injects the selected secret values before container startup, so
 the task execution role can read only the required secret ARNs. The application
 task role does not receive `secretsmanager:GetSecretValue`.
 
-The oracle signer secret already exists at
-`/agroasys/staging/base-sepolia/wallet-oracle`. Terraform reads its identity but
-does not read or manage its value.
+The legacy Oracle signer secret remains available only for the current staging
+rollback lane. Do not use it for the new candidate.
+
+Terraform creates seven non-exportable `ECC_SECG_P256K1` KMS keys. They cover
+the Oracle, relayer, treasury, deployer, and three administrator roles.
+
+Key creation does not grant signing access. Add each least-privilege runtime or
+operator grant only after its derived EVM address is reviewed.
+
+Use the stable aliases from `managed_signer_aliases`. Derive each public address
+with `GetPublicKey`; never create or import plaintext private key material.
+
+The new contract must use those seven distinct addresses. The deployer must not
+hold a runtime role.
+
+Keep the legacy runtime unchanged during key creation. Deploy and verify the new
+contract before enabling KMS-backed runtime signing.
 
 Every service schema migration runs as a separate one-off ECS task. Each
 execution role can pull only its service image, write only its service log

@@ -66,7 +66,7 @@ executor must keep the gateway API process separate from signer authority and
 must use an isolated, auditable signing boundary. No buyer wallet, paymaster, raw
 environment key, or manual contract call is an approved shortcut.
 
-Gasless settlement execution now supports managed signer custody through `GATEWAY_GASLESS_MANAGED_SIGNER_URL` when `GATEWAY_GASLESS_SIGNER_CUSTODY_MODE` is `kms` or `mpc`. Managed custody requires authenticated HTTPS in every environment. Production gasless execution must use that managed signer path; raw private-key gasless custody is not an allowed production mode.
+Gasless settlement execution supports direct IAM-authenticated AWS KMS signing when `GATEWAY_GASLESS_SIGNER_CUSTODY_MODE=kms`; configure `GATEWAY_GASLESS_KMS_KEY_ID` and the independently approved `GATEWAY_GASLESS_KMS_EXPECTED_ADDRESS`. MPC custody uses the authenticated HTTPS endpoint in `GATEWAY_GASLESS_MANAGED_SIGNER_URL`. Production gasless execution must use one of these managed custody paths; raw private-key gasless custody is not an allowed production mode.
 
 ## Approved custody models
 

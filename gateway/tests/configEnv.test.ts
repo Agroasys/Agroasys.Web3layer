@@ -272,7 +272,7 @@ describe('gateway runtime env config', () => {
     );
   });
 
-  test('managed gasless custody parses signer service contract without raw executor key', () => {
+  test('MPC custody parses signer service contract without raw executor key', () => {
     withEnv(
       {
         GATEWAY_SETTLEMENT_RUNTIME: 'base-sepolia',
@@ -280,7 +280,7 @@ describe('gateway runtime env config', () => {
         GATEWAY_RPC_FALLBACK_URLS: 'https://fallback.example.test',
         GATEWAY_CHAIN_ID: undefined,
         GATEWAY_GASLESS_EXECUTION_ENABLED: 'true',
-        GATEWAY_GASLESS_SIGNER_CUSTODY_MODE: 'kms',
+        GATEWAY_GASLESS_SIGNER_CUSTODY_MODE: 'mpc',
         GATEWAY_GASLESS_MANAGED_SIGNER_URL: 'https://signer.example.test/',
         GATEWAY_GASLESS_MANAGED_SIGNER_API_KEY: 'test-key',
         GATEWAY_GASLESS_MANAGED_SIGNER_REQUEST_TIMEOUT_MS: '2500',
@@ -292,12 +292,36 @@ describe('gateway runtime env config', () => {
         const { loadConfig } = loadConfigModule();
         const config = loadConfig();
 
-        expect(config.gaslessSignerCustodyMode).toBe('kms');
+        expect(config.gaslessSignerCustodyMode).toBe('mpc');
         expect(config.gaslessExecutorPrivateKey).toBeUndefined();
         expect(config.gaslessManagedSignerUrl).toBe('https://signer.example.test');
         expect(config.gaslessManagedSignerApiKey).toBe('test-key');
         expect(config.gaslessManagedSignerRequestTimeoutMs).toBe(2500);
         expect(config.gaslessReceiptTimeoutMs).toBe(3000);
+      },
+    );
+  });
+
+  test('KMS custody parses a direct IAM-authenticated key identity', () => {
+    withEnv(
+      {
+        GATEWAY_SETTLEMENT_RUNTIME: 'base-sepolia',
+        GATEWAY_RPC_URL: undefined,
+        GATEWAY_RPC_FALLBACK_URLS: 'https://fallback.example.test',
+        GATEWAY_CHAIN_ID: undefined,
+        GATEWAY_GASLESS_EXECUTION_ENABLED: 'true',
+        GATEWAY_GASLESS_SIGNER_CUSTODY_MODE: 'kms',
+        GATEWAY_GASLESS_KMS_KEY_ID: 'alias/cotsel-staging-relayer',
+        GATEWAY_GASLESS_KMS_EXPECTED_ADDRESS: '0x1111111111111111111111111111111111111111',
+        GATEWAY_GASLESS_MIN_EXECUTOR_BALANCE_WEI: '10000000000000000000',
+        GATEWAY_GASLESS_LOW_BALANCE_ALERT_WEI: '10000000000000000000',
+      },
+      () => {
+        const config = loadConfigModule().loadConfig();
+        expect(config.gaslessSignerCustodyMode).toBe('kms');
+        expect(config.gaslessKmsKeyId).toBe('alias/cotsel-staging-relayer');
+        expect(config.gaslessKmsExpectedAddress).toBe('0x1111111111111111111111111111111111111111');
+        expect(config.gaslessManagedSignerUrl).toBeUndefined();
       },
     );
   });
