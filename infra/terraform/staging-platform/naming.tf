@@ -44,6 +44,7 @@ locals {
     "gateway-to-ricardian-auth",
     "gateway-to-treasury-auth",
     "gateway-managed-signer",
+    "notifications-webhook",
     "oracle-managed-signer",
     "rpc-base-sepolia-fallback",
     "rpc-base-sepolia-primary",

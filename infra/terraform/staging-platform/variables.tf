@@ -89,6 +89,29 @@ variable "gateway_image_tag" {
   }
 }
 
+variable "base_sepolia_escrow_codehash" {
+  description = "Reviewed keccak256 of the deployed escrow runtime bytecode. The indexer refuses to start when the address serves different code."
+  type        = string
+
+  validation {
+    condition = (
+      can(regex("^0x[0-9a-fA-F]{64}$", var.base_sepolia_escrow_codehash)) &&
+      lower(var.base_sepolia_escrow_codehash) != "0x0000000000000000000000000000000000000000000000000000000000000000"
+    )
+    error_message = "base_sepolia_escrow_codehash must be a non-zero 32-byte hex string."
+  }
+}
+
+variable "escrow_abi_fingerprint" {
+  description = "Reviewed sha256 over the sorted escrow event signature set. The indexer refuses to start when its built ABI differs."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9a-f]{64}$", var.escrow_abi_fingerprint))
+    error_message = "escrow_abi_fingerprint must be a lowercase sha256 hex digest."
+  }
+}
+
 variable "base_sepolia_escrow_address" {
   description = "Reviewed Base Sepolia escrow deployment consumed by the staging runtime."
   type        = string
@@ -250,5 +273,35 @@ variable "log_retention_days" {
   validation {
     condition     = contains([30, 60, 90, 120, 150, 180, 365], var.log_retention_days)
     error_message = "log_retention_days must be an AWS-supported value of at least 30 days."
+  }
+}
+
+# The edge policy starts managed groups in count mode. A group moves to blocking only after
+# reviewers inspect redacted staging matches and record the false-positive decision.
+variable "managed_rule_groups" {
+  description = "AWS managed WAF rule groups for the Cotsel CloudFront gateway."
+  type        = list(string)
+  default = [
+    "AWSManagedRulesAmazonIpReputationList",
+    "AWSManagedRulesKnownBadInputsRuleSet",
+    "AWSManagedRulesCommonRuleSet",
+    "AWSManagedRulesSQLiRuleSet",
+  ]
+}
+
+variable "blocking_rule_groups" {
+  description = "Managed WAF rule groups approved to block after count-mode review."
+  type        = list(string)
+  default     = []
+}
+
+variable "edge_rate_limit_per_five_minutes" {
+  description = "CloudFront viewer requests per IP in five minutes before the edge blocks."
+  type        = number
+  default     = 2000
+
+  validation {
+    condition     = var.edge_rate_limit_per_five_minutes >= 100
+    error_message = "edge_rate_limit_per_five_minutes must be at least 100."
   }
 }

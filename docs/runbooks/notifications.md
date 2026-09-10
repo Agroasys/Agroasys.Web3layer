@@ -34,13 +34,17 @@ Severity route policy:
 - `warning` -> `operations`
 - `critical` -> `pager`
 
-Reconciliation coverage event types (WP-3, see `reconciliation-chain-coverage.md`):
+Registered producer event types:
 
-| `type`                            | Severity | Meaning                                                                                                             |
-| --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
-| `RECONCILIATION_CRITICAL_DRIFT`   | critical | On-chain and indexed state disagree for a trade both sides hold.                                                    |
-| `RECONCILIATION_COVERAGE_GAP`     | critical | A chain trade is absent from the indexer projection, or the indexer holds more trades than the chain allocated ids. |
-| `RECONCILIATION_COVERAGE_BACKLOG` | critical | The uncovered trade tail has breached its age SLA; reconciliation can no longer keep up with the chain range.       |
+| `type`                                   | Source         | Severity | Meaning                                                                                                                                                            |
+| ---------------------------------------- | -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ORACLE_TRIGGER_TERMINAL_FAILURE`        | oracle         | critical | Settlement trigger failed terminally.                                                                                                                              |
+| `ORACLE_TRIGGER_EXHAUSTED_NEEDS_REDRIVE` | oracle         | critical | Trigger retries exhausted; needs redrive.                                                                                                                          |
+| `ORACLE_CONFIRMATION_TIMEOUT`            | oracle         | warning  | Broadcast confirmation timed out.                                                                                                                                  |
+| `RECONCILIATION_CRITICAL_DRIFT`          | reconciliation | critical | On-chain and indexed trade state disagree for a trade both sides hold.                                                                                             |
+| `RECONCILIATION_COVERAGE_GAP`            | reconciliation | critical | A chain trade is absent from the indexer projection, or the indexer holds more trades than the chain allocated ids (WP-3, see `reconciliation-chain-coverage.md`). |
+| `RECONCILIATION_COVERAGE_BACKLOG`        | reconciliation | critical | The uncovered trade tail has breached its age SLA; reconciliation can no longer keep up with the chain range (WP-3).                                               |
+| `INDEXER_POISON_LOG`                     | indexer        | critical | An escrow log could not be projected; the indexer quarantined it and is holding its checkpoint. Follow `indexer-poison-log-recovery.md`.                           |
 
 ## Retry, Cooldown, And Dedup Behavior
 

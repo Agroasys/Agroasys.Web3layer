@@ -2,11 +2,18 @@ locals {
   indexer_pipeline_environment = [
     { name = "CHAIN_ID", value = tostring(local.base_sepolia_chain_id) },
     { name = "CONTRACT_ADDRESS", value = var.base_sepolia_escrow_address },
+    { name = "COTSEL_ENVIRONMENT", value = var.environment },
     { name = "DB_HOST", value = local.postgres_host },
     { name = "DB_NAME", value = "cotsel_indexer" },
     { name = "DB_PORT", value = "5432" },
+    { name = "DB_SSL_MODE", value = "verify-full" },
+    { name = "EXPECTED_ABI_FINGERPRINT", value = var.escrow_abi_fingerprint },
+    { name = "EXPECTED_CONTRACT_CODEHASH", value = var.base_sepolia_escrow_codehash },
     { name = "FINALITY_CONFIRMATION_BLOCKS", value = "1" },
     { name = "GRAPHQL_PORT", value = "4350" },
+    { name = "NOTIFICATIONS_COOLDOWN_MS", value = "300000" },
+    { name = "NOTIFICATIONS_ENABLED", value = "true" },
+    { name = "NOTIFICATIONS_REQUEST_TIMEOUT_MS", value = "5000" },
     { name = "PGSSLMODE", value = "verify-full" },
     { name = "RATE_LIMIT", value = "10" },
     { name = "RPC_CAPACITY", value = "1" },
@@ -15,12 +22,14 @@ locals {
     { name = "RPC_RETRY_ATTEMPTS", value = "5" },
     { name = "START_BLOCK", value = tostring(var.base_sepolia_contract_start_block) },
     { name = "SUBSQUID_EVM_RPC_SPLIT_SIZE", value = "10" },
+    { name = "VERIFY_START_BLOCK_CODE", value = "true" },
   ]
 
   indexer_pipeline_secrets = [
     { name = "DB_PASS", valueFrom = "${aws_secretsmanager_secret.platform["database/indexer/runtime"].arn}:password::" },
     { name = "DB_PASSWORD", valueFrom = "${aws_secretsmanager_secret.platform["database/indexer/runtime"].arn}:password::" },
     { name = "DB_USER", valueFrom = "${aws_secretsmanager_secret.platform["database/indexer/runtime"].arn}:username::" },
+    { name = "NOTIFICATIONS_WEBHOOK_URL", valueFrom = aws_secretsmanager_secret.platform["notifications-webhook"].arn },
     { name = "RPC_ENDPOINT", valueFrom = aws_secretsmanager_secret.platform["rpc-base-sepolia-primary"].arn },
     { name = "RPC_FALLBACK_ENDPOINTS", valueFrom = aws_secretsmanager_secret.platform["rpc-base-sepolia-fallback"].arn },
   ]

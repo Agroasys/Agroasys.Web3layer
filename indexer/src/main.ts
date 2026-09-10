@@ -1,8 +1,6 @@
 import './secureLogger';
-import type { BlockData, DataHandlerContext } from '@subsquid/evm-processor';
 import { TypeormDatabase } from '@subsquid/typeorm-store';
-import type { Store } from '@subsquid/typeorm-store';
-import { processor, applyReachableRpcEndpoint, ESCROW_ADDRESS, type Fields } from './processor';
+import { processor, applyReachableRpcEndpoint, ESCROW_ADDRESS } from './processor';
 import { contractInterface } from './abi';
 import {
   Trade,
@@ -17,7 +15,6 @@ import {
   OverviewSnapshot,
   TradeStatus,
   DisputeStatus,
-  ClaimType,
 } from './model';
 import {
   OVERVIEW_SNAPSHOT_ID,
@@ -29,10 +26,74 @@ import {
 import { buildEvmEventId, compareOrderedEvmEvents } from './eventIdentity';
 import { markGovernanceProposalExecuted } from './governanceProjection';
 import { persistIndexerBatch } from './persistence';
+import {
+  CLAIM_TYPE_VALUES,
+  getOrLoadTrade,
+  type DecodedEscrowLog,
+  type IndexerBlock,
+  type IndexerContext,
+} from './handlerContext';
+import {
+  handleClaimableAccrued,
+  handleClaimsPaused,
+  handleClaimsUnpaused,
+  handleTreasuryClaimed,
+  handleTreasuryPayoutAddressUpdateApproved,
+  handleTreasuryPayoutAddressUpdateProposalExpiredCancelled,
+  handleTreasuryPayoutAddressUpdateProposed,
+  handleTreasuryPayoutAddressUpdated,
+} from './handlers/claims';
+import { loadConfig } from './config';
+import { WebhookIndexerAlerts, type IndexerAlerts } from './alerts';
+import { createQuarantinePool, QuarantineStore } from './quarantine';
+import { haltOnPoisonLog, PoisonLogHaltError, type PoisonLogDeps } from './poisonLog';
+import {
+  assertContractPreflight,
+  assertNoUnresolvedQuarantine,
+  ESCROW_ABI_FINGERPRINT,
+} from './preflight';
 
-type IndexerContext = DataHandlerContext<Store, Fields>;
-type IndexerBlock = BlockData<Fields>;
-type DecodedEscrowLog = NonNullable<ReturnType<typeof contractInterface.parseLog>>;
+const config = loadConfig();
+
+const quarantinePool = createQuarantinePool({
+  host: config.dbHost,
+  port: config.dbPort,
+  database: config.dbName,
+  user: config.dbUser,
+  password: config.dbPassword,
+  sslMode: config.dbSslMode,
+});
+const quarantine = new QuarantineStore(quarantinePool);
+const alerts: IndexerAlerts = new WebhookIndexerAlerts({
+  enabled: config.notificationsEnabled,
+  webhookUrl: config.notificationsWebhookUrl ?? undefined,
+  cooldownMs: config.notificationsCooldownMs,
+  requestTimeoutMs: config.notificationsRequestTimeoutMs,
+});
+
+function poisonLogDeps(ctx: IndexerContext): PoisonLogDeps {
+  return {
+    quarantine,
+    alerts,
+    logger: {
+      error: (message, meta) => ctx.log.error(meta ?? {}, message),
+    },
+  };
+}
+
+/**
+ * The transaction is requested for every escrow log, but a log we cannot
+ * project is exactly the case where that assumption may not hold. An empty
+ * hash still yields a unique quarantine identity, because the log index is
+ * unique within its block.
+ */
+function safeTransactionHash(log: IndexerBlock['logs'][number]): string {
+  try {
+    return log.getTransaction().hash;
+  } catch {
+    return '';
+  }
+}
 
 const SETTLEMENT_SUPPORT_FEE_BASE_UNITS = 4_000_000n;
 const PROPOSAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -74,14 +135,40 @@ async function processBatch(ctx: IndexerContext): Promise<void> {
         continue;
       }
 
+      const poisonContext = {
+        abiFingerprint: ESCROW_ABI_FINGERPRINT,
+        blockNumber: block.header.height,
+        blockHash: block.header.hash,
+        txHash: safeTransactionHash(log),
+        log: {
+          address: log.address,
+          topics: log.topics,
+          data: log.data,
+          logIndex: log.logIndex,
+          transactionIndex: log.transactionIndex,
+        },
+      };
+
+      let decoded: DecodedEscrowLog | null;
       try {
-        const decoded = contractInterface.parseLog({ topics: log.topics, data: log.data });
+        decoded = contractInterface.parseLog({ topics: log.topics, data: log.data });
+      } catch (error) {
+        return haltOnPoisonLog(poisonLogDeps(ctx), {
+          ...poisonContext,
+          reason: 'UNDECODABLE',
+          error,
+        });
+      }
 
-        if (!decoded) {
-          ctx.log.warn(`Failed to decode log at block ${block.header.height}`);
-          continue;
-        }
+      if (!decoded) {
+        return haltOnPoisonLog(poisonLogDeps(ctx), {
+          ...poisonContext,
+          reason: 'UNDECODABLE',
+          error: new Error('Escrow ABI produced no decoding for a matching event topic'),
+        });
+      }
 
+      try {
         const transaction = log.getTransaction();
         const txHash = transaction.hash;
         const logIndex = log.logIndex;
@@ -784,10 +871,24 @@ async function processBatch(ctx: IndexerContext): Promise<void> {
             break;
 
           default:
-            ctx.log.debug(`Unhandled event: ${decoded.name}`);
+            return haltOnPoisonLog(poisonLogDeps(ctx), {
+              ...poisonContext,
+              reason: 'UNKNOWN_EVENT',
+              eventName: decoded.name,
+              error: new Error(`Decoded escrow event ${decoded.name} has no projection handler`),
+            });
         }
-      } catch (e) {
-        ctx.log.error(`Error at block ${block.header.height}: ${e}`);
+      } catch (error) {
+        if (error instanceof PoisonLogHaltError) {
+          throw error;
+        }
+
+        return haltOnPoisonLog(poisonLogDeps(ctx), {
+          ...poisonContext,
+          reason: 'HANDLER_FAILURE',
+          eventName: decoded.name,
+          error,
+        });
       }
     }
   }
@@ -811,32 +912,62 @@ async function processBatch(ctx: IndexerContext): Promise<void> {
   );
 }
 
+function logBootstrapEvent(
+  level: 'info' | 'warn' | 'error',
+  eventType: string,
+  message: string,
+  meta: Record<string, unknown> = {},
+): void {
+  process.stderr.write(
+    `${JSON.stringify({ level, service: 'indexer', eventType, message, ...meta })}\n`,
+  );
+}
+
 async function bootstrap(): Promise<void> {
-  await applyReachableRpcEndpoint();
+  const selection = await applyReachableRpcEndpoint();
+
+  const preflight = await assertContractPreflight(
+    {
+      rpcUrl: selection.url,
+      contractAddress: config.contractAddress,
+      startBlock: config.startBlock,
+      timeoutMs: config.rpcRequestTimeoutMs ?? undefined,
+      expectedCodehash: config.expectedContractCodehash,
+      expectedAbiFingerprint: config.expectedAbiFingerprint,
+      verifyStartBlockCode: config.verifyStartBlockCode,
+    },
+    {
+      warn: (message, meta) =>
+        logBootstrapEvent('warn', 'contract.preflight_partial', message, meta),
+    },
+  );
+  logBootstrapEvent('info', 'contract.preflight_passed', 'Contract preflight passed', {
+    contractAddress: config.contractAddress,
+    startBlock: config.startBlock,
+    codehash: preflight.codehash,
+    abiFingerprint: preflight.abiFingerprint,
+    startBlockVerified: preflight.startBlockVerified,
+  });
+
+  await assertNoUnresolvedQuarantine({
+    quarantine,
+    alerts,
+    logger: {
+      error: (message, meta) =>
+        logBootstrapEvent('error', 'quarantine.startup_blocked', message, meta ?? {}),
+    },
+  });
+
   await processor.run(new TypeormDatabase({ initializeStateSchema: false }), processBatch);
 }
 
-void bootstrap();
-
-// helper
-async function getOrLoadTrade(
-  tradeId: string,
-  trades: Map<string, Trade>,
-  ctx: IndexerContext,
-): Promise<Trade | null> {
-  let trade = trades.get(tradeId);
-  if (trade) {
-    return trade;
-  }
-
-  trade = await ctx.store.get(Trade, tradeId);
-  if (trade) {
-    trades.set(tradeId, trade);
-    return trade;
-  }
-
-  return null;
-}
+void bootstrap().catch(async (error: unknown) => {
+  logBootstrapEvent('error', 'indexer.bootstrap_failed', 'Indexer bootstrap failed', {
+    error: error instanceof Error ? error.message : String(error),
+  });
+  await quarantinePool.end().catch(() => undefined);
+  process.exit(1);
+});
 
 async function getOrLoadOverviewSnapshot(ctx: IndexerContext): Promise<OverviewSnapshot> {
   const snapshot = await ctx.store.get(OverviewSnapshot, OVERVIEW_SNAPSHOT_ID);
@@ -2693,279 +2824,4 @@ async function handleGovernanceEpochAdvanced(
     }),
   );
   ctx.log.info(`Governance epoch advanced to ${newEpoch}`);
-}
-
-// ########################### claim events ##########################
-
-const CLAIM_TYPE_VALUES = Object.values(ClaimType);
-
-async function handleClaimableAccrued(
-  log: DecodedEscrowLog,
-  trades: Map<string, Trade>,
-  events: TradeEvent[],
-  overviewSnapshot: OverviewSnapshot,
-  eventId: string,
-  block: IndexerBlock,
-  timestamp: Date,
-  txHash: string,
-  logIndex: number,
-  transactionIndex: number,
-  ctx: IndexerContext,
-) {
-  const [tradeId, recipient, amount, claimType] = log.args;
-
-  const trade = await getOrLoadTrade(tradeId.toString(), trades, ctx);
-
-  if (!trade) {
-    ctx.log.error(`Trade ${tradeId} not found for ClaimableAccrued event`);
-    return overviewSnapshot;
-  }
-
-  const claimTypeEnum = CLAIM_TYPE_VALUES[Number(claimType)] ?? null;
-  overviewSnapshot.lastTradeEventAt = timestamp;
-
-  events.push(
-    new TradeEvent({
-      id: eventId,
-      trade,
-      eventName: 'ClaimableAccrued',
-      blockNumber: block.header.height,
-      timestamp,
-      txHash,
-      logIndex,
-      transactionIndex,
-      claimType: claimTypeEnum,
-      claimRecipient: recipient.toLowerCase(),
-      claimAmount: amount,
-    }),
-  );
-
-  ctx.log.info(
-    `Trade ${tradeId} claimable accrued: ${amount} to ${recipient} (type: ${claimTypeEnum})`,
-  );
-  return overviewSnapshot;
-}
-
-async function handleTreasuryClaimed(
-  log: DecodedEscrowLog,
-  events: SystemEvent[],
-  eventId: string,
-  block: IndexerBlock,
-  timestamp: Date,
-  txHash: string,
-  logIndex: number,
-  transactionIndex: number,
-  ctx: IndexerContext,
-) {
-  const [treasuryIdentity, payoutReceiver, amount, triggeredBy] = log.args;
-
-  events.push(
-    new SystemEvent({
-      id: eventId,
-      eventName: 'TreasuryClaimed',
-      blockNumber: block.header.height,
-      timestamp,
-      txHash,
-      logIndex,
-      transactionIndex,
-      triggeredBy: triggeredBy.toLowerCase(),
-      claimAmount: amount,
-      treasuryIdentity: treasuryIdentity.toLowerCase(),
-      payoutReceiver: payoutReceiver.toLowerCase(),
-    }),
-  );
-
-  ctx.log.info(`Treasury claimed ${amount} to ${payoutReceiver} by ${triggeredBy}`);
-}
-
-async function handleTreasuryPayoutAddressUpdateProposed(
-  log: DecodedEscrowLog,
-  events: SystemEvent[],
-  eventId: string,
-  block: IndexerBlock,
-  timestamp: Date,
-  txHash: string,
-  logIndex: number,
-  transactionIndex: number,
-  ctx: IndexerContext,
-) {
-  const [proposalId, proposer, newPayoutReceiver, eta] = log.args;
-
-  events.push(
-    new SystemEvent({
-      id: eventId,
-      eventName: 'TreasuryPayoutAddressUpdateProposed',
-      blockNumber: block.header.height,
-      timestamp,
-      txHash,
-      logIndex,
-      transactionIndex,
-      proposalId: proposalId.toString(),
-      triggeredBy: proposer.toLowerCase(),
-      newPayoutReceiver: newPayoutReceiver.toLowerCase(),
-      payoutReceiver: newPayoutReceiver.toLowerCase(),
-      eta,
-    }),
-  );
-
-  ctx.log.info(
-    `Treasury payout receiver update proposed: proposal=${proposalId} newReceiver=${newPayoutReceiver}`,
-  );
-}
-
-async function handleTreasuryPayoutAddressUpdateApproved(
-  log: DecodedEscrowLog,
-  events: SystemEvent[],
-  eventId: string,
-  block: IndexerBlock,
-  timestamp: Date,
-  txHash: string,
-  logIndex: number,
-  transactionIndex: number,
-  ctx: IndexerContext,
-) {
-  const [proposalId, approver, approvalCount, requiredApprovals] = log.args;
-
-  events.push(
-    new SystemEvent({
-      id: eventId,
-      eventName: 'TreasuryPayoutAddressUpdateApproved',
-      blockNumber: block.header.height,
-      timestamp,
-      txHash,
-      logIndex,
-      transactionIndex,
-      proposalId: proposalId.toString(),
-      triggeredBy: approver.toLowerCase(),
-      approvalCount: Number(approvalCount),
-      requiredApprovals: Number(requiredApprovals),
-    }),
-  );
-
-  ctx.log.info(
-    `Treasury payout receiver update approved: proposal=${proposalId} approver=${approver} approvals=${approvalCount}/${requiredApprovals}`,
-  );
-}
-
-async function handleTreasuryPayoutAddressUpdated(
-  log: DecodedEscrowLog,
-  events: SystemEvent[],
-  eventId: string,
-  block: IndexerBlock,
-  timestamp: Date,
-  txHash: string,
-  logIndex: number,
-  transactionIndex: number,
-  ctx: IndexerContext,
-) {
-  const [oldPayoutReceiver, newPayoutReceiver] = log.args;
-
-  events.push(
-    new SystemEvent({
-      id: eventId,
-      eventName: 'TreasuryPayoutAddressUpdated',
-      blockNumber: block.header.height,
-      timestamp,
-      txHash,
-      logIndex,
-      transactionIndex,
-      oldPayoutReceiver: oldPayoutReceiver.toLowerCase(),
-      newPayoutReceiver: newPayoutReceiver.toLowerCase(),
-      payoutReceiver: newPayoutReceiver.toLowerCase(),
-    }),
-  );
-
-  ctx.log.info(
-    `Treasury payout receiver updated: old=${oldPayoutReceiver} new=${newPayoutReceiver}`,
-  );
-}
-
-async function handleTreasuryPayoutAddressUpdateProposalExpiredCancelled(
-  log: DecodedEscrowLog,
-  events: SystemEvent[],
-  eventId: string,
-  block: IndexerBlock,
-  timestamp: Date,
-  txHash: string,
-  logIndex: number,
-  transactionIndex: number,
-  ctx: IndexerContext,
-) {
-  const [proposalId, cancelledBy] = log.args;
-
-  events.push(
-    new SystemEvent({
-      id: eventId,
-      eventName: 'TreasuryPayoutAddressUpdateProposalExpiredCancelled',
-      blockNumber: block.header.height,
-      timestamp,
-      txHash,
-      logIndex,
-      transactionIndex,
-      proposalId: proposalId.toString(),
-      triggeredBy: cancelledBy.toLowerCase(),
-    }),
-  );
-
-  ctx.log.info(
-    `Treasury payout receiver update proposal expired and cancelled: proposal=${proposalId} by=${cancelledBy}`,
-  );
-}
-
-async function handleClaimsPaused(
-  log: DecodedEscrowLog,
-  events: SystemEvent[],
-  eventId: string,
-  block: IndexerBlock,
-  timestamp: Date,
-  txHash: string,
-  logIndex: number,
-  transactionIndex: number,
-  ctx: IndexerContext,
-) {
-  const [triggeredBy] = log.args;
-
-  events.push(
-    new SystemEvent({
-      id: eventId,
-      eventName: 'ClaimsPaused',
-      blockNumber: block.header.height,
-      timestamp,
-      txHash,
-      logIndex,
-      transactionIndex,
-      triggeredBy: triggeredBy.toLowerCase(),
-    }),
-  );
-
-  ctx.log.info(`Claims paused by ${triggeredBy}`);
-}
-
-async function handleClaimsUnpaused(
-  log: DecodedEscrowLog,
-  events: SystemEvent[],
-  eventId: string,
-  block: IndexerBlock,
-  timestamp: Date,
-  txHash: string,
-  logIndex: number,
-  transactionIndex: number,
-  ctx: IndexerContext,
-) {
-  const [triggeredBy] = log.args;
-
-  events.push(
-    new SystemEvent({
-      id: eventId,
-      eventName: 'ClaimsUnpaused',
-      blockNumber: block.header.height,
-      timestamp,
-      txHash,
-      logIndex,
-      transactionIndex,
-      triggeredBy: triggeredBy.toLowerCase(),
-    }),
-  );
-
-  ctx.log.info(`Claims unpaused by ${triggeredBy}`);
 }

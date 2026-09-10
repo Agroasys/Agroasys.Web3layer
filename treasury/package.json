@@ -14,7 +14,7 @@
     "ingest:once": "ts-node src/server.ts --ingest-once"
   },
   "dependencies": {
-    "@agroasys/sdk": "^1.0.0",
+    "@agroasys/sdk": "workspace:*",
     "@agroasys/shared-db": "^1.0.0",
     "@agroasys/shared-edge": "^1.0.0",
     "@agroasys/shared-auth": "^1.0.0",

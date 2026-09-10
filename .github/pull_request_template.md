@@ -11,6 +11,10 @@
 
 ## Validation
 
+Hosted PR checks are the normal merge path. An organization administrator may
+bypass them under the owner-approved #497 policy. Record the bypass reason and
+available validation; do not represent a bypass as a green check.
+
 - [ ] Lint passed for changed workspaces
 - [ ] Tests passed for changed workspaces
 - [ ] Build passed for changed workspaces

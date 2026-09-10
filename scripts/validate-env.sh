@@ -84,6 +84,29 @@ if [[ "$COTSEL_ENVIRONMENT" != "local" ]]; then
     echo "GATEWAY_ALLOW_INSECURE_DOWNSTREAM_AUTH must be false when COTSEL_ENVIRONMENT=$COTSEL_ENVIRONMENT" >&2
     exit 1
   fi
+
+  # Without pinned contract identity the indexer preflight degrades to "is there
+  # any code at this address", so a redeploy at the same address starts cleanly.
+  if [[ -z "${INDEXER_EXPECTED_CONTRACT_CODEHASH:-}" ]]; then
+    echo "INDEXER_EXPECTED_CONTRACT_CODEHASH is required when COTSEL_ENVIRONMENT=$COTSEL_ENVIRONMENT" >&2
+    exit 1
+  fi
+
+  if [[ -z "${INDEXER_EXPECTED_ABI_FINGERPRINT:-}" ]]; then
+    echo "INDEXER_EXPECTED_ABI_FINGERPRINT is required when COTSEL_ENVIRONMENT=$COTSEL_ENVIRONMENT" >&2
+    exit 1
+  fi
+
+  # A poison log holds the checkpoint; without a webhook it holds silently.
+  if [[ "${INDEXER_NOTIFICATIONS_ENABLED:-}" != "true" ]]; then
+    echo "INDEXER_NOTIFICATIONS_ENABLED must be true when COTSEL_ENVIRONMENT=$COTSEL_ENVIRONMENT" >&2
+    exit 1
+  fi
+
+  if [[ -z "${INDEXER_NOTIFICATIONS_WEBHOOK_URL:-}" ]]; then
+    echo "INDEXER_NOTIFICATIONS_WEBHOOK_URL is required when COTSEL_ENVIRONMENT=$COTSEL_ENVIRONMENT" >&2
+    exit 1
+  fi
 fi
 
 required_groups=(
@@ -166,6 +189,7 @@ if true; then
     FINALITY_CONFIRMATION_BLOCKS
     INDEXER_GRAPHQL_PORT\|GRAPHQL_PORT
     INDEXER_CONTRACT_ADDRESS\|CONTRACT_ADDRESS
+    INDEXER_CHAIN_ID\|CHAIN_ID
   )
 fi
 
@@ -210,6 +234,16 @@ if true; then
 
   if [[ "${RECONCILIATION_NOTIFICATIONS_ENABLED:-}" != "true" && "${RECONCILIATION_NOTIFICATIONS_ENABLED:-}" != "false" ]]; then
     echo "RECONCILIATION_NOTIFICATIONS_ENABLED must be true or false" >&2
+    exit 1
+  fi
+
+  if [[ "${INDEXER_NOTIFICATIONS_ENABLED:-}" != "true" && "${INDEXER_NOTIFICATIONS_ENABLED:-}" != "false" ]]; then
+    echo "INDEXER_NOTIFICATIONS_ENABLED must be true or false" >&2
+    exit 1
+  fi
+
+  if [[ "${INDEXER_NOTIFICATIONS_ENABLED:-false}" == "true" && -z "${INDEXER_NOTIFICATIONS_WEBHOOK_URL:-}" ]]; then
+    echo "INDEXER_NOTIFICATIONS_WEBHOOK_URL is required when INDEXER_NOTIFICATIONS_ENABLED=true" >&2
     exit 1
   fi
 
