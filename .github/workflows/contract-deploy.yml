@@ -1,0 +1,129 @@
+name: Contract Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Exact reviewed main commit to deploy.
+        required: true
+        type: string
+      forbidden_user_wallets:
+        description: Optional comma-separated buyer and supplier wallets that must not hold a protocol role.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ap-south-1
+  DEPLOY_ROLE_ARN: arn:aws:iam::655177116834:role/agroasys-cotsel-contract-deploy
+  DEPLOY_KMS_KEY_ID: alias/cotsel-staging-deployer-signer
+
+concurrency:
+  group: contract-deploy-base-sepolia
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy/base-sepolia
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    env:
+      BASE_SEPOLIA_RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
+      BASESCAN_API_KEY: ${{ secrets.BASESCAN_API_KEY }}
+      DEPLOY_KMS_EXPECTED_ADDRESS: ${{ vars.COTSEL_STAGING_DEPLOYER_KMS_EXPECTED_ADDRESS }}
+      DEPLOY_ORACLE_ADDRESS: ${{ vars.COTSEL_STAGING_ORACLE_KMS_EXPECTED_ADDRESS }}
+      DEPLOY_TREASURY_ADDRESS: ${{ vars.COTSEL_STAGING_TREASURY_KMS_EXPECTED_ADDRESS }}
+      DEPLOY_RELAYER_ADDRESS: ${{ vars.COTSEL_STAGING_RELAYER_KMS_EXPECTED_ADDRESS }}
+      DEPLOY_ADMINS: ${{ vars.COTSEL_STAGING_ADMIN_1_KMS_EXPECTED_ADDRESS }},${{ vars.COTSEL_STAGING_ADMIN_2_KMS_EXPECTED_ADDRESS }},${{ vars.COTSEL_STAGING_ADMIN_3_KMS_EXPECTED_ADDRESS }}
+      DEPLOY_REQUIRED_APPROVALS: '2'
+      DEPLOY_VERIFY: 'true'
+      DEPLOY_FORBIDDEN_USER_WALLETS: ${{ inputs.forbidden_user_wallets }}
+    steps:
+      - name: Checkout the requested main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Verify immutable deployment selection
+        env:
+          EXPECTED_COMMIT_SHA: ${{ inputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || {
+            echo "Contract deployment is restricted to main." >&2
+            exit 1
+          }
+          test "$GITHUB_SHA" = "$EXPECTED_COMMIT_SHA" || {
+            echo "The dispatched commit does not match the reviewed main commit." >&2
+            exit 1
+          }
+          test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT_SHA" || {
+            echo "The checkout does not match the reviewed commit." >&2
+            exit 1
+          }
+          test -z "$(git status --porcelain --untracked-files=all)" || {
+            echo "The deployment checkout is not clean." >&2
+            exit 1
+          }
+
+      - name: Check protected configuration
+        run: |
+          set -euo pipefail
+          for name in \
+            BASE_SEPOLIA_RPC_URL \
+            BASESCAN_API_KEY \
+            DEPLOY_KMS_EXPECTED_ADDRESS \
+            DEPLOY_ORACLE_ADDRESS \
+            DEPLOY_TREASURY_ADDRESS \
+            DEPLOY_RELAYER_ADDRESS \
+            DEPLOY_ADMINS; do
+            test -n "${!name:-}" || {
+              echo "$name is not configured in the protected staging environment." >&2
+              exit 1
+            }
+          done
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+        with:
+          version: 10.34.4
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.23.2
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Revalidate the contract candidate
+        run: |
+          pnpm --dir contracts run compile
+          pnpm --dir contracts run test
+
+      - name: Assume the contract deploy role
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify the seven-role KMS matrix
+        run: |
+          mkdir -p contracts/reports/deploy/base-sepolia
+          pnpm --dir contracts run kms:verify-role-matrix \
+            > contracts/reports/deploy/base-sepolia/kms-role-matrix.json
+
+      - name: Deploy and verify AgroasysEscrow
+        run: pnpm --dir contracts run deploy:base-sepolia
+
+      - name: Retain deployment evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: base-sepolia-contract-deploy-${{ github.sha }}-${{ github.run_id }}
+          path: contracts/reports/deploy/base-sepolia/*.json
+          if-no-files-found: warn
+          retention-days: 90

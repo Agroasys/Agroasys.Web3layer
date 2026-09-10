@@ -10,7 +10,10 @@ contract address. Existing trades and balances remain on the previous contract.
 
 ## Preconditions
 
-- The deployer wallet is funded on Base Sepolia.
+- The non-exportable deployer KMS address is funded on Base Sepolia.
+- The backend bootstrap created `agroasys-cotsel-contract-deploy`.
+- The protected staging environment contains the managed RPC and Basescan secrets.
+- Repository variables contain the seven independently reviewed KMS addresses.
 - `DEPLOY_ADMINS` contains exactly three unique administrator addresses.
 - `DEPLOY_RELAYER_ADDRESS` is a service-owned gasless execution wallet.
 - `DEPLOY_REQUIRED_APPROVALS` is `2`.
@@ -29,7 +32,7 @@ cd /path/to/repo
 cp env/base-sepolia-deploy.env.runtime.example env/base-sepolia-deploy.env
 ```
 
-Fill `env/base-sepolia-deploy.env`.
+Fill `env/base-sepolia-deploy.env`. Do not set `PRIVATE_KEY` or `PRIVATE_KEY2`.
 
 Do not commit `env/base-sepolia-deploy.env`. Files matching `env/*.env` are
 ignored by Git.
@@ -47,7 +50,32 @@ If Foundry is installed:
 pnpm --filter ./contracts run test:foundry
 ```
 
-## Deploy And Verify
+## Protected deployment
+
+Use the `Contract Deploy` workflow for the shared Base Sepolia deployment.
+
+1. Select the `main` branch.
+2. Enter the exact reviewed `main` commit in `commit_sha`.
+3. Enter the excluded buyer and supplier addresses when they are known.
+4. Ask the other participant to approve the protected staging job.
+5. Download the retained JSON evidence after the workflow succeeds.
+
+The workflow uses these protected values:
+
+- Secrets: `BASE_SEPOLIA_RPC_URL` and `BASESCAN_API_KEY`.
+- Variables: `COTSEL_STAGING_DEPLOYER_KMS_EXPECTED_ADDRESS`.
+- Variables: `COTSEL_STAGING_ORACLE_KMS_EXPECTED_ADDRESS`.
+- Variables: `COTSEL_STAGING_TREASURY_KMS_EXPECTED_ADDRESS`.
+- Variables: `COTSEL_STAGING_RELAYER_KMS_EXPECTED_ADDRESS`.
+- Variables: `COTSEL_STAGING_ADMIN_1_KMS_EXPECTED_ADDRESS` through
+  `COTSEL_STAGING_ADMIN_3_KMS_EXPECTED_ADDRESS`.
+
+The workflow rejects a non-`main` ref or a commit mismatch. It verifies that each expected
+address matches its KMS public key. Only the deployer key is authorized to sign.
+
+## Local operator fallback
+
+Use this path only with an authorized short-lived AWS session for the deployer KMS key.
 
 Run from the repository root:
 
