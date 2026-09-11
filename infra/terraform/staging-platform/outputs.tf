@@ -137,3 +137,13 @@ output "kms_key_arn" {
   description = "Cotsel staging platform KMS key."
   value       = aws_kms_key.platform.arn
 }
+
+output "managed_signer_key_arns" {
+  description = "Non-exportable secp256k1 KMS signer keys. IAM grants remain separate from key creation."
+  value       = { for role, key in aws_kms_key.managed_signer : role => key.arn }
+}
+
+output "managed_signer_aliases" {
+  description = "Stable aliases used to derive and attest each managed signer's EVM address."
+  value       = { for role, alias in aws_kms_alias.managed_signer : role => alias.name }
+}
