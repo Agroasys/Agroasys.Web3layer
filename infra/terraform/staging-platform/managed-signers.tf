@@ -1,13 +1,28 @@
 locals {
-  managed_signer_roles = toset([
+  human_governance_signer_roles = toset([
     "admin-1",
     "admin-2",
     "admin-3",
+  ])
+
+  managed_signer_roles = toset([
     "deployer",
     "oracle",
     "relayer",
     "treasury",
   ])
+}
+
+check "human_governance_signers_are_not_kms_managed" {
+  assert {
+    condition = length(
+      setintersection(
+        local.managed_signer_roles,
+        local.human_governance_signer_roles,
+      ),
+    ) == 0
+    error_message = "Human administrator signers must use independent hardware wallets and must not be provisioned as AWS KMS keys."
+  }
 }
 
 data "aws_iam_policy_document" "managed_signer_key" {

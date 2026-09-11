@@ -57,17 +57,23 @@ task role does not receive `secretsmanager:GetSecretValue`.
 The legacy Oracle signer secret remains available only for the current staging
 rollback lane. Do not use it for the new candidate.
 
-Terraform creates seven non-exportable `ECC_SECG_P256K1` KMS keys. They cover
-the Oracle, relayer, treasury, deployer, and three administrator roles.
+Terraform creates four non-exportable `ECC_SECG_P256K1` KMS keys. They cover
+the Oracle, relayer, treasury, and deployer identities. Terraform deliberately
+does not create KMS keys for the three human administrator roles.
 
 Key creation does not grant signing access. Add each least-privilege runtime or
-operator grant only after its derived EVM address is reviewed.
+operator grant only after its derived EVM address is reviewed. Treasury and
+deployer signing remain disabled until their custody classification and
+permissions are explicitly accepted.
 
 Use the stable aliases from `managed_signer_aliases`. Derive each public address
 with `GetPublicKey`; never create or import plaintext private key material.
 
-The new contract must use those seven distinct addresses. The deployer must not
-hold a runtime role.
+The new contract must use distinct approved Oracle, treasury, relayer, and
+administrator addresses. The three administrators must be independent
+hardware-backed wallets in the direct prepare, review, sign, broadcast, and
+confirm flow; they must not be KMS aliases or backend-accessible signers. The
+deployer must not hold a runtime role.
 
 Keep the legacy runtime unchanged during key creation. Deploy and verify the new
 contract before enabling KMS-backed runtime signing.

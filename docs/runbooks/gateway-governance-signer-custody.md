@@ -49,6 +49,33 @@ That target flow is:
 
 Use ADR-0411 and the dashboard-gateway governance contract docs for that path.
 
+### Human administrator custody
+
+For the controlled pilot and production, the direct-sign administrator boundary
+is mandatory:
+
+- the contract uses exactly three distinct approved administrator addresses with
+  two required approvals;
+- each administrator address is generated and held on a dedicated hardware
+  wallet with a different authorized human custodian and no shared seed or
+  recovery material;
+- compatible browser wallet software may transport the prepared transaction,
+  but the hardware device must display and physically approve the signature;
+- no administrator key may be created in AWS KMS, stored in a backend secret,
+  exposed to a workload, or made available to a delegated executor;
+- the approved signer register binds each address to its authorized custodian
+  without storing seed phrases, PINs, recovery material, device serial numbers,
+  or personal location data; and
+- before release acceptance, two different administrator hardware wallets
+  complete a witnessed prepare-to-confirm governance rehearsal against the exact
+  release candidate.
+
+An EVM address does not prove hardware-wallet provenance. Contract and gateway
+checks enforce signer identity and quorum; controlled provisioning, witnessed
+rehearsal evidence, and custody attestations enforce the physical-device
+boundary. A future change to delegated or managed administrator custody requires
+a superseding architecture decision and reopens the affected release gate.
+
 No-AA boundary for privileged paths:
 
 - governance executor actions, treasury sweeps, payout-receiver changes, compliance overrides, and operator-admin sessions use direct wallet or managed-signer execution only
